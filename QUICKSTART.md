@@ -51,10 +51,16 @@ MODEL_NAME=glm-4
 # MODEL_NAME=gpt-4
 ```
 
-### 步骤4: 运行Demo
+### 步骤4: 开始游玩！
 
+**第一次运行 - 生成世界:**
 ```bash
 python run_architect.py
+```
+
+**开始游戏:**
+```bash
+python play_game.py
 ```
 
 ---
