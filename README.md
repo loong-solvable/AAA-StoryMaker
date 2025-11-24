@@ -61,16 +61,26 @@ copy .env.example .env
 # ZHIPU_API_KEY=your_api_key_here
 ```
 
-### 运行第一阶段Demo（架构师）
+### 运行Demo
 
+**第一阶段：架构师（离线构建）**
 ```bash
 python run_architect.py
 ```
-
 该脚本会：
 1. 读取 `data/novels/example_novel.txt` 中的示例小说
 2. 调用架构师Agent进行世界观解析
 3. 生成 `data/genesis/genesis.json` 数据包
+
+**第二阶段：OS与Logic（在线系统基础）**
+```bash
+python test_phase2_demo.py
+```
+该脚本会：
+1. 初始化信息中枢OS
+2. 初始化逻辑审查官Logic
+3. 演示消息路由和验证功能
+4. 测试世界上下文管理
 
 ## 📁 项目结构
 
@@ -98,18 +108,25 @@ AAA-StoryMaker/
 
 ## 📝 开发状态
 
-### ✅ 第一阶段（当前）
+### ✅ 第一阶段（已完成）
 - [x] 项目架构设计
 - [x] 架构师Agent实现
 - [x] LLM工厂模式
 - [x] 日志系统
 - [x] Genesis.json生成
 
-### 🔜 第二阶段（未来）
-- [ ] 信息中枢OS实现
-- [ ] 逻辑审查官Logic实现
+### ✅ 第二阶段（当前 - v0.2.0）
+- [x] Agent消息协议定义
+- [x] 信息中枢OS实现
+- [x] 逻辑审查官Logic实现
+- [x] 消息路由系统
+- [x] 世界上下文管理
+- [x] 基础测试Demo
+
+### 🔜 第三阶段（未来）
 - [ ] 光明会三大Agent（WS/Plot/Vibe）
 - [ ] NPC动态生成系统
+- [ ] 完整的游戏回合逻辑
 - [ ] CLI交互界面
 
 ## 📄 许可证
