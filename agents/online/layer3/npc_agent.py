@@ -4,8 +4,8 @@ NPC Agent - 演员组
 """
 import json
 from typing import Dict, Any, Optional
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema.output_parser import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 from utils.llm_factory import get_llm
 from utils.logger import setup_logger
 from agents.message_protocol import Message, AgentRole, MessageType, GeneratedContent

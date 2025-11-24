@@ -1,20 +1,20 @@
 # LangChain核心
-langchain==0.1.0
-langchain-community==0.0.10
+langchain>=0.1.0
+langchain-community>=0.0.10
 
 # LLM提供商
-zhipuai==2.0.1
-openai==1.6.1
+zhipuai>=2.0.1
+openai>=1.6.1
 
 # 环境变量管理
-python-dotenv==1.0.0
+python-dotenv>=1.0.0
 
 # JSON处理
-pydantic==2.5.0
+pydantic>=2.0.0
 
 # 日志
-colorlog==6.8.0
+colorlog>=6.8.0
 
-# 文本处理
-tiktoken==0.5.2
+# 文本处理（可选）
+# tiktoken>=0.5.2
 
