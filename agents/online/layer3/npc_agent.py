@@ -2,6 +2,10 @@
 NPC Agent - 演员组
 动态生成的NPC角色，沉浸式扮演
 使用新的JSON角色卡格式：traits, behavior_rules, relationship_matrix, voice_samples等
+
+架构原则：数据与逻辑分离
+- 角色数据由 utils.character_data 模块管理
+- NPC Agent只负责业务逻辑（反应、对话、状态更新）
 """
 import json
 from typing import Dict, Any, Optional, List
@@ -10,6 +14,7 @@ from langchain.schema.output_parser import StrOutputParser
 from utils.llm_factory import get_llm
 from utils.logger import setup_logger
 from config.settings import settings
+from utils.character_data import CharacterData, CharacterDataFormatter
 from agents.message_protocol import Message, AgentRole, MessageType, GeneratedContent
 
 logger = setup_logger("NPC", "npc.log")
@@ -28,48 +33,24 @@ class NPCAgent:
         Args:
             character_data: 角色数据（从Genesis提取，使用新的JSON角色卡格式）
         """
-        self.character_id = character_data.get("id")
-        self.character_name = character_data.get("name")
+        # 数据与逻辑分离：使用CharacterData对象管理数据
+        self.character = CharacterData.from_dict(character_data)
+        
+        # 快捷访问（为了代码简洁性）
+        self.character_id = self.character.id
+        self.character_name = self.character.name
         
         logger.info(f"🎭 初始化NPC: {self.character_name} ({self.character_id})")
+        logger.info(f"   - 剧情权重: {self.character.importance}")
+        logger.info(f"   - 特质: {', '.join(self.character.traits[:3])}")
         
         # LLM实例
         self.llm = get_llm(temperature=0.8)
         
-        # ==========================================
-        # 1. 基础元数据 (Meta Info)
-        # ==========================================
-        self.character_data = character_data
-        self.age = character_data.get("age", "未知")
-        self.gender = character_data.get("gender", "未知")
-        self.importance = character_data.get("importance", 50.0)  # 剧情权重 0-100
-        
-        # ==========================================
-        # 2. 核心特质与逻辑 (Core Identity)
-        # ==========================================
-        self.traits = character_data.get("traits", [])  # 身份/性格/状态标签
-        self.behavior_rules = character_data.get("behavior_rules", [])  # 行为逻辑准则
-        
-        # ==========================================
-        # 3. 社交矩阵 (Relationship Matrix)
-        # ==========================================
-        self.relationship_matrix = character_data.get("relationship_matrix", {})  # 该角色"眼中的别人"
-        
-        # ==========================================
-        # 4. 资产与外观 (Assets & Visuals)
-        # ==========================================
-        self.possessions = character_data.get("possessions", [])  # 关键持有物
-        self.current_appearance = character_data.get("current_appearance", "")  # 外观描述（供Vibe使用）
-        
-        # ==========================================
-        # 5. 语言样本 (Mimesis Data)
-        # ==========================================
-        self.voice_samples = character_data.get("voice_samples", [])  # 原文台词样本
-        
-        # 当前动态状态
+        # 当前动态状态（与静态角色数据分离）
         self.current_mood = "平静"
         self.current_location = ""
-        self.current_activity = character_data.get("initial_state", "日常活动")
+        self.current_activity = self.character.initial_state
         
         # 加载提示词模板
         self.system_prompt_template = self._load_system_prompt()
@@ -91,33 +72,17 @@ class NPCAgent:
     
     def _build_chain(self):
         """构建处理链"""
-        # 动态生成角色的系统提示（使用新的JSON字段）
-        traits_str = ", ".join(self.traits) if self.traits else "普通人"
-        behavior_rules_str = "\n".join([f"- {rule}" for rule in self.behavior_rules]) if self.behavior_rules else "无特殊行为准则"
+        # 数据与逻辑分离：使用CharacterDataFormatter格式化数据
+        formatted_data = CharacterDataFormatter.format_for_prompt(self.character)
         
-        # 格式化社交矩阵
-        relationship_lines = []
-        for target_id, rel_data in self.relationship_matrix.items():
-            address = rel_data.get("address_as", target_id)
-            attitude = rel_data.get("attitude", "普通")
-            relationship_lines.append(f"- {target_id}: 称呼为'{address}', 态度: {attitude}")
-        relationships_str = "\n".join(relationship_lines) if relationship_lines else "暂无特殊关系"
+        # 动态状态字段保持为占位符（运行时填充）
+        formatted_data.update({
+            "current_mood": "{current_mood}",
+            "current_location": "{current_location}",
+            "current_activity": "{current_activity}"
+        })
         
-        # 格式化语言样本（作为few-shot示例）
-        voice_samples_str = "\n".join([f'"{sample}"' for sample in self.voice_samples[:3]]) if self.voice_samples else "无语言样本"
-        
-        system_prompt = self.system_prompt_template.format(
-            character_name=self.character_name,
-            age=self.age,
-            gender=self.gender,
-            traits=traits_str,
-            behavior_rules=behavior_rules_str,
-            relationships=relationships_str,
-            voice_samples=voice_samples_str,
-            current_mood="{current_mood}",
-            current_location="{current_location}",
-            current_activity="{current_activity}"
-        )
+        system_prompt = self.system_prompt_template.format(**formatted_data)
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -167,33 +132,17 @@ class NPCAgent:
         history_str = self._format_dialogue_history()
         
         try:
-            # 动态填充当前状态（使用新的JSON字段）
-            traits_str = ", ".join(self.traits) if self.traits else "普通人"
-            behavior_rules_str = "\n".join([f"- {rule}" for rule in self.behavior_rules]) if self.behavior_rules else "无特殊行为准则"
+            # 数据与逻辑分离：使用CharacterDataFormatter格式化数据
+            formatted_data = CharacterDataFormatter.format_for_prompt(self.character)
             
-            # 格式化社交矩阵
-            relationship_lines = []
-            for target_id, rel_data in self.relationship_matrix.items():
-                address = rel_data.get("address_as", target_id)
-                attitude = rel_data.get("attitude", "普通")
-                relationship_lines.append(f"- {target_id}: 称呼为'{address}', 态度: {attitude}")
-            relationships_str = "\n".join(relationship_lines) if relationship_lines else "暂无特殊关系"
+            # 动态填充当前状态
+            formatted_data.update({
+                "current_mood": self.current_mood,
+                "current_location": self.current_location,
+                "current_activity": self.current_activity
+            })
             
-            # 格式化语言样本
-            voice_samples_str = "\n".join([f'"{sample}"' for sample in self.voice_samples[:3]]) if self.voice_samples else "无语言样本"
-            
-            prompt_with_state = self.system_prompt_template.format(
-                character_name=self.character_name,
-                age=self.age,
-                gender=self.gender,
-                traits=traits_str,
-                behavior_rules=behavior_rules_str,
-                relationships=relationships_str,
-                voice_samples=voice_samples_str,
-                current_mood=self.current_mood,
-                current_location=self.current_location,
-                current_activity=self.current_activity
-            )
+            prompt_with_state = self.system_prompt_template.format(**formatted_data)
             
             # 重新构建链（包含当前状态）
             prompt = ChatPromptTemplate.from_messages([
