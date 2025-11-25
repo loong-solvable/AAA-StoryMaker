@@ -5,8 +5,8 @@
 import json
 from pathlib import Path
 from typing import Dict, Any
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema.output_parser import StrOutputParser
 from utils.llm_factory import get_llm
 from utils.logger import setup_logger
 from config.settings import settings

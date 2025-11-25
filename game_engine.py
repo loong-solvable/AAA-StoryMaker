@@ -88,7 +88,8 @@ class GameEngine:
         atmosphere = self.vibe.create_atmosphere(
             location_id=self.player_location,
             director_instruction=atmosphere_instruction or {},
-            current_time=self.os.world_context.current_time
+            current_time=self.os.world_context.current_time,
+            present_characters=self.os.world_context.present_characters  # ✨传递在场角色
         )
         
         # 拼接开场文本
@@ -158,7 +159,8 @@ class GameEngine:
                 atmosphere = self.vibe.create_atmosphere(
                     location_id=self.player_location,
                     director_instruction=atmosphere_instruction,
-                    current_time=self.world_state.current_time
+                    current_time=self.world_state.current_time,
+                    present_characters=self.os.world_context.present_characters  # ✨传递在场角色
                 )
             
             # NPC反应

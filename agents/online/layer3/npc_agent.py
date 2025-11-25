@@ -1,13 +1,15 @@
 """
 NPC Agent - 演员组
 动态生成的NPC角色，沉浸式扮演
+使用新的JSON角色卡格式：traits, behavior_rules, relationship_matrix, voice_samples等
 """
 import json
-from typing import Dict, Any, Optional
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from typing import Dict, Any, Optional, List
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema.output_parser import StrOutputParser
 from utils.llm_factory import get_llm
 from utils.logger import setup_logger
+from config.settings import settings
 from agents.message_protocol import Message, AgentRole, MessageType, GeneratedContent
 
 logger = setup_logger("NPC", "npc.log")
@@ -24,7 +26,7 @@ class NPCAgent:
         初始化NPC Agent
         
         Args:
-            character_data: 角色数据（从Genesis提取）
+            character_data: 角色数据（从Genesis提取，使用新的JSON角色卡格式）
         """
         self.character_id = character_data.get("id")
         self.character_name = character_data.get("name")
@@ -34,16 +36,37 @@ class NPCAgent:
         # LLM实例
         self.llm = get_llm(temperature=0.8)
         
-        # 角色数据
+        # ==========================================
+        # 1. 基础元数据 (Meta Info)
+        # ==========================================
         self.character_data = character_data
         self.age = character_data.get("age", "未知")
         self.gender = character_data.get("gender", "未知")
-        self.occupation = character_data.get("occupation", "未知")
-        self.personality = character_data.get("personality", [])
-        self.background = character_data.get("background", "")
-        self.relationships = character_data.get("relationships", {})
+        self.importance = character_data.get("importance", 50.0)  # 剧情权重 0-100
         
-        # 当前状态
+        # ==========================================
+        # 2. 核心特质与逻辑 (Core Identity)
+        # ==========================================
+        self.traits = character_data.get("traits", [])  # 身份/性格/状态标签
+        self.behavior_rules = character_data.get("behavior_rules", [])  # 行为逻辑准则
+        
+        # ==========================================
+        # 3. 社交矩阵 (Relationship Matrix)
+        # ==========================================
+        self.relationship_matrix = character_data.get("relationship_matrix", {})  # 该角色"眼中的别人"
+        
+        # ==========================================
+        # 4. 资产与外观 (Assets & Visuals)
+        # ==========================================
+        self.possessions = character_data.get("possessions", [])  # 关键持有物
+        self.current_appearance = character_data.get("current_appearance", "")  # 外观描述（供Vibe使用）
+        
+        # ==========================================
+        # 5. 语言样本 (Mimesis Data)
+        # ==========================================
+        self.voice_samples = character_data.get("voice_samples", [])  # 原文台词样本
+        
+        # 当前动态状态
         self.current_mood = "平静"
         self.current_location = ""
         self.current_activity = character_data.get("initial_state", "日常活动")
@@ -68,18 +91,29 @@ class NPCAgent:
     
     def _build_chain(self):
         """构建处理链"""
-        # 动态生成角色的系统提示
-        personality_str = ", ".join(self.personality) if isinstance(self.personality, list) else str(self.personality)
-        relationships_str = "\n".join([f"- {k}: {v}" for k, v in self.relationships.items()]) if self.relationships else "暂无特殊关系"
+        # 动态生成角色的系统提示（使用新的JSON字段）
+        traits_str = ", ".join(self.traits) if self.traits else "普通人"
+        behavior_rules_str = "\n".join([f"- {rule}" for rule in self.behavior_rules]) if self.behavior_rules else "无特殊行为准则"
+        
+        # 格式化社交矩阵
+        relationship_lines = []
+        for target_id, rel_data in self.relationship_matrix.items():
+            address = rel_data.get("address_as", target_id)
+            attitude = rel_data.get("attitude", "普通")
+            relationship_lines.append(f"- {target_id}: 称呼为'{address}', 态度: {attitude}")
+        relationships_str = "\n".join(relationship_lines) if relationship_lines else "暂无特殊关系"
+        
+        # 格式化语言样本（作为few-shot示例）
+        voice_samples_str = "\n".join([f'"{sample}"' for sample in self.voice_samples[:3]]) if self.voice_samples else "无语言样本"
         
         system_prompt = self.system_prompt_template.format(
             character_name=self.character_name,
             age=self.age,
             gender=self.gender,
-            occupation=self.occupation,
-            personality=personality_str,
-            background=self.background,
+            traits=traits_str,
+            behavior_rules=behavior_rules_str,
             relationships=relationships_str,
+            voice_samples=voice_samples_str,
             current_mood="{current_mood}",
             current_location="{current_location}",
             current_activity="{current_activity}"
@@ -133,15 +167,29 @@ class NPCAgent:
         history_str = self._format_dialogue_history()
         
         try:
-            # 动态填充当前状态
+            # 动态填充当前状态（使用新的JSON字段）
+            traits_str = ", ".join(self.traits) if self.traits else "普通人"
+            behavior_rules_str = "\n".join([f"- {rule}" for rule in self.behavior_rules]) if self.behavior_rules else "无特殊行为准则"
+            
+            # 格式化社交矩阵
+            relationship_lines = []
+            for target_id, rel_data in self.relationship_matrix.items():
+                address = rel_data.get("address_as", target_id)
+                attitude = rel_data.get("attitude", "普通")
+                relationship_lines.append(f"- {target_id}: 称呼为'{address}', 态度: {attitude}")
+            relationships_str = "\n".join(relationship_lines) if relationship_lines else "暂无特殊关系"
+            
+            # 格式化语言样本
+            voice_samples_str = "\n".join([f'"{sample}"' for sample in self.voice_samples[:3]]) if self.voice_samples else "无语言样本"
+            
             prompt_with_state = self.system_prompt_template.format(
                 character_name=self.character_name,
                 age=self.age,
                 gender=self.gender,
-                occupation=self.occupation,
-                personality=", ".join(self.personality) if isinstance(self.personality, list) else str(self.personality),
-                background=self.background,
-                relationships="\n".join([f"- {k}: {v}" for k, v in self.relationships.items()]) if self.relationships else "暂无特殊关系",
+                traits=traits_str,
+                behavior_rules=behavior_rules_str,
+                relationships=relationships_str,
+                voice_samples=voice_samples_str,
                 current_mood=self.current_mood,
                 current_location=self.current_location,
                 current_activity=self.current_activity

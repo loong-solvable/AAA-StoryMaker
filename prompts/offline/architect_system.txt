@@ -5,21 +5,20 @@
 2. 提取并结构化以下核心信息：
    - 世界观设定（时代背景、地理环境、社会规则）
    - 主要角色档案（姓名、性格、背景、关系网）
-   - 关键剧情节点（起因、发展、高潮、关键事件）
-   - 重要场所（名称、描述、功能）
+
 
 3. 输出格式：严格的JSON结构，字段如下：
 
-{{
-  "world": {{
+{
+  "world": {
     "title": "小说标题",
     "genre": "类型（现代都市/悬疑/言情等）",
     "time_period": "时代背景",
     "location": "主要地理位置",
     "world_rules": "世界观核心规则（3-5条）"
-  }},
+  },
   "characters": [
-    {{
+    {
       "id": "char_001",
       "name": "角色姓名",
       "age": "年龄",
@@ -27,22 +26,22 @@
       "occupation": "职业",
       "personality": "性格特征（3-5个关键词）",
       "background": "背景故事（100字内）",
-      "relationships": {{
+      "relationships": {
         "char_002": "与其他角色的关系"
-      }},
+      },
       "initial_state": "初始状态（情绪、位置、目标）"
-    }}
+    }
   ],
   "locations": [
-    {{
+    {
       "id": "loc_001",
       "name": "地点名称",
       "description": "地点描述",
       "function": "功能作用"
-    }}
+    }
   ],
   "plot_nodes": [
-    {{
+    {
       "id": "plot_001",
       "title": "剧情节点标题",
       "trigger_condition": "触发条件",
@@ -50,15 +49,15 @@
       "involved_characters": ["char_001", "char_002"],
       "location": "loc_001",
       "importance": "critical/major/minor"
-    }}
+    }
   ],
-  "initial_scene": {{
+  "initial_scene": {
     "description": "游戏开始时的场景描述",
     "time": "具体时间",
     "location": "loc_001",
     "present_characters": ["char_001"]
-  }}
-}}
+  }
+}
 
 注意事项：
 - 保持逻辑严谨，信息不要自我矛盾

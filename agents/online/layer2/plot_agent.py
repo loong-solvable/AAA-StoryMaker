@@ -4,8 +4,8 @@
 """
 import json
 from typing import Dict, Any, List, Optional
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema.output_parser import StrOutputParser
 from utils.llm_factory import get_llm
 from utils.logger import setup_logger
 from config.settings import settings
@@ -117,12 +117,18 @@ class PlotDirector:
         # 构建剧情节点描述
         available_plots = self._format_available_plots()
         
-        # 构建角色名称列表
+        # 构建角色名称列表（包含importance权重信息）
         char_names = []
+        char_importance_info = []
         for char_id in present_characters:
             char_data = next((c for c in self.characters if c.get("id") == char_id), None)
             if char_data:
-                char_names.append(char_data.get("name", char_id))
+                char_name = char_data.get("name", char_id)
+                importance = char_data.get("importance", 50.0)
+                char_names.append(char_name)
+                char_importance_info.append(f"{char_name}(权重:{importance})")
+        
+        logger.info(f"   - 在场角色权重: {', '.join(char_importance_info)}")
         
         try:
             response = self.chain.invoke({
@@ -226,6 +232,62 @@ class PlotDirector:
             },
             "director_notes": "自动生成的最小剧本"
         }
+    
+    def get_high_importance_characters(self, min_importance: float = 70.0) -> List[Dict[str, Any]]:
+        """
+        获取高权重角色（用于重要剧情场景）
+        
+        Args:
+            min_importance: 最低权重阈值（0-100）
+        
+        Returns:
+            高权重角色列表
+        """
+        high_importance_chars = []
+        for char in self.characters:
+            importance = char.get("importance", 50.0)
+            if importance >= min_importance:
+                high_importance_chars.append({
+                    "id": char.get("id"),
+                    "name": char.get("name"),
+                    "importance": importance
+                })
+        
+        # 按权重排序
+        high_importance_chars.sort(key=lambda x: x["importance"], reverse=True)
+        return high_importance_chars
+    
+    def suggest_scene_characters(self, location: str, scene_importance: str = "normal") -> List[str]:
+        """
+        根据场景重要性和角色权重，建议应该出现的角色
+        
+        Args:
+            location: 场景位置
+            scene_importance: 场景重要性（"high", "normal", "low"）
+        
+        Returns:
+            建议出现的角色ID列表
+        """
+        # 根据场景重要性设置权重阈值
+        importance_thresholds = {
+            "high": 80.0,    # 高潮场景：只让权重80+的角色出现
+            "normal": 50.0,  # 常规场景：权重50+的角色
+            "low": 0.0       # 过渡场景：任何角色都可能出现
+        }
+        
+        threshold = importance_thresholds.get(scene_importance, 50.0)
+        
+        suggested = []
+        for char in self.characters:
+            importance = char.get("importance", 50.0)
+            char_id = char.get("id")
+            
+            # 基于权重和阈值决定
+            if importance >= threshold:
+                suggested.append(char_id)
+        
+        logger.info(f"📋 场景角色建议（{scene_importance}）: {len(suggested)}个角色（权重≥{threshold}）")
+        return suggested
     
     def get_plot_status(self) -> Dict[str, Any]:
         """获取剧情状态"""

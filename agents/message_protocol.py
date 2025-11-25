@@ -50,7 +50,7 @@ class AgentRole(str, Enum):
     LOGIC = "logic"                      # 逻辑审查官
     
     # 第二层（光明会）
-    WORLD_STATE = "world_state"          # 世界状态运行者
+    WORLD_STATE = "ws"          # 世界状态运行者
     PLOT = "plot"                        # 命运编织者
     VIBE = "vibe"                        # 氛围感受者
     

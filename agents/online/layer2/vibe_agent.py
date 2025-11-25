@@ -1,11 +1,12 @@
 """
 氛围感受者 (Atmosphere Creator)
 美工/摄影师，负责生成沉浸式的环境描写
+利用角色的current_appearance字段进行视觉描写
 """
 import json
-from typing import Dict, Any, Optional
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from typing import Dict, Any, Optional, List
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema.output_parser import StrOutputParser
 from utils.llm_factory import get_llm
 from utils.logger import setup_logger
 from config.settings import settings
@@ -36,6 +37,7 @@ class AtmosphereCreator:
         self.genesis_data = genesis_data
         self.locations = genesis_data.get("locations", [])
         self.world_info = genesis_data.get("world", {})
+        self.characters = genesis_data.get("characters", [])  # 用于获取角色外观
         
         # 加载提示词
         self.system_prompt = self._load_system_prompt()
@@ -69,6 +71,9 @@ class AtmosphereCreator:
 位置名称：{location_name}
 位置描述：{location_description}
 
+【在场角色外观】
+{character_appearances}
+
 【场景指令】
 主题情绪：{mood}
 基调：{tone}
@@ -83,7 +88,7 @@ class AtmosphereCreator:
 最近的描写片段（请避免类似表达）：
 {recent_descriptions}
 
-请创作富有感染力的氛围描写，返回JSON格式。""")
+请创作富有感染力的氛围描写，返回JSON格式。描写时可以自然地融入角色的外观细节。""")
         ])
         
         return prompt | self.llm | StrOutputParser()
@@ -93,7 +98,8 @@ class AtmosphereCreator:
         location_id: str,
         director_instruction: Dict[str, Any],
         current_time: str = "",
-        weather: str = "晴朗"
+        weather: str = "晴朗",
+        present_characters: List[str] = None
     ) -> Dict[str, Any]:
         """
         创作环境氛围
@@ -103,6 +109,7 @@ class AtmosphereCreator:
             director_instruction: 导演指令
             current_time: 当前时间
             weather: 天气
+            present_characters: 在场角色ID列表（用于描写角色外观）
         
         Returns:
             氛围描写数据
@@ -114,6 +121,9 @@ class AtmosphereCreator:
         
         # 提取指令参数
         params = director_instruction.get("parameters", {})
+        
+        # 获取在场角色的外观描述
+        character_appearances = self._get_character_appearances(present_characters or [])
         
         try:
             response = self.chain.invoke({
@@ -127,6 +137,7 @@ class AtmosphereCreator:
                 "sensory_requirements": ", ".join(params.get("sensory_details", [])),
                 "current_time": current_time or "当前",
                 "weather": weather,
+                "character_appearances": character_appearances,
                 "recent_descriptions": self._format_recent_descriptions()
             })
             
@@ -160,6 +171,34 @@ class AtmosphereCreator:
             "name": "未知地点",
             "description": "一个普通的场所"
         }
+    
+    def _get_character_appearances(self, character_ids: List[str]) -> str:
+        """
+        获取在场角色的外观描述
+        
+        Args:
+            character_ids: 角色ID列表
+        
+        Returns:
+            格式化的角色外观描述
+        """
+        if not character_ids:
+            return "无角色在场"
+        
+        appearances = []
+        for char_id in character_ids:
+            char_data = next((c for c in self.characters if c.get("id") == char_id), None)
+            if char_data:
+                char_name = char_data.get("name", char_id)
+                appearance = char_data.get("current_appearance", "外观未知")
+                appearances.append(f"- {char_name}: {appearance}")
+        
+        if not appearances:
+            return "角色外观信息未提供"
+        
+        result = "\n".join(appearances)
+        logger.info(f"   - 包含 {len(appearances)} 个角色外观描述")
+        return result
     
     def _format_recent_descriptions(self) -> str:
         """格式化最近的描写"""
