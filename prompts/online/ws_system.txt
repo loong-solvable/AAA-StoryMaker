@@ -68,7 +68,9 @@
       "change": "咖啡馆进入下午茶时段，客人增多"
     }
   ],
-  "triggered_plot_nodes": ["plot_003"]
+  "potential_plot_developments": [
+    "随着调查深入，张维诚可能开始注意到调查者的行动"
+  ]
 }
 
 决策原则：
@@ -140,7 +142,7 @@
       "change": "下午时段，咖啡馆多了几位常客"
     }
   ],
-  "triggered_plot_nodes": []
+  "potential_plot_developments": []
 }
 
 注意事项：

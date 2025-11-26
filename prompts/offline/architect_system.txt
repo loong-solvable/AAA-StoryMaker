@@ -40,15 +40,15 @@
       "function": "功能作用"
     }
   ],
-  "plot_nodes": [
+  "plot_hints": [
     {
-      "id": "plot_001",
-      "title": "剧情节点标题",
-      "trigger_condition": "触发条件",
-      "description": "事件描述",
-      "involved_characters": ["char_001", "char_002"],
-      "location": "loc_001",
-      "importance": "critical/major/minor"
+      "id": "hint_001",
+      "title": "剧情线索标题",
+      "description": "线索描述",
+      "importance": 85.0,
+      "related_characters": ["char_001", "char_002"],
+      "status": "潜在",
+      "note_for_plot_agent": "给Plot Agent的提示：这个线索的性质和可能的展开方向"
     }
   ],
   "initial_scene": {

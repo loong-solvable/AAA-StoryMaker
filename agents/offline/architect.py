@@ -134,7 +134,7 @@ class ArchitectAgent:
     
     def _validate_genesis(self, data: Dict[str, Any]):
         """验证Genesis数据包的结构"""
-        required_keys = ["world", "characters", "locations", "plot_nodes", "initial_scene"]
+        required_keys = ["world", "characters", "locations", "plot_hints", "initial_scene"]
         
         for key in required_keys:
             if key not in data:
@@ -144,7 +144,7 @@ class ArchitectAgent:
         logger.info(f"✅ Genesis数据验证通过:")
         logger.info(f"   - 角色数量: {len(data['characters'])}")
         logger.info(f"   - 地点数量: {len(data['locations'])}")
-        logger.info(f"   - 剧情节点: {len(data['plot_nodes'])}")
+        logger.info(f"   - 剧情线索: {len(data['plot_hints'])}")
     
     def save_genesis(self, genesis_data: Dict[str, Any], output_path: Path):
         """

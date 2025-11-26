@@ -38,7 +38,7 @@ class WorldStateManager:
         self.world_info = genesis_data.get("world", {})
         self.characters = genesis_data.get("characters", [])
         self.locations = genesis_data.get("locations", [])
-        self.plot_nodes = genesis_data.get("plot_nodes", [])
+        self.plot_hints = genesis_data.get("plot_hints", [])
         
         # 加载提示词
         self.system_prompt = self._load_system_prompt()
@@ -230,10 +230,10 @@ class WorldStateManager:
         for event in update_data.get("offscreen_events", []):
             self.world_events.append(event)
         
-        # 记录触发的剧情节点
-        for plot_id in update_data.get("triggered_plot_nodes", []):
-            if plot_id not in self.triggered_plots:
-                self.triggered_plots.append(plot_id)
+        # 记录潜在的剧情发展（仅供Plot Agent参考，不触发硬编码分支）
+        plot_developments = update_data.get("potential_plot_developments", [])
+        if plot_developments:
+            logger.debug(f"💡 潜在剧情发展: {plot_developments}")
     
     def _create_minimal_update(self, time_cost: int) -> Dict[str, Any]:
         """创建最小更新（出错时使用）"""
@@ -250,7 +250,7 @@ class WorldStateManager:
             "npc_updates": [],
             "offscreen_events": [],
             "environment_changes": [],
-            "triggered_plot_nodes": []
+            "potential_plot_developments": []
         }
     
     def get_npc_state(self, npc_id: str) -> Optional[Dict[str, Any]]:

@@ -35,7 +35,7 @@ class PlotDirector:
         # Genesis数据
         self.genesis_data = genesis_data
         self.world_info = genesis_data.get("world", {})
-        self.plot_nodes = genesis_data.get("plot_nodes", [])
+        self.plot_hints = genesis_data.get("plot_hints", [])
         self.characters = genesis_data.get("characters", [])
         
         # 加载提示词
@@ -51,7 +51,7 @@ class PlotDirector:
         self.scene_count = 0
         
         logger.info("✅ 命运编织者初始化完成")
-        logger.info(f"   - 剧情节点总数: {len(self.plot_nodes)}")
+        logger.info(f"   - 剧情线索总数: {len(self.plot_hints)}")
     
     def _load_system_prompt(self) -> str:
         """加载系统提示词"""
@@ -161,12 +161,12 @@ class PlotDirector:
             return self._create_minimal_script()
     
     def _format_available_plots(self) -> str:
-        """格式化可用的剧情节点"""
+        """格式化可用的剧情线索"""
         lines = []
-        for i, node in enumerate(self.plot_nodes[:10], 1):  # 只显示前10个
-            if node.get("id") not in self.completed_nodes:
+        for i, hint in enumerate(self.plot_hints[:10], 1):  # 只显示前10个
+            if hint.get("id") not in self.completed_nodes:
                 lines.append(
-                    f"{i}. [{node.get('id')}] {node.get('title', '未知')}"
+                    f"{i}. [{hint.get('id')}] {hint.get('title', '未知')}"
                     f" - 重要性: {node.get('importance', 'minor')}"
                 )
         return "\n".join(lines) if lines else "无可用剧情节点"
@@ -296,8 +296,8 @@ class PlotDirector:
             "scene_count": self.scene_count,
             "completed_nodes": self.completed_nodes,
             "active_nodes": self.active_nodes,
-            "total_nodes": len(self.plot_nodes),
-            "completion_rate": len(self.completed_nodes) / len(self.plot_nodes) if self.plot_nodes else 0
+            "total_hints": len(self.plot_hints),
+            "completion_rate": len(self.completed_nodes) / len(self.plot_hints) if self.plot_hints else 0
         }
     
     def handle_message(self, message: Message) -> Optional[Message]:
