@@ -3,11 +3,11 @@ LLM工厂模块
 支持多种LLM提供商，遵循低耦合原则
 """
 from typing import Optional
-from langchain_community.chat_models import ChatZhipuAI
 from langchain_community.chat_models import ChatOpenAI
 from langchain_core.language_models import BaseLanguageModel
 from config.settings import settings
 from utils.logger import setup_logger
+from utils.custom_zhipuai import CustomChatZhipuAI
 
 logger = setup_logger("LLMFactory")
 
@@ -53,21 +53,28 @@ class LLMFactory:
             raise
     
     @staticmethod
-    def _create_zhipu(model_name: str, temperature: float, max_tokens: Optional[int]) -> ChatZhipuAI:
-        """创建智谱清言LLM"""
+    def _create_zhipu(model_name: str, temperature: float, max_tokens: Optional[int]) -> CustomChatZhipuAI:
+        """创建智谱清言LLM（使用自定义类修复超时问题）"""
         if not settings.ZHIPU_API_KEY:
             raise ValueError("❌ 未配置ZHIPU_API_KEY，请检查.env文件")
         
-        # 构建参数字典，如果 max_tokens 为 None 则不传递该参数
+        # 使用自定义的CustomChatZhipuAI类，修复原始类硬编码60秒超时的问题
+        # 原始ChatZhipuAI在_generate方法中硬编码: httpx.Client(timeout=60)
+        # 导致无法配置更长的超时时间
+        
+        logger.info(f"⏱️  使用自定义ChatZhipuAI，配置超时: 600秒 (10分钟)")
+        
+        # 构建参数字典
         params = {
             "model": model_name,
             "temperature": temperature,
             "api_key": settings.ZHIPU_API_KEY,
+            "request_timeout": 600.0,  # 10分钟超时
         }
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
         
-        return ChatZhipuAI(**params)
+        return CustomChatZhipuAI(**params)
     
     @staticmethod
     def _create_openai(model_name: str, temperature: float, max_tokens: Optional[int]) -> ChatOpenAI:
