@@ -174,3 +174,4 @@ class CustomChatZhipuAI(ChatZhipuAI):
             logger.error(f"解析流式数据失败: {e}")
             return None
 
+

@@ -1,0 +1,143 @@
+{
+  "meta": {
+    "world_name": "江城",
+    "genre_type": "REALISTIC",
+    "description": "2024年的现代都市，一个关于科技、商业阴谋与媒体监督的现实世界"
+  },
+  "physics_logic": {
+    "mode": "STANDARD_REALITY",
+    "hard_constraints": [
+      "人类无法飞行",
+      "无法凭空造物",
+      "无法进行超自然能力",
+      "无法在没有设备的情况下进行远程网络攻击",
+      "无法突破物理空间的限制（如穿墙）"
+    ],
+    "supernatural_system": null
+  },
+  "social_logic": [
+    {
+      "rule_name": "商业权力压制",
+      "trigger_condition": "普通人揭露大型企业不法行为",
+      "consequence": "面临法律威胁、人身安全威胁、家人安全威胁",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "媒体监督效应",
+      "trigger_condition": "向可信媒体提供确凿证据",
+      "consequence": "引发社会关注，促使执法机构介入调查",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "技术能力风险",
+      "trigger_condition": "技术人员接触敏感数据",
+      "consequence": "被监控、网络攻击、人身威胁",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "证据链要求",
+      "trigger_condition": "指控企业或高官不法行为",
+      "consequence": "没有实质证据时指控无效，可能面临反诉",
+      "is_rigid": true
+    }
+  ],
+  "geography": {
+    "locations": [
+      {
+        "id": "downtown_cafe",
+        "name": "市中心咖啡馆",
+        "region_type": "城市商业区",
+        "sensory_profile": {
+          "visual": "繁华街景，人流量大，现代都市氛围",
+          "auditory": "城市喧嚣，咖啡机声，轻柔的背景音乐",
+          "olfactory": "咖啡香气，都市混合气息",
+          "atmosphere": "繁忙，社交，偶遇的可能性"
+        },
+        "connected_to": [
+          "lin_apartment",
+          "hidden_teahouse"
+        ]
+      },
+      {
+        "id": "lin_apartment",
+        "name": "林晨的出租屋",
+        "region_type": "住宅区",
+        "sensory_profile": {
+          "visual": "老旧公寓，堆满电脑设备和技术书籍",
+          "auditory": "安静，电脑运行声，键盘敲击声",
+          "olfactory": "书籍和电子设备的气味",
+          "atmosphere": "技术宅的私密空间，专注，安全"
+        },
+        "connected_to": [
+          "downtown_cafe",
+          "old_internet_cafe"
+        ]
+      },
+      {
+        "id": "hidden_teahouse",
+        "name": "隐蔽茶馆",
+        "region_type": "商业休闲区",
+        "sensory_profile": {
+          "visual": "传统中式装修，隐蔽位置",
+          "auditory": "轻柔交谈声，茶具碰撞声",
+          "olfactory": "茶香，木质家具气息",
+          "atmosphere": "隐秘，紧张，适合秘密会谈"
+        },
+        "connected_to": [
+          "downtown_cafe",
+          "old_internet_cafe"
+        ]
+      },
+      {
+        "id": "old_internet_cafe",
+        "name": "老旧网吧",
+        "region_type": "城市角落",
+        "sensory_profile": {
+          "visual": "陈旧设备，昏暗照明",
+          "auditory": "电脑风扇声，键盘密集敲击声",
+          "olfactory": "灰尘，电子设备，快餐气味",
+          "atmosphere": "临时避难所，紧张，隐匿"
+        },
+        "connected_to": [
+          "hidden_teahouse",
+          "lin_apartment",
+          "luxury_hotel"
+        ]
+      },
+      {
+        "id": "luxury_hotel",
+        "name": "市中心高档酒店",
+        "region_type": "高端商业区",
+        "sensory_profile": {
+          "visual": "豪华装修，现代设计，明亮照明",
+          "auditory": "优雅的背景音乐，低语交谈声",
+          "olfactory": "高档香氛，清洁剂气味",
+          "atmosphere": "权力，财富，对峙，紧张"
+        },
+        "connected_to": [
+          "old_internet_cafe",
+          "final_cafe"
+        ]
+      },
+      {
+        "id": "final_cafe",
+        "name": "结局咖啡馆",
+        "region_type": "城市商业区",
+        "sensory_profile": {
+          "visual": "夕阳透过窗户，城市灯火逐渐亮起",
+          "auditory": "舒缓的音乐，远处城市声",
+          "olfactory": "咖啡香气，轻松的气息",
+          "atmosphere": "平静，释然，成就感"
+        },
+        "connected_to": [
+          "luxury_hotel"
+        ]
+      }
+    ]
+  },
+  "initial_state": {
+    "time_of_day": "傍晚",
+    "weather_condition": "深秋，凉爽",
+    "environmental_stress": "平静的都市生活，潜在的商业暗流"
+  }
+}

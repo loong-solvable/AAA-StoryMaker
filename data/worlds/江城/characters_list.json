@@ -1,0 +1,52 @@
+[
+  {
+    "id": "lin_chen",
+    "name": "林晨",
+    "importance": 1.0
+  },
+  {
+    "id": "su_qing_yu",
+    "name": "苏晴雨",
+    "importance": 1.0
+  },
+  {
+    "id": "ni_ming_xian_ren",
+    "name": "匿名线人",
+    "importance": 0.1
+  },
+  {
+    "id": "dian_hua_nan_ren",
+    "name": "电话中的陌生男人",
+    "importance": 0.1
+  },
+  {
+    "id": "zhang_rui_feng",
+    "name": "张瑞峰",
+    "importance": 0.5
+  },
+  {
+    "id": "hei_xi_zhuang_ren",
+    "name": "黑西装人",
+    "importance": 0.1
+  },
+  {
+    "id": "li_wan",
+    "name": "李婉",
+    "importance": 0.5
+  },
+  {
+    "id": "lao_ji_zhe",
+    "name": "老记者",
+    "importance": 0.1
+  },
+  {
+    "id": "lin_chen_mu_qin",
+    "name": "林晨的母亲",
+    "importance": 0.1
+  },
+  {
+    "id": "jing_fang",
+    "name": "警方",
+    "importance": 0.1
+  }
+]
