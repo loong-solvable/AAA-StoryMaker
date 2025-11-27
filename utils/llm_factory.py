@@ -63,6 +63,8 @@ class LLMFactory:
             temperature=temperature,
             max_tokens=max_tokens,
             api_key=settings.ZHIPU_API_KEY,
+            timeout=600,  # 超时时间：10分钟
+            request_timeout=600,  # 请求超时：10分钟
         )
     
     @staticmethod
@@ -76,6 +78,8 @@ class LLMFactory:
             temperature=temperature,
             max_tokens=max_tokens,
             api_key=settings.OPENAI_API_KEY,
+            timeout=600,  # 超时时间：10分钟
+            request_timeout=600,  # 请求超时：10分钟
         )
 
 
