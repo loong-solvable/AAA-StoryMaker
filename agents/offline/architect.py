@@ -103,7 +103,11 @@ class ArchitectAgent:
         
         logger.info("🤖 正在调用LLM进行角色普查...")
         try:
-            response = chain.invoke({"novel_text": novel_text})
+            # 设置超时配置：10分钟
+            response = chain.invoke(
+                {"novel_text": novel_text},
+                config={"timeout": 600}
+            )
             characters_list = self._parse_json_response(response)
             
             logger.info(f"✅ 角色普查完成，发现 {len(characters_list)} 个角色")
@@ -138,7 +142,11 @@ class ArchitectAgent:
         
         logger.info("🤖 正在调用LLM进行世界观解析...")
         try:
-            response = chain.invoke({"novel_text": novel_text})
+            # 设置超时配置：10分钟
+            response = chain.invoke(
+                {"novel_text": novel_text},
+                config={"timeout": 600}
+            )
             world_setting = self._parse_json_response(response)
             
             logger.info("✅ 世界观设定提取完成")
@@ -191,7 +199,11 @@ class ArchitectAgent:
             chain = prompt | self.llm | StrOutputParser()
             
             try:
-                response = chain.invoke({"novel_text": novel_text})
+                # 设置超时配置：10分钟
+                response = chain.invoke(
+                    {"novel_text": novel_text},
+                    config={"timeout": 600}
+                )
                 char_data = self._parse_json_response(response)
                 
                 # 确保importance字段被保留
