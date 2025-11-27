@@ -288,6 +288,154 @@ class ArchitectAgent:
         logger.info(f"📁 世界数据已保存到: {world_dir}")
         return world_dir
     
+    def _auto_retry_failed_characters(
+        self,
+        world_dir: Path,
+        world_name: str,
+        novel_text: str,
+        characters_list: List[Dict[str, Any]],
+        retry_delay: int = 10,
+        max_retries: int = 3
+    ):
+        """
+        自动检查并重试失败的角色创建
+        
+        Args:
+            world_dir: 世界文件夹路径
+            world_name: 世界名称
+            novel_text: 原始小说文本
+            characters_list: 角色列表
+            retry_delay: 重试延迟（秒）
+            max_retries: 最大重试次数
+        """
+        import time
+        
+        logger.info("=" * 80)
+        logger.info("🔍 检查角色创建状态...")
+        logger.info("=" * 80)
+        
+        characters_dir = world_dir / "characters"
+        failed_characters = []
+        
+        # 扫描失败的角色
+        for char_info in characters_list:
+            char_id = char_info["id"]
+            char_name = char_info["name"]
+            importance = char_info["importance"]
+            char_file = characters_dir / f"character_{char_id}.json"
+            
+            # 情况1: 文件不存在
+            if not char_file.exists():
+                logger.warning(f"⚠️  {char_name} (ID: {char_id}): 文件不存在")
+                failed_characters.append((char_id, char_name, importance))
+                continue
+            
+            # 情况2: 文件存在但包含error字段
+            try:
+                with open(char_file, "r", encoding="utf-8") as f:
+                    char_data = json.load(f)
+                
+                if "error" in char_data:
+                    logger.warning(f"⚠️  {char_name} (ID: {char_id}): 创建失败")
+                    failed_characters.append((char_id, char_name, importance))
+                else:
+                    logger.info(f"✅ {char_name} (ID: {char_id}): 状态正常")
+            except json.JSONDecodeError:
+                logger.warning(f"⚠️  {char_name} (ID: {char_id}): JSON解析失败")
+                failed_characters.append((char_id, char_name, importance))
+        
+        # 如果没有失败的角色，直接返回
+        if not failed_characters:
+            logger.info("=" * 80)
+            logger.info("✅ 太棒了！所有角色都创建成功，无需重试")
+            logger.info("=" * 80)
+            return
+        
+        # 发现失败的角色，开始重试
+        logger.info("=" * 80)
+        logger.info(f"⚠️  发现 {len(failed_characters)} 个角色创建失败，自动开始重试...")
+        for char_id, char_name, importance in failed_characters:
+            logger.info(f"   - {char_name} (ID: {char_id}, 重要性: {importance})")
+        logger.info("=" * 80)
+        
+        success_count = 0
+        still_failed = []
+        
+        # 逐个重试失败的角色
+        for char_id, char_name, importance in failed_characters:
+            retry_count = 0
+            success = False
+            
+            while retry_count < max_retries and not success:
+                retry_count += 1
+                logger.info(f"🔄 [{retry_count}/{max_retries}] 重试: {char_name} (ID: {char_id})")
+                
+                # 延迟避免API限流
+                if retry_count > 1 or failed_characters.index((char_id, char_name, importance)) > 0:
+                    logger.info(f"⏰ 等待 {retry_delay} 秒以避免API限流...")
+                    time.sleep(retry_delay)
+                
+                try:
+                    # 动态填充提示词模板
+                    char_prompt = self.char_detail_prompt.replace("{target_name}", char_name)
+                    char_prompt = char_prompt.replace("{target_id}", char_id)
+                    
+                    prompt = ChatPromptTemplate.from_messages([
+                        ("system", char_prompt),
+                        ("human", "{novel_text}")
+                    ])
+                    
+                    chain = prompt | self.llm | StrOutputParser()
+                    
+                    # 调用LLM
+                    response = chain.invoke(
+                        {"novel_text": novel_text},
+                        config={"timeout": 600}
+                    )
+                    
+                    # 解析JSON响应
+                    char_data = self._parse_json_response(response)
+                    char_data["importance"] = importance
+                    
+                    # 保存到文件
+                    char_file = characters_dir / f"character_{char_id}.json"
+                    with open(char_file, "w", encoding="utf-8") as f:
+                        json.dump(char_data, f, ensure_ascii=False, indent=2)
+                    
+                    logger.info(f"✅ {char_name} 重试成功！")
+                    success = True
+                    success_count += 1
+                
+                except Exception as e:
+                    logger.warning(f"❌ {char_name} 第{retry_count}次重试失败: {e}")
+                    if retry_count < max_retries:
+                        # 失败后等待更长时间
+                        wait_time = retry_delay * 2
+                        logger.info(f"⏰ 将在 {wait_time} 秒后再次尝试...")
+                        time.sleep(wait_time)
+            
+            if not success:
+                still_failed.append((char_id, char_name, importance))
+        
+        # 最终报告
+        logger.info("=" * 80)
+        logger.info("📊 自动重试完成！")
+        logger.info(f"   ✅ 成功修复: {success_count} 个角色")
+        logger.info(f"   ❌ 仍然失败: {len(still_failed)} 个角色")
+        
+        if still_failed:
+            logger.warning("⚠️  以下角色仍未创建成功：")
+            for char_id, char_name, importance in still_failed:
+                logger.warning(f"   - {char_name} (ID: {char_id})")
+            logger.warning("💡 建议：")
+            logger.warning("   1. 稍后手动运行: python temp/retry_failed_characters.py {world_name}")
+            logger.warning("   2. 检查API配额是否充足")
+            logger.warning("   3. 增加retry_delay参数以降低请求频率")
+        else:
+            logger.info("🎉 所有角色现已创建完成！")
+        
+        logger.info("=" * 80)
+    
     def run(self, novel_filename: str = "example_novel.txt") -> Path:
         """
         完整的三阶段运行流程
@@ -333,6 +481,9 @@ class ArchitectAgent:
         logger.info(f"   - characters_list.json ({len(characters_list)}个角色)")
         logger.info(f"   - characters/ ({len(characters_details)}个档案)")
         logger.info("=" * 80)
+        
+        # 自动检查并重试失败的角色
+        self._auto_retry_failed_characters(world_dir, world_name, novel_text, characters_list)
         
         return world_dir
 
