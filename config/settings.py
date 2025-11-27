@@ -33,7 +33,7 @@ class Settings:
     # 模型参数
     MODEL_NAME = os.getenv("MODEL_NAME", "glm-4")
     TEMPERATURE = float(os.getenv("TEMPERATURE", "0.7"))
-    MAX_TOKENS = int(os.getenv("MAX_TOKENS", "4000"))
+    MAX_TOKENS = None  # 不限制，让模型自己决定需要多少tokens
     
     # 项目路径
     DATA_DIR = PROJECT_ROOT / "data"

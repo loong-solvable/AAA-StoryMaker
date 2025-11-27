@@ -53,30 +53,38 @@ class LLMFactory:
             raise
     
     @staticmethod
-    def _create_zhipu(model_name: str, temperature: float, max_tokens: int) -> ChatZhipuAI:
+    def _create_zhipu(model_name: str, temperature: float, max_tokens: Optional[int]) -> ChatZhipuAI:
         """创建智谱清言LLM"""
         if not settings.ZHIPU_API_KEY:
             raise ValueError("❌ 未配置ZHIPU_API_KEY，请检查.env文件")
         
-        return ChatZhipuAI(
-            model=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            api_key=settings.ZHIPU_API_KEY,
-        )
+        # 构建参数字典，如果 max_tokens 为 None 则不传递该参数
+        params = {
+            "model": model_name,
+            "temperature": temperature,
+            "api_key": settings.ZHIPU_API_KEY,
+        }
+        if max_tokens is not None:
+            params["max_tokens"] = max_tokens
+        
+        return ChatZhipuAI(**params)
     
     @staticmethod
-    def _create_openai(model_name: str, temperature: float, max_tokens: int) -> ChatOpenAI:
+    def _create_openai(model_name: str, temperature: float, max_tokens: Optional[int]) -> ChatOpenAI:
         """创建OpenAI LLM"""
         if not settings.OPENAI_API_KEY:
             raise ValueError("❌ 未配置OPENAI_API_KEY，请检查.env文件")
         
-        return ChatOpenAI(
-            model=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            api_key=settings.OPENAI_API_KEY,
-        )
+        # 构建参数字典，如果 max_tokens 为 None 则不传递该参数
+        params = {
+            "model": model_name,
+            "temperature": temperature,
+            "api_key": settings.OPENAI_API_KEY,
+        }
+        if max_tokens is not None:
+            params["max_tokens"] = max_tokens
+        
+        return ChatOpenAI(**params)
 
 
 # 便捷函数
