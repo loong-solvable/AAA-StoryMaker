@@ -6,6 +6,7 @@
 - characters/character_<id>.json: 每个角色的详细档案
 """
 import json
+import re
 from pathlib import Path
 from typing import Dict, Any, List
 from langchain_core.prompts import ChatPromptTemplate
@@ -74,12 +75,21 @@ class ArchitectAgent:
             response = response[:-3]
         response = response.strip()
         
+        # 移除JSON中的注释（LLM可能返回带注释的JSON）
+        # 处理单行注释：// ...
+        response = re.sub(r'//.*?(?=\n|$)', '', response)
+        # 处理多行注释：/* ... */
+        response = re.sub(r'/\*.*?\*/', '', response, flags=re.DOTALL)
+        # 移除空行和多余空白
+        response = '\n'.join(line for line in response.split('\n') if line.strip())
+        
         try:
             data = json.loads(response)
             return data
         except json.JSONDecodeError as e:
             logger.error(f"❌ JSON解析失败: {e}")
             logger.error(f"原始响应前500字: {response[:500]}...")
+            logger.error(f"清理后响应前500字: {response[:500]}...")
             raise ValueError("LLM返回的数据格式不正确")
     
     def stage1_filter_characters(self, novel_text: str) -> List[Dict[str, Any]]:
