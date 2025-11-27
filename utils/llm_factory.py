@@ -3,7 +3,6 @@ LLM工厂模块
 支持多种LLM提供商，遵循低耦合原则
 """
 from typing import Optional
-import httpx
 from langchain_community.chat_models import ChatZhipuAI
 from langchain_community.chat_models import ChatOpenAI
 from langchain_core.language_models import BaseLanguageModel
@@ -59,23 +58,11 @@ class LLMFactory:
         if not settings.ZHIPU_API_KEY:
             raise ValueError("❌ 未配置ZHIPU_API_KEY，请检查.env文件")
         
-        # 创建自定义的 httpx client，设置超时时间为10分钟
-        timeout = httpx.Timeout(
-            connect=60.0,    # 连接超时：60秒
-            read=600.0,      # 读取超时：10分钟
-            write=600.0,     # 写入超时：10分钟
-            pool=600.0       # 连接池超时：10分钟
-        )
-        http_client = httpx.Client(timeout=timeout)
-        
-        logger.info(f"✅ 已配置HTTP超时：连接60秒，读取/写入600秒")
-        
         return ChatZhipuAI(
             model=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
             api_key=settings.ZHIPU_API_KEY,
-            http_client=http_client,  # 传入配置好的 client
         )
     
     @staticmethod
@@ -84,23 +71,11 @@ class LLMFactory:
         if not settings.OPENAI_API_KEY:
             raise ValueError("❌ 未配置OPENAI_API_KEY，请检查.env文件")
         
-        # 创建自定义的 httpx client，设置超时时间为10分钟
-        timeout = httpx.Timeout(
-            connect=60.0,    # 连接超时：60秒
-            read=600.0,      # 读取超时：10分钟
-            write=600.0,     # 写入超时：10分钟
-            pool=600.0       # 连接池超时：10分钟
-        )
-        http_client = httpx.Client(timeout=timeout)
-        
-        logger.info(f"✅ 已配置HTTP超时：连接60秒，读取/写入600秒")
-        
         return ChatOpenAI(
             model=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
             api_key=settings.OPENAI_API_KEY,
-            http_client=http_client,  # 传入配置好的 client
         )
 
 
