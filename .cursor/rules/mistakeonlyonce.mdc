@@ -1,0 +1,38 @@
+---
+alwaysApply: false
+description: 这里存放着在项目开发中遇到过的问题，留存在这里以便在之后的开发过程中能够之间避免已经遇到过的问题
+---
+# LLM SDK Integration & Timeout Handling Rules
+
+## Context
+We have experienced specific issues with default timeout settings (often hardcoded to 60s) in various LLM SDKs (e.g., ZhipuAI). This causes failures during long-running tasks or parallel agent executions.
+
+## Rules for Switching or Implementing LLM Clients
+
+1. **MANDATORY Timeout Check**: 
+   - Whenever you are asked to switch LLM providers (e.g., from Zhipu to OpenAI, Anthropic, DeepSeek, etc.) or implement a new `Client` wrapper, you MUST immediately inspect the default timeout behavior of the new SDK/Library.
+   - Do NOT assume the default timeout is sufficient.
+
+2. **The "Custom Wrapper" Pattern**:
+   - Always implement a custom wrapper class (e.g., `CustomOpenAI`, `CustomDeepSeek`) that inherits from or wraps the original client.
+   - **Explicitly override the timeout setting** in this wrapper.
+   - Set the default timeout to a higher value (e.g., `300` seconds or `None` for infinite) unless specified otherwise.
+
+3. **Code Generation Requirement**:
+   - When generating the client code, always include the timeout parameter explicitly in the HTTP client configuration or the API call method.
+   - Example pattern to follow (Python):
+     ```python
+     # BAD: client = SomeSDK(api_key=...)
+     # GOOD: 
+     import httpx
+     timeout = httpx.Timeout(300.0, connect=60.0)
+     client = SomeSDK(api_key=..., http_client=httpx.Client(timeout=timeout))
+     # OR if the SDK supports it directly:
+     client = SomeSDK(api_key=..., timeout=300)
+     ```
+
+4. **Migration Memory**:
+   - If I ask you to refactor code from `CustomZhipuAI` to a new provider, preserve the logic structure of the custom wrapper but adapt it to the new SDK's syntax. Do not revert to the vanilla, default SDK usage.
+
+## Triggers
+- User asks to "change model", "swap provider", or "use [Model Name]".

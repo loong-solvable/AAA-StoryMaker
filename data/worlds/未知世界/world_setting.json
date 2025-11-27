@@ -1,0 +1,122 @@
+{
+  "meta": {
+    "world_name": "江城都市",
+    "genre_type": "REALISTIC",
+    "description": "2024年现代都市背景下，一名AI工程师和记者揭露数据交易商业阴谋的故事"
+  },
+  "physics_logic": {
+    "mode": "STANDARD_REALITY",
+    "hard_constraints": [
+      "人类无法飞行",
+      "无法凭空造物",
+      "技术操作有现实限制（如破解加密需要时间）",
+      "黑客攻击有技术门槛和风险"
+    ],
+    "supernatural_system": null
+  },
+  "social_logic": [
+    {
+      "rule_name": "职场阶级规则",
+      "trigger_condition": "下属顶撞上司或挑战权威",
+      "consequence": "可能被解雇、面临职业危机",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "商业道德与法律边界",
+      "trigger_condition": "揭露商业不法行为",
+      "consequence": "面临威胁、人身危险",
+      "is_rigid": true
+    },
+    {
+      "rule_name": "媒体与权力关系",
+      "trigger_condition": "媒体调查权与企业权力对抗",
+      "consequence": "媒体受到压力，记者面临危险",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "数据隐私法律",
+      "trigger_condition": "非法获取、交易用户数据",
+      "consequence": "面临法律制裁和巨额赔偿",
+      "is_rigid": true
+    }
+  ],
+  "geography": {
+    "locations": [
+      {
+        "id": "city_center_cafe",
+        "name": "市中心咖啡馆",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "繁华的现代都市环境，车水马龙，玻璃幕墙反射夕阳",
+          "auditory": "城市喧嚣声，咖啡馆背景音乐，人们交谈声",
+          "olfactory": "咖啡香，糕点甜香",
+          "atmosphere": "现代都市感，繁忙而有序"
+        },
+        "connected_to": [
+          "city_roads"
+        ]
+      },
+      {
+        "id": "suburb_apartment",
+        "name": "郊区老旧公寓",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "简陋的房间，堆满电脑设备和技术书籍，老旧家具",
+          "auditory": "电脑风扇声，键盘敲击声，远处城市噪音",
+          "olfactory": "旧书气味，电子设备轻微的焦糊味",
+          "atmosphere": "技术宅的生活空间，安静但有技术氛围"
+        },
+        "connected_to": [
+          "suburb_roads"
+        ]
+      },
+      {
+        "id": "teahouse",
+        "name": "隐蔽茶馆",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "传统中式装潢，木质家具，柔和灯光",
+          "auditory": "茶水声，轻柔音乐，低语交谈",
+          "olfactory": "茶叶清香，传统点心香味",
+          "atmosphere": "私密，传统，适合秘密讨论"
+        },
+        "connected_to": [
+          "city_back_alley"
+        ]
+      },
+      {
+        "id": "old_internet_cafe",
+        "name": "老旧网吧",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "陈旧电脑设备，昏暗灯光，烟味弥漫",
+          "auditory": "键盘敲击声，鼠标点击声，电脑风扇声",
+          "olfactory": "烟味，电子设备气味，速食面香味",
+          "atmosphere": "平民化，混乱，临时避难所"
+        },
+        "connected_to": [
+          "city_back_alley"
+        ]
+      },
+      {
+        "id": "luxury_hotel",
+        "name": "高档酒店",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "现代商务装潢，优雅环境，专业着装人士",
+          "auditory": "轻柔背景音乐，低声交谈，电梯运行声",
+          "olfactory": "高级香水味，清洁剂气味",
+          "atmosphere": "正式，高端，有一定压力感"
+        },
+        "connected_to": [
+          "city_center"
+        ]
+      }
+    ]
+  },
+  "initial_state": {
+    "time_of_day": "深秋傍晚",
+    "weather_condition": "秋季微凉，可能有薄雾",
+    "environmental_stress": "都市生活的快节奏与压力，技术工作的紧张感"
+  }
+}

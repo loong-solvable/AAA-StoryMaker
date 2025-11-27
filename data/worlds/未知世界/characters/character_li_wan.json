@@ -1,0 +1,6 @@
+{
+  "id": "li_wan",
+  "name": "李婉",
+  "importance": 0.5,
+  "error": "Client error '429 Too Many Requests' for url 'https://open.bigmodel.cn/api/paas/v4/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429"
+}

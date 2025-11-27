@@ -1,0 +1,37 @@
+{
+  "id": "lao_jizhe",
+  "name": "老记者",
+  "gender": "男",
+  "age": "50岁左右",
+  "importance": 0.5,
+  "traits": [
+    "资深媒体人",
+    "正直",
+    "有影响力",
+    "调查记者"
+  ],
+  "behavior_rules": [
+    "追求真相",
+    "敢于揭露黑幕",
+    "保护信息来源",
+    "专业严谨"
+  ],
+  "relationship_matrix": {
+    "su_qingyu": {
+      "address_as": "苏小姐",
+      "attitude": "欣赏"
+    },
+    "lin_chen": {
+      "address_as": "林先生",
+      "attitude": "敬佩"
+    }
+  },
+  "possessions": [
+    "专业录音设备",
+    "高清相机",
+    "笔记本电脑",
+    "记者证"
+  ],
+  "current_appearance": "一位约50岁的男性，身材瘦削，戴着黑框眼镜，眼神锐利而专注，穿着得体的西装，手持笔记本和录音设备，展现出资深记者的专业气质。",
+  "voice_samples": []
+}

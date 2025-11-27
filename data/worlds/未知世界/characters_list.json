@@ -1,0 +1,47 @@
+[
+  {
+    "id": "lin_chen",
+    "name": "林晨",
+    "importance": 1.0
+  },
+  {
+    "id": "su_qingyu",
+    "name": "苏晴雨",
+    "importance": 1.0
+  },
+  {
+    "id": "zhang_ruifeng",
+    "name": "张瑞峰",
+    "importance": 1.0
+  },
+  {
+    "id": "li_wan",
+    "name": "李婉",
+    "importance": 0.5
+  },
+  {
+    "id": "lao_jizhe",
+    "name": "老记者",
+    "importance": 0.5
+  },
+  {
+    "id": "lin_chen_mother",
+    "name": "林晨母亲",
+    "importance": 0.1
+  },
+  {
+    "id": "niming_xianren",
+    "name": "匿名线人",
+    "importance": 0.1
+  },
+  {
+    "id": "mosheng_nanxing",
+    "name": "陌生号码男性",
+    "importance": 0.1
+  },
+  {
+    "id": "heiyi_xieshang",
+    "name": "黑衣西装男",
+    "importance": 0.1
+  }
+]
