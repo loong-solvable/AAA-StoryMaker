@@ -74,12 +74,12 @@ class OperatingSystem:
             logger.warning("⚠️  未加载Genesis数据，无法初始化世界上下文")
             return
         
-        initial_scene = self.genesis_data.get("initial_scene", {})
+        world_start = self.genesis_data.get("world_start_context", {})
         
         self.world_context = WorldContext(
-            current_time=initial_scene.get("time", "未知时间"),
-            current_location=initial_scene.get("location", "loc_001"),
-            present_characters=initial_scene.get("present_characters", []),
+            current_time=world_start.get("suggested_time", "下午"),
+            current_location=world_start.get("suggested_location", "loc_001"),
+            present_characters=world_start.get("key_characters", []),
             recent_events=[],
             world_state={
                 "turn": 0,

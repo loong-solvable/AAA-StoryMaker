@@ -4,8 +4,10 @@
 """
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from uuid import uuid4
 from config.settings import settings
 from utils.logger import setup_logger
+from utils.database import StateManager
 from agents.online.layer1.os_agent import OperatingSystem
 from agents.online.layer1.logic_agent import LogicValidator
 from agents.online.layer2.ws_agent import WorldStateManager
@@ -39,6 +41,13 @@ class GameEngine:
         # 初始化信息中枢OS
         self.os = OperatingSystem(genesis_path)
         
+        self.game_id = uuid4().hex
+        self.state_manager = StateManager(
+            game_id=self.game_id,
+            game_name=self.os.genesis_data.get("world", {}).get("title", "未知世界"),
+            genesis_path=str(genesis_path)
+        )
+        
         # 初始化逻辑审查官Logic
         self.logic = LogicValidator()
         self.logic.set_world_rules(self.os.genesis_data['world'])
@@ -60,6 +69,9 @@ class GameEngine:
         # 玩家状态
         self.player_location = self.os.world_context.current_location
         self.player_name = "玩家"  # 可以让用户自定义
+        
+        self._bootstrap_character_cards()
+        self._record_agent_snapshots(turn_number=0)
         
         logger.info("✅ 游戏引擎初始化完成")
         logger.info(f"   - 世界: {self.os.genesis_data['world']['title']}")
@@ -96,6 +108,15 @@ class GameEngine:
         opening = self._format_opening(atmosphere, initial_script)
         
         self.os.world_context.world_state["game_started"] = True
+        self._record_turn_summary(
+            turn_number=0,
+            player_input="进入游戏世界",
+            world_update=None,
+            script=initial_script,
+            atmosphere=atmosphere,
+            npc_reactions=[],
+            event_type="game_start"
+        )
         
         return opening
     
@@ -113,6 +134,8 @@ class GameEngine:
         logger.info(f"🎮 处理回合 #{self.os.turn_count + 1}")
         logger.info(f"玩家输入: {player_input[:50]}...")
         logger.info("=" * 60)
+        
+        current_turn = self.os.turn_count + 1
         
         try:
             # Step 1: 输入拦截（Logic验证）
@@ -189,6 +212,15 @@ class GameEngine:
             # Step 6: 最终渲染
             logger.info("📍 Step 6: 最终渲染")
             output_text = self._render_output(atmosphere, npc_reactions, script)
+            
+            self._record_turn_summary(
+                turn_number=current_turn,
+                player_input=player_input,
+                world_update=world_update,
+                script=script,
+                atmosphere=atmosphere,
+                npc_reactions=npc_reactions
+            )
             
             # 更新OS状态
             self.os.next_turn()
@@ -313,4 +345,95 @@ class GameEngine:
             settings.DATA_DIR / "saves" / f"{save_name}.json"
         )
         logger.info(f"💾 游戏已保存: {save_name}")
+
+    def _bootstrap_character_cards(self):
+        """将Genesis中的角色卡导入数据库系统"""
+        characters = self.os.genesis_data.get("characters", [])
+        for char in characters:
+            char_id = char.get("id")
+            if not char_id:
+                continue
+            try:
+                self.state_manager.record_character_card(
+                    character_id=char_id,
+                    version=1,
+                    card_data=char,
+                    changes=None,
+                    changed_by="genesis_import"
+                )
+            except Exception as exc:
+                logger.warning(f"⚠️ 记录角色卡失败: {char_id} - {exc}")
+
+    def _record_turn_summary(
+        self,
+        turn_number: int,
+        player_input: str,
+        world_update: Optional[Dict[str, Any]],
+        script: Optional[Dict[str, Any]],
+        atmosphere: Optional[Dict[str, Any]],
+        npc_reactions: Optional[List[Dict[str, Any]]],
+        event_type: str = "turn_summary"
+    ):
+        """记录每回合的汇总信息"""
+        try:
+            payload = {
+                "player_input": player_input,
+                "world_update": world_update or {},
+                "script": script or {},
+                "atmosphere": atmosphere or {},
+                "npc_reactions": self._serialize_reactions(npc_reactions),
+                "npc_snapshot": self.npc_manager.get_state_snapshot(),
+            }
+            self.state_manager.record_event(
+                event_type=event_type,
+                event_data=payload,
+                agent_source="GameEngine",
+                turn_number=turn_number,
+            )
+            self._record_agent_snapshots(turn_number=turn_number)
+        except Exception as exc:
+            logger.warning(f"⚠️ 记录回合数据失败: {exc}")
+
+    def _serialize_reactions(self, reactions: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+        """将NPC反应转换为可序列化的结构"""
+        serialized = []
+        for item in reactions or []:
+            npc = item.get("npc")
+            reaction = item.get("reaction", {})
+            if not npc:
+                continue
+            serialized.append(
+                {
+                    "npc_id": npc.character_id,
+                    "npc_name": npc.character_name,
+                    "reaction": reaction,
+                }
+            )
+        return serialized
+
+    def _record_agent_snapshots(self, turn_number: int):
+        """记录各核心Agent的状态快照"""
+        try:
+            self.state_manager.record_agent_state(
+                agent_type="OS",
+                turn_number=turn_number,
+                state_snapshot=self.os.get_game_state(),
+            )
+            self.state_manager.record_agent_state(
+                agent_type="WS",
+                turn_number=turn_number,
+                state_snapshot=self.world_state.get_state_snapshot(),
+            )
+            self.state_manager.record_agent_state(
+                agent_type="Plot",
+                turn_number=turn_number,
+                state_snapshot=self.plot.get_state_snapshot(),
+            )
+            self.state_manager.record_agent_state(
+                agent_type="Vibe",
+                turn_number=turn_number,
+                state_snapshot=self.vibe.get_state_snapshot(),
+            )
+        except Exception as exc:
+            logger.warning(f"⚠️ 记录Agent状态失败: {exc}")
 

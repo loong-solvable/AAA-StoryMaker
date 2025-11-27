@@ -299,6 +299,17 @@ class PlotDirector:
             "total_hints": len(self.plot_hints),
             "completion_rate": len(self.completed_nodes) / len(self.plot_hints) if self.plot_hints else 0
         }
+
+    def get_state_snapshot(self) -> Dict[str, Any]:
+        """用于持久化的剧情状态快照"""
+        status = dict(self.get_plot_status())
+        status.update(
+            {
+                "available_hint_ids": [hint.get("id") for hint in self.plot_hints],
+                "recent_completed": self.completed_nodes[-5:] if self.completed_nodes else [],
+            }
+        )
+        return status
     
     def handle_message(self, message: Message) -> Optional[Message]:
         """处理消息（OS接口）"""

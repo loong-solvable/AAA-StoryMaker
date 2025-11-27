@@ -47,7 +47,9 @@
 
 ### 示例世界
 
-完整的示例世界文件在：`../genesis/example_genesis.json`
+完整的示例世界数据在：`../worlds/`（拆分式结构）
+
+查看新的世界数据格式：`../worlds/README.md`
 
 ---
 

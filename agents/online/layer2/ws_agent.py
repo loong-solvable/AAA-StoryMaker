@@ -95,27 +95,106 @@ class WorldStateManager:
     
     def _parse_initial_time(self) -> str:
         """解析初始时间"""
-        initial_scene = self.genesis_data.get("initial_scene", {})
-        time_str = initial_scene.get("time", "2024-11-24 09:00")
-        return time_str
+        world_start = self.genesis_data.get("world_start_context", {})
+        # 根据建议时间生成具体时间
+        suggested_time = world_start.get("suggested_time", "下午")
+        time_map = {
+            "早晨": "08:00",
+            "上午": "10:00",
+            "中午": "12:00",
+            "下午": "15:00",
+            "傍晚": "18:00",
+            "晚上": "20:00",
+            "深夜": "23:00"
+        }
+        time_str = time_map.get(suggested_time, "15:00")
+        return f"2024-11-26 {time_str}"
     
     def _initialize_npc_states(self):
         """初始化所有NPC的状态"""
-        initial_scene = self.genesis_data.get("initial_scene", {})
-        present_chars = initial_scene.get("present_characters", [])
-        location = initial_scene.get("location", "loc_001")
+        world_start = self.genesis_data.get("world_start_context", {})
+        key_chars = world_start.get("key_characters", [])
+        suggested_loc = world_start.get("suggested_location", "loc_001")
         
+        # 智能初始化：关键角色在建议位置，其他角色根据特征合理分配
         for char in self.characters:
             char_id = char.get("id")
+            
+            # 确定初始位置和活动
+            if char_id in key_chars:
+                init_location = suggested_loc
+                init_activity = self._infer_activity_from_location(char, suggested_loc)
+            else:
+                init_location = self._infer_location_from_traits(char)
+                init_activity = self._infer_activity_from_location(char, init_location)
+            
             self.npc_states[char_id] = {
                 "name": char.get("name"),
-                "current_location": location if char_id in present_chars else "unknown",
-                "current_activity": char.get("initial_state", "日常活动"),
+                "current_location": init_location,
+                "current_activity": init_activity,
                 "mood": "平静",
                 "schedule": []
             }
         
         logger.info(f"✅ 初始化了 {len(self.npc_states)} 个NPC的状态")
+    
+    def _infer_location_from_traits(self, char: Dict[str, Any]) -> str:
+        """根据角色特征推断合理的初始位置"""
+        traits = char.get("traits", [])
+        possessions = char.get("possessions", [])
+        
+        # 简单的特征→位置映射逻辑
+        if any("CEO" in t or "老板" in t or "总裁" in t for t in traits):
+            # 查找办公楼类型的位置
+            for loc in self.locations:
+                if "公司" in loc.get("name", "") or "办公" in loc.get("name", ""):
+                    return loc.get("id", "loc_001")
+        
+        if any("记者" in t or "调查" in t for t in traits):
+            # 查找咖啡厅或公共场所
+            for loc in self.locations:
+                if "咖啡" in loc.get("name", "") or "餐厅" in loc.get("name", ""):
+                    return loc.get("id", "loc_001")
+        
+        if any("工程师" in t or "程序员" in t or "技术" in t for t in traits):
+            # 查找家/工作室
+            for loc in self.locations:
+                if "公寓" in loc.get("name", "") or "家" in loc.get("name", ""):
+                    return loc.get("id", "loc_001")
+        
+        # 默认返回第一个位置
+        return self.locations[0].get("id", "loc_001") if self.locations else "loc_001"
+    
+    def _infer_activity_from_location(self, char: Dict[str, Any], location_id: str) -> str:
+        """根据角色特征和位置推断当前活动"""
+        # 查找位置信息
+        location = None
+        for loc in self.locations:
+            if loc.get("id") == location_id:
+                location = loc
+                break
+        
+        if not location:
+            return "日常活动"
+        
+        loc_name = location.get("name", "")
+        traits = char.get("traits", [])
+        
+        # 简单的位置→活动映射
+        if "公司" in loc_name or "办公" in loc_name:
+            return "处理公司事务"
+        elif "咖啡" in loc_name:
+            if any("记者" in t for t in traits):
+                return "整理调查资料"
+            return "享用咖啡"
+        elif "公寓" in loc_name or "家" in loc_name:
+            if any("工程师" in t or "程序员" in t for t in traits):
+                return "远程工作"
+            return "休息"
+        elif "街道" in loc_name:
+            return "行走"
+        else:
+            return "日常活动"
     
     def update_world_state(
         self,
@@ -265,6 +344,18 @@ class WorldStateManager:
             "triggered_plots": self.triggered_plots,
             "recent_events": self.world_events[-5:] if self.world_events else []
         }
+
+    def get_state_snapshot(self) -> Dict[str, Any]:
+        """用于持久化的完整状态快照"""
+        snapshot = dict(self.get_context_summary())
+        snapshot.update(
+            {
+                "world_events_count": len(self.world_events),
+                "triggered_plots_count": len(self.triggered_plots),
+                "last_event": self.world_events[-1] if self.world_events else None,
+            }
+        )
+        return snapshot
     
     def handle_message(self, message: Message) -> Optional[Message]:
         """处理消息（OS接口）"""

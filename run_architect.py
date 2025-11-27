@@ -1,8 +1,8 @@
 """
 运行架构师Agent的入口脚本
-这是第一阶段Demo的主程序
+三阶段世界构建流程
 """
-from agents.offline.architect import create_genesis
+from agents.offline.architect import create_world
 from config.settings import settings
 from utils.logger import default_logger as logger
 
@@ -13,8 +13,10 @@ def main():
     print("🎭 欢迎使用 Infinite Story - 无限故事机")
     print("=" * 70)
     print()
-    print("📌 当前阶段: 第一阶段 - 离线构建者 (The Architect)")
-    print("🎯 目标: 将小说转化为可游戏化的Genesis世界数据包")
+    print("📌 三阶段构建流程:")
+    print("   1️⃣ 角色过滤 - 识别所有角色并评估重要性")
+    print("   2️⃣ 世界设定 - 提取物理法则、社会规则、地点")
+    print("   3️⃣ 角色档案 - 为每个角色创建详细档案")
     print()
     print("=" * 70)
     print()
@@ -42,24 +44,22 @@ def main():
     
     # 运行架构师
     try:
-        genesis_path = create_genesis("example_novel.txt")
+        world_dir = create_world("example_novel.txt")
         
         print("\n" + "=" * 70)
-        print("🎉 恭喜！第一阶段Demo运行成功！")
+        print("🎉 世界构建成功！")
         print("=" * 70)
         print()
-        print(f"📁 Genesis数据包已生成: {genesis_path}")
+        print(f"📁 世界数据已生成: {world_dir}")
         print()
-        print("📖 你可以打开以下文件查看结果：")
-        print(f"   - Genesis.json: {genesis_path}")
-        print(f"   - 运行日志: {settings.LOGS_DIR}/architect.log")
+        print("📖 生成的文件：")
+        print(f"   - world_setting.json      # 世界观设定")
+        print(f"   - characters_list.json    # 角色列表")
+        print(f"   - characters/             # 角色详细档案")
+        print()
+        print(f"📋 运行日志: {settings.LOGS_DIR}/architect.log")
         print()
         print("=" * 70)
-        print()
-        print("🔜 下一步:")
-        print("   第二阶段将实现在线运行系统（信息中枢、光明会、NPC等）")
-        print("   敬请期待！")
-        print()
         
     except FileNotFoundError as e:
         logger.error(f"❌ 文件未找到: {e}")

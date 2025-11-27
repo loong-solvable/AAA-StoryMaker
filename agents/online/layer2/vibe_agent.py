@@ -247,6 +247,14 @@ class AtmosphereCreator:
             "mood_keywords": ["平静", "普通"],
             "focus_elements": ["整体环境"]
         }
+
+    def get_state_snapshot(self) -> Dict[str, Any]:
+        """用于持久化的氛围Agent状态"""
+        return {
+            "world_genre": self.world_info.get("genre"),
+            "description_history": self.description_history[-5:],
+            "locations_cached": len(self.locations),
+        }
     
     def handle_message(self, message: Message) -> Optional[Message]:
         """处理消息（OS接口）"""

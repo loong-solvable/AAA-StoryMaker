@@ -16,7 +16,7 @@
 ## 🏗️ 系统架构
 
 ### 离线构建阶段（The Creator）
-- **架构师 (The Architect)**: 读取小说，提取世界观、人物、剧情，生成`Genesis.json`
+- **架构师 (The Architect)**: 读取小说，三阶段提取世界数据（世界设定、角色列表、角色档案）
 
 ### 在线运行系统（The Runtime）
 
@@ -67,10 +67,15 @@ copy .env.example .env
 ```bash
 python run_architect.py
 ```
-该脚本会：
-1. 读取 `data/novels/example_novel.txt` 中的示例小说
-2. 调用架构师Agent进行世界观解析
-3. 生成 `data/genesis/genesis.json` 数据包
+该脚本会执行三阶段处理：
+1. **角色过滤** - 识别所有角色并评估重要性
+2. **世界设定** - 提取物理法则、社会规则、地点
+3. **角色档案** - 为每个角色创建详细档案
+
+生成结果保存在 `data/worlds/<世界名>/` 目录：
+- `world_setting.json` - 世界观设定
+- `characters_list.json` - 角色列表
+- `characters/` - 每个角色的详细档案
 
 **第二阶段：OS与Logic（在线系统基础）**
 ```bash
@@ -97,12 +102,14 @@ python play_game.py
 ```
 AAA-StoryMaker/
 ├── agents/               # Agent实现
-│   ├── offline/         # 离线构建（本阶段）
-│   └── online/          # 在线运行（未来）
+│   ├── offline/         # 离线构建（架构师）
+│   └── online/          # 在线运行（游戏Agent）
 ├── prompts/             # Prompt工程
 ├── data/                # 数据存储
-│   ├── novels/         # 输入小说
-│   └── genesis/        # 输出世界数据
+│   ├── novels/         # 输入：小说文本
+│   ├── worlds/         # 输出：世界数据（拆分式结构）⭐
+│   └── runtime/        # 运行时数据
+├── initial/             # 初始化模块
 ├── logs/                # 运行日志
 ├── utils/               # 工具模块
 └── config/              # 配置管理
@@ -120,10 +127,10 @@ AAA-StoryMaker/
 
 ### ✅ 第一阶段（已完成）
 - [x] 项目架构设计
-- [x] 架构师Agent实现
+- [x] 架构师Agent实现（三阶段处理）
 - [x] LLM工厂模式
 - [x] 日志系统
-- [x] Genesis.json生成
+- [x] 世界数据生成（拆分式结构）
 
 ### ✅ 第二阶段（已完成 - v0.2.0）
 - [x] Agent消息协议定义

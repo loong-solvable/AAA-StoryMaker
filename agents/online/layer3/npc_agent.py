@@ -323,3 +323,10 @@ class NPCManager:
                     mood=update.get("mood")
                 )
 
+    def get_state_snapshot(self) -> Dict[str, Any]:
+        """获取所有NPC的快照，用于持久化"""
+        return {
+            npc_id: npc.get_state()
+            for npc_id, npc in self.npcs.items()
+        }
+

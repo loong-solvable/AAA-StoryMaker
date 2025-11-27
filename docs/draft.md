@@ -17,7 +17,11 @@
 
 #### **A. 离线构建者 (The Creator)**
 * **架构师 (The Architect):**
-    * **职责：** **ETL 引擎**。只运行一次。阅读小说原文，提取世界观、人物档案、剧情节点，生成标准化的 `Genesis.json` 数据包。
+    * **职责：** **三阶段ETL引擎**。只运行一次。阅读小说原文，通过三个专业架构师分别提取：
+      1. 角色列表（含重要性评分）
+      2. 世界观设定（物理法则、社会规则、地点）
+      3. 角色详细档案（性格、关系、语言样本）
+    * **输出：** 生成拆分式世界数据包（world_setting.json + characters_list.json + characters/*.json）
 
 
 
@@ -51,7 +55,7 @@
 ---
 
 #### 世界初始化：
-离线构建者形成genesis.json后，根据小说中角色的数量生成角色，每个角色从genesis.json中提取自己的人设数据来生成角色。WS根据Genesis.json进行初始化。Plot根据Genesis.json生成第一个场景和剧本，并将剧本分发给Vibe、WS和各个角色（注意，这里的分发都要通过OS进行传递）。
+离线构建者生成世界数据后，系统加载 world_setting、characters_list 和所有角色档案。WS根据世界设定进行初始化，NPC Manager根据角色档案生成所有角色Agent。Plot根据世界设定和角色信息生成第一个场景和剧本，并将剧本分发给Vibe、WS和各个NPC（注意，这里的分发都要通过OS进行传递）。
 
 
 ### 3. 交互逻辑顺序 (Interaction Flow)
