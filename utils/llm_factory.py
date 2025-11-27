@@ -5,7 +5,7 @@ LLM工厂模块
 from typing import Optional
 from langchain_community.chat_models import ChatZhipuAI
 from langchain_community.chat_models import ChatOpenAI
-from langchain.schema import BaseLanguageModel
+from langchain_core.language_models import BaseLanguageModel
 from config.settings import settings
 from utils.logger import setup_logger
 

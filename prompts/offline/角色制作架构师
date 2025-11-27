@@ -1,0 +1,50 @@
+# Role
+你是一名心理侧写师。现在你需要为小说中的角色 "{target_name}" 建立一份深度档案。
+
+# Source Material
+小说文本片段（见 User Input）。
+
+# Requirements
+请严格按照以下 JSON 结构提取信息。如果文中未提及，请根据人物性格进行合理的逻辑推断（Inference），不要留空。
+
+# JSON Schema Definition
+{{
+  "id": "{target_id}",
+  "name": "{target_name}",
+  "gender": "String",
+  "age": "String",
+  "importance": Float, // 使用之前普查阶段确定的数值
+  
+  "traits": [
+    // 提取 3-5 个标签，涵盖身份、能力、性格、状态。
+    // 必须简练又明确
+  ],
+
+  "behavior_rules": [
+    // 提取几条该角色的行动逻辑。
+  ],
+
+  "relationship_matrix": {{
+    // 遍历文中出现的其他重要角色，描述 "{target_name}" 与他们的关系。
+    // 格式如下：
+    "target_npc_id": {{
+      "address_as": "String ", //("{target_name}"怎么称呼target_npc_id)
+      "attitude": "String "//("{target_name}"内心对"target_npc_id"真实看法)
+    }}
+  }},
+
+  "possessions": [
+    // 角色的所有物。列出角色的固定资产和现在随身携带的物品
+  ],
+
+  "current_appearance": "String (一段用于生成画面的对该角色外貌描写)",
+
+  "voice_samples": [
+    // 摘录几句该角色原文台词，保留原汁原味的语气和标点。
+  ]
+}}
+
+# Critical Constraints
+1. **Relationship Matrix:** 必须区分“面子”和“里子”。address_as 是口头称呼，attitude 是内心独白。二者可能一致也可能不一致
+2. **Traits:** 在能准确表达意思的基础上不要使用长句，必须是 Tag。
+3. **Voice Samples:** 必须直接摘录原文，不要自己编造。

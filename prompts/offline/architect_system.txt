@@ -51,18 +51,19 @@
       "note_for_plot_agent": "给Plot Agent的提示：这个线索的性质和可能的展开方向"
     }
   ],
-  "initial_scene": {
-    "description": "游戏开始时的场景描述",
-    "time": "具体时间",
-    "location": "loc_001",
-    "present_characters": ["char_001"]
+  "world_start_context": {
+    "note": "游戏开始时的背景提示，由Plot Agent动态生成开场场景",
+    "suggested_location": "loc_001",
+    "suggested_time": "时间建议（如：上午/下午/傍晚）",
+    "key_characters": ["char_001"],
+    "opening_hint": "简短的开场背景提示（如：主角接到一个神秘来电）"
   }
 }
 
 注意事项：
 - 保持逻辑严谨，信息不要自我矛盾
 - 角色关系网要清晰完整
-- 剧情节点要覆盖小说的主线和重要支线
-- 初始场景要给玩家一个清晰的进入点
-- 所有ID使用统一命名规则（char_xxx, loc_xxx, plot_xxx）
+- 角色不要有 initial_state 字段，初始状态由WS在运行时初始化
+- world_start_context 只是提示，不是具体场景，Plot Agent会动态生成开场
+- 所有ID使用统一命名规则（char_xxx, loc_xxx, hint_xxx）
 
