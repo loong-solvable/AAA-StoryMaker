@@ -194,7 +194,7 @@ class IlluminatiInitializer:
         ws_dir.mkdir(parents=True, exist_ok=True)
         
         # 读取 WS 系统提示词
-        ws_prompt_path = settings.BASE_DIR / "prompts" / "online" / "ws_system.txt"
+        ws_prompt_path = settings.PROMPTS_DIR / "online" / "ws_system.txt"
         with open(ws_prompt_path, "r", encoding="utf-8") as f:
             system_prompt = f.read()
         
