@@ -25,12 +25,17 @@ class Settings:
     # OpenAI配置（备用）
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     
+    # OpenRouter配置
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+    OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "x-ai/grok-4.1-fast:free")
+    OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+    
     # 讯飞星火配置（备用）
     IFLYTEK_APP_ID = os.getenv("IFLYTEK_APP_ID", "")
     IFLYTEK_API_KEY = os.getenv("IFLYTEK_API_KEY", "")
     IFLYTEK_API_SECRET = os.getenv("IFLYTEK_API_SECRET", "")
     
-    # 模型参数
+    # 模型参数（OpenRouter使用时会优先读取OPENROUTER_MODEL）
     MODEL_NAME = os.getenv("MODEL_NAME", "glm-4")
     TEMPERATURE = float(os.getenv("TEMPERATURE", "0.7"))
     MAX_TOKENS = None  # 不限制，让模型自己决定需要多少tokens
@@ -51,6 +56,8 @@ class Settings:
             errors.append("❌ 未配置ZHIPU_API_KEY")
         elif cls.LLM_PROVIDER == "openai" and not cls.OPENAI_API_KEY:
             errors.append("❌ 未配置OPENAI_API_KEY")
+        elif cls.LLM_PROVIDER == "openrouter" and not cls.OPENROUTER_API_KEY:
+            errors.append("❌ 未配置OPENROUTER_API_KEY")
         elif cls.LLM_PROVIDER == "iflytek" and not cls.IFLYTEK_API_KEY:
             errors.append("❌ 未配置讯飞星火API密钥")
         

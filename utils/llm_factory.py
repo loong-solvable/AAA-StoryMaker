@@ -1,6 +1,7 @@
 """
 LLM工厂模块
 支持多种LLM提供商，遵循低耦合原则
+支持: zhipu(智谱清言), openai, openrouter
 """
 from typing import Optional
 from langchain_community.chat_models import ChatOpenAI
@@ -26,7 +27,7 @@ class LLMFactory:
         创建LLM实例
         
         Args:
-            provider: LLM提供商 (zhipu/openai/iflytek)，默认从配置读取
+            provider: LLM提供商 (zhipu/openai/openrouter)，默认从配置读取
             model_name: 模型名称，默认从配置读取
             temperature: 温度参数，默认从配置读取
             max_tokens: 最大token数，默认从配置读取
@@ -35,7 +36,13 @@ class LLMFactory:
             LLM实例
         """
         provider = provider or settings.LLM_PROVIDER
-        model_name = model_name or settings.MODEL_NAME
+        
+        # OpenRouter使用专门的模型配置
+        if provider == "openrouter":
+            model_name = model_name or settings.OPENROUTER_MODEL
+        else:
+            model_name = model_name or settings.MODEL_NAME
+            
         temperature = temperature if temperature is not None else settings.TEMPERATURE
         max_tokens = max_tokens or settings.MAX_TOKENS
         
@@ -46,6 +53,8 @@ class LLMFactory:
                 return LLMFactory._create_zhipu(model_name, temperature, max_tokens)
             elif provider == "openai":
                 return LLMFactory._create_openai(model_name, temperature, max_tokens)
+            elif provider == "openrouter":
+                return LLMFactory._create_openrouter(model_name, temperature, max_tokens)
             else:
                 raise ValueError(f"不支持的LLM提供商: {provider}")
         except Exception as e:
@@ -87,6 +96,38 @@ class LLMFactory:
             "model": model_name,
             "temperature": temperature,
             "api_key": settings.OPENAI_API_KEY,
+        }
+        if max_tokens is not None:
+            params["max_tokens"] = max_tokens
+        
+        return ChatOpenAI(**params)
+    
+    @staticmethod
+    def _create_openrouter(model_name: str, temperature: float, max_tokens: Optional[int]) -> ChatOpenAI:
+        """
+        创建OpenRouter LLM
+        
+        OpenRouter提供统一的API接入多种模型，兼容OpenAI API格式
+        官方文档: https://openrouter.ai/docs
+        """
+        if not settings.OPENROUTER_API_KEY:
+            raise ValueError("❌ 未配置OPENROUTER_API_KEY，请检查.env文件")
+        
+        logger.info(f"🌐 使用OpenRouter API: {settings.OPENROUTER_BASE_URL}")
+        logger.info(f"📦 模型: {model_name}")
+        
+        # OpenRouter兼容OpenAI API，使用ChatOpenAI类即可
+        # 需要设置base_url指向OpenRouter的API端点
+        params = {
+            "model": model_name,
+            "temperature": temperature,
+            "api_key": settings.OPENROUTER_API_KEY,
+            "base_url": settings.OPENROUTER_BASE_URL,
+            "default_headers": {
+                "HTTP-Referer": "https://github.com/AAA-StoryMaker",  # 可选：用于OpenRouter统计
+                "X-Title": "AAA-StoryMaker"  # 可选：应用名称
+            },
+            "timeout": 600,  # 10分钟超时
         }
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
