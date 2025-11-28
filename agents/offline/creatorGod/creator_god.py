@@ -94,14 +94,46 @@ class CreatorGod:
         self.logger.info(f"✅ 成功读取小说: {novel_path.name} ({len(text)}字)")
         return text
 
-    def run_pipeline(self, novel_text: str):
-        """执行三阶段流水线（不落盘）"""
+    def run_pipeline(self, novel_text: str, world_dir: Optional[Path] = None):
+        """
+        执行三阶段流水线（每阶段完成后立即保存）
+        
+        Args:
+            novel_text: 小说文本
+            world_dir: 可选的世界目录，若提供则每阶段完成后立即保存
+        """
+        # 阶段1：角色过滤
         characters_list = self.character_filter_agent.run(novel_text)
+        if world_dir:
+            self._save_characters_list(world_dir, characters_list)
+        
+        # 阶段2：世界观提取
         world_setting = self.world_setting_agent.run(novel_text)
+        if world_dir:
+            self._save_world_setting(world_dir, world_setting)
+        
+        # 阶段3：角色档案（传入characters_list以保持ID一致）
         characters_details = self.character_detail_agent.run(
-            novel_text, characters_list
+            novel_text, characters_list, world_dir
         )
+        
         return world_setting, characters_list, characters_details
+
+    def _save_characters_list(self, world_dir: Path, characters_list: Any) -> None:
+        """保存角色列表（阶段1产物）"""
+        world_dir.mkdir(parents=True, exist_ok=True)
+        characters_list_file = world_dir / "characters_list.json"
+        with characters_list_file.open("w", encoding="utf-8") as f:
+            json.dump(characters_list, f, ensure_ascii=False, indent=2)
+        self.logger.info(f"💾 阶段1完成 - 已保存角色列表: {characters_list_file}")
+
+    def _save_world_setting(self, world_dir: Path, world_setting: Dict[str, Any]) -> None:
+        """保存世界设定（阶段2产物）"""
+        world_dir.mkdir(parents=True, exist_ok=True)
+        world_setting_file = world_dir / "world_setting.json"
+        with world_setting_file.open("w", encoding="utf-8") as f:
+            json.dump(world_setting, f, ensure_ascii=False, indent=2)
+        self.logger.info(f"💾 阶段2完成 - 已保存世界设定: {world_setting_file}")
 
     def save_world_data(
         self,
@@ -110,7 +142,10 @@ class CreatorGod:
         characters_list: Any,
         characters_details: Dict[str, Dict[str, Any]],
     ) -> Path:
-        """保存三份产物到 data/worlds/<world_name>/"""
+        """
+        保存三份产物到 data/worlds/<world_name>/
+        （兼容旧版调用，当未使用分阶段保存时可用此方法一次性保存）
+        """
         self.logger.info("=" * 60)
         self.logger.info("💾 保存世界数据")
         self.logger.info("=" * 60)
@@ -200,8 +235,9 @@ class CreatorGod:
                         "name": char_name,
                         "importance": importance,
                     }
+                    # 传入characters_list以保持ID一致性
                     char_data = self.character_detail_agent.create_one(
-                        novel_text, char_info
+                        novel_text, char_info, characters_list
                     )
                     char_file = characters_dir / f"character_{char_id}.json"
                     with char_file.open("w", encoding="utf-8") as f:
@@ -227,8 +263,14 @@ class CreatorGod:
                 self.logger.warning(f"   - {cname} (ID: {cid}, 重要性 {importance})")
         self.logger.info("=" * 80)
 
-    def run(self, novel_filename: str = "example_novel.txt") -> Path:
-        """完整流程：读取小说 -> 三阶段 -> 落盘 -> 自动重试"""
+    def run(self, novel_filename: str = "example_novel.txt", world_name: Optional[str] = None) -> Path:
+        """
+        完整流程：读取小说 -> 三阶段（每阶段完成后保存） -> 自动重试
+        
+        Args:
+            novel_filename: 小说文件名
+            world_name: 可选的世界名称，若不提供则从阶段2的世界设定中提取
+        """
         self.logger.info("=" * 80)
         self.logger.info("🚀 启动 CreatorGod - 三阶段世界构建")
         self.logger.info("=" * 80)
@@ -236,15 +278,37 @@ class CreatorGod:
         novel_path = settings.NOVELS_DIR / novel_filename
         novel_text = self._read_novel(novel_path)
 
-        world_setting, characters_list, characters_details = self.run_pipeline(
-            novel_text
-        )
-        world_name = world_setting.get("meta", {}).get("world_name", "未知世界")
-        world_dir = self.save_world_data(
-            world_name=world_name,
-            world_setting=world_setting,
-            characters_list=characters_list,
-            characters_details=characters_details,
+        # 如果提前指定了世界名称，可以在阶段1完成后就开始保存
+        # 否则需要等阶段2完成获取世界名称后再保存
+        if world_name:
+            world_dir = settings.DATA_DIR / "worlds" / world_name
+            world_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.info(f"📁 使用指定世界名称: {world_name}")
+        else:
+            world_dir = None
+        
+        # 阶段1：角色过滤
+        characters_list = self.character_filter_agent.run(novel_text)
+        
+        # 阶段2：世界观提取
+        world_setting = self.world_setting_agent.run(novel_text)
+        
+        # 如果没有预先指定世界名称，从世界设定中获取
+        if not world_name:
+            world_name = world_setting.get("meta", {}).get("world_name", "未知世界")
+            world_dir = settings.DATA_DIR / "worlds" / world_name
+            world_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.info(f"📁 从世界设定中获取世界名称: {world_name}")
+        
+        # 阶段1和阶段2数据现在可以保存了
+        self._save_characters_list(world_dir, characters_list)
+        self._save_world_setting(world_dir, world_setting)
+        
+        # 阶段3：角色档案（每个角色创建后即时保存）
+        characters_dir = world_dir / "characters"
+        characters_dir.mkdir(exist_ok=True)
+        characters_details = self.character_detail_agent.run(
+            novel_text, characters_list, world_dir
         )
 
         self._auto_retry_failed_characters(

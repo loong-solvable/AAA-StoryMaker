@@ -11,6 +11,8 @@
 # Output Format
 JSON List:
 [
-  {"id": "npc_name_pinyin", "name": "中文名", "importance": 0.9},
+  {"id": "npc_001", "name": "中文名", "importance": 0.9},
+  {"id": "npc_002", "name": "中文名", "importance": 0.9},
+
   ...
 ]

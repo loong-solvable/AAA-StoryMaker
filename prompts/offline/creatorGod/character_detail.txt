@@ -4,6 +4,10 @@
 # Source Material
 小说文本片段（见 User Input）。
 
+# Characters List（角色普查表）
+以下是阶段一角色普查确定的所有角色及其ID，在填写 relationship_matrix 时必须使用这些ID：
+{characters_list}
+
 # Requirements
 请严格按照以下 JSON 结构提取信息。若文中未提及，请根据人设性格进行合理的逻辑推断（Inference），不要留空。
 
@@ -26,10 +30,11 @@
 
   "relationship_matrix": {{
     // 遍历文中出现的其他重要角色，描述 "{target_name}" 与他们的关系。
+    // **重要：这里的 target_npc_id 必须使用上方角色普查表中的ID（如 npc_001, npc_002 等）**
     // 格式如下：
-    "target_npc_id": {{
-      "address_as": "String ", //("{target_name}"怎么称呼target_npc_id)
-      "attitude": "String "//("{target_name}"内心对target_npc_id"真实看法)
+    "npc_XXX": {{  // 使用角色普查表中的ID
+      "address_as": "String", //("{target_name}"怎么称呼该角色)
+      "attitude": "String"//("{target_name}"内心对该角色的真实看法)
     }}
   }},
 
@@ -45,6 +50,7 @@
 }}
 
 # Critical Constraints
-1. **Relationship Matrix:** 必须区分“面子”和“里子”。address_as 是口头称呼，attitude 是内心独白。二者可能一致也可能不一致。
-2. **Traits:** 在能准确表达意思的基础上不要使用长句，必须是 Tag。
-3. **Voice Samples:** 必须直接摘录原文，不要自己编造。
+1. **ID一致性：** 必须使用角色普查表中确定的ID。当前角色ID为 "{target_id}"，relationship_matrix 中引用其他角色时也必须使用普查表中的ID。
+2. **Relationship Matrix:** 必须区分"面子"和"里子"。address_as 是口头称呼，attitude 是内心独白。二者可能一致也可能不一致。
+3. **Traits:** 在能准确表达意思的基础上不要使用长句，必须是 Tag。
+4. **Voice Samples:** 必须直接摘录原文，不要自己编造。

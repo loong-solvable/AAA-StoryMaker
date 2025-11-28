@@ -1,6 +1,8 @@
 """
 角色档案子客体：为单个角色生成详细档案
 """
+import json
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -12,7 +14,7 @@ from .utils import load_prompt, parse_json_response, escape_braces
 
 
 class CharacterDetailAgent:
-    """角色档案 Agent"""
+    """角色档案 Agent（许劭）"""
 
     def __init__(
         self,
@@ -24,18 +26,51 @@ class CharacterDetailAgent:
         self.llm = llm or get_llm()
         self.prompt_template = load_prompt(prompt_filename)
 
-    def _build_prompt(self, char_name: str, char_id: str) -> str:
+    def _build_prompt(
+        self, 
+        char_name: str, 
+        char_id: str, 
+        characters_list: Optional[List[Dict[str, Any]]] = None
+    ) -> str:
+        """
+        构建提示词，包含角色列表信息以保持ID一致性
+        
+        Args:
+            char_name: 目标角色名
+            char_id: 目标角色ID
+            characters_list: 阶段1生成的角色列表，用于ID同步
+        """
         prompt = self.prompt_template.replace("{target_name}", char_name)
         prompt = prompt.replace("{target_id}", char_id)
+        
+        # 构建角色列表信息（用于relationship_matrix中的ID引用）
+        if characters_list:
+            characters_list_str = json.dumps(characters_list, ensure_ascii=False, indent=2)
+            prompt = prompt.replace("{characters_list}", characters_list_str)
+        else:
+            prompt = prompt.replace("{characters_list}", "[]")
+        
         return escape_braces(prompt)
 
-    def create_one(self, novel_text: str, char_info: Dict[str, Any]) -> Dict[str, Any]:
-        """为单个角色生成档案"""
+    def create_one(
+        self, 
+        novel_text: str, 
+        char_info: Dict[str, Any],
+        characters_list: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """
+        为单个角色生成档案
+        
+        Args:
+            novel_text: 小说文本
+            char_info: 当前角色信息
+            characters_list: 阶段1生成的角色列表，用于ID同步
+        """
         char_id = char_info.get("id")
         char_name = char_info.get("name")
         importance = char_info.get("importance")
 
-        prompt_text = self._build_prompt(char_name, char_id)
+        prompt_text = self._build_prompt(char_name, char_id, characters_list)
         prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", prompt_text),
@@ -49,12 +84,34 @@ class CharacterDetailAgent:
         char_data["importance"] = importance
         return char_data
 
+    def _save_character(
+        self, 
+        world_dir: Path, 
+        char_id: str, 
+        char_data: Dict[str, Any]
+    ) -> None:
+        """保存单个角色档案"""
+        characters_dir = world_dir / "characters"
+        characters_dir.mkdir(exist_ok=True)
+        char_file = characters_dir / f"character_{char_id}.json"
+        with char_file.open("w", encoding="utf-8") as f:
+            json.dump(char_data, f, ensure_ascii=False, indent=2)
+        self.logger.info(f"   💾 已保存角色档案: {char_file.name}")
+
     def run(
         self,
         novel_text: str,
         characters_list: List[Dict[str, Any]],
+        world_dir: Optional[Path] = None,
     ) -> Dict[str, Dict[str, Any]]:
-        """批量为角色生成档案"""
+        """
+        批量为角色生成档案
+        
+        Args:
+            novel_text: 小说文本
+            characters_list: 阶段1生成的角色列表（包含ID信息）
+            world_dir: 世界目录，若提供则每个角色创建后即时保存
+        """
         self.logger.info("=" * 60)
         self.logger.info("📍 阶段3：创建角色详细档案")
         self.logger.info("=" * 60)
@@ -70,16 +127,26 @@ class CharacterDetailAgent:
                 f"[{idx}/{total}] 处理角色: {char_name} (重要性 {importance})"
             )
             try:
-                characters_details[char_id] = self.create_one(novel_text, char_info)
+                # 传入characters_list以保持ID一致性
+                char_data = self.create_one(novel_text, char_info, characters_list)
+                characters_details[char_id] = char_data
                 self.logger.info(f"   ✅ {char_name} 档案创建完成")
+                
+                # 即时保存
+                if world_dir:
+                    self._save_character(world_dir, char_id, char_data)
             except Exception as e:
                 self.logger.warning(f"   ⚠️  {char_name} 档案创建失败: {e}")
-                characters_details[char_id] = {
+                error_data = {
                     "id": char_id,
                     "name": char_name,
                     "importance": importance,
                     "error": str(e),
                 }
+                characters_details[char_id] = error_data
+                # 即使失败也保存错误信息
+                if world_dir:
+                    self._save_character(world_dir, char_id, error_data)
 
         self.logger.info(f"✅ 角色档案生成完成: {len(characters_details)}/{total}")
         return characters_details
