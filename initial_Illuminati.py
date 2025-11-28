@@ -233,8 +233,7 @@ class IlluminatiInitializer:
             },
             "weather": {
                 "condition": "晴朗",
-                "temperature": "温暖",
-                "atmosphere": "天气宜人，微风轻拂"
+                "temperature": "22°C"
             },
             "characters_present": characters_present,
             "characters_absent": [],  # 初始化时为空
@@ -284,29 +283,39 @@ class IlluminatiInitializer:
     # Plot 初始化
     # ==========================================
     
-    def init_plot_and_generate_opening(self) -> tuple[InitialScene, InitialScript]:
+    def init_plot_and_generate_opening(self, world_state: Dict[str, Any]) -> tuple[InitialScene, InitialScript]:
         """
         初始化 Plot（命运编织者）并生成起始场景和剧本
         
-        读取创世组生成的所有 json 文件，生成：
-        - 起始场景 (initial_scene.json)
-        - 起始剧本 (initial_script.json)
+        Args:
+            world_state: WS初始化生成的世界状态数据
+        
+        依据数据：
+        - 角色卡 (characters_details)
+        - 世界设定 (world_setting)
+        - 角色列表 (characters_list)
+        - WS世界状态 (world_state)
+        
+        生成：
+        - 当前场景 (plot/current_scene.json)
+        - 起始剧本 (plot/script/script_001.json)
         """
         logger.info("")
         logger.info("─" * 60)
         logger.info("🎬 初始化 Plot（命运编织者）")
         logger.info("─" * 60)
         
-        # 构建 Prompt
-        prompt = self._build_plot_prompt()
-        
-        logger.info("🤖 正在调用 LLM 生成起始场景和剧本...")
-        
         # 创建 Plot 目录结构
         plot_dir = self.runtime_dir / "plot"
         plot_dir.mkdir(parents=True, exist_ok=True)
         script_dir = plot_dir / "script"
         script_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 构建 Prompt（传入world_state）
+        prompt = self._build_plot_prompt(world_state)
+        
+        logger.info("🤖 正在调用 LLM 生成起始场景和剧本...")
+        logger.info(f"   依据: world_setting, characters_list, {len(self.characters_details)}个角色卡, world_state")
         
         try:
             # 调用 LLM
@@ -319,21 +328,25 @@ class IlluminatiInitializer:
             self.initial_scene = scene
             self.initial_script = script
             
-            # 保存起始场景到 plot 目录
-            scene_file = plot_dir / "initial_scene.json"
+            # 保存当前场景到 plot 目录
+            scene_file = plot_dir / "current_scene.json"
             with open(scene_file, "w", encoding="utf-8") as f:
                 json.dump(asdict(scene), f, ensure_ascii=False, indent=2)
             
-            # 保存起始剧本到 plot/script 目录
-            script_file = script_dir / "initial_script.json"
+            # 保存起始剧本到 plot/script 目录，使用序号命名
+            script_number = 1
+            script_file = script_dir / f"script_{script_number:03d}.json"
+            script_data = asdict(script)
+            script_data["script_number"] = script_number  # 添加序号标识
+            script_data["is_initial"] = True  # 标记为初始剧本
             with open(script_file, "w", encoding="utf-8") as f:
-                json.dump(asdict(script), f, ensure_ascii=False, indent=2)
+                json.dump(script_data, f, ensure_ascii=False, indent=2)
             
             logger.info(f"✅ Plot 初始化完成")
             logger.info(f"   - 起始地点: {scene.location_name}")
             logger.info(f"   - 在场角色: {', '.join(scene.present_characters)}")
             logger.info(f"   - 场景文件: {scene_file}")
-            logger.info(f"   - 剧本目录: {script_dir}")
+            logger.info(f"   - 剧本文件: {script_file}")
             
             return scene, script
             
@@ -342,8 +355,13 @@ class IlluminatiInitializer:
             # 返回默认值
             return self._create_default_scene(), self._create_default_script()
     
-    def _build_plot_prompt(self) -> str:
-        """构建 Plot 的 Prompt"""
+    def _build_plot_prompt(self, world_state: Dict[str, Any]) -> str:
+        """
+        构建 Plot 的 Prompt
+        
+        Args:
+            world_state: WS生成的世界状态
+        """
         # 获取世界信息
         meta = self.world_setting.get("meta", {})
         world_name = meta.get("world_name", self.world_name)
@@ -357,9 +375,19 @@ class IlluminatiInitializer:
             for loc in locations
         ])
         
-        # 获取角色信息
-        characters_text = "\n".join([
-            f"- {char.get('name', char.get('id'))} (重要性: {char.get('importance', 0.5)}): {', '.join(char.get('traits', []))}"
+        # 获取角色列表信息
+        characters_list_text = "\n".join([
+            f"- {char.get('name')} (ID: {char.get('id')}, 重要性: {char.get('importance', 0.5)})"
+            for char in self.characters_list
+        ])
+        
+        # 获取角色详细信息（角色卡）
+        characters_detail_text = "\n".join([
+            f"【{char.get('name', char.get('id'))}】\n"
+            f"  ID: {char.get('id')}\n"
+            f"  特征: {', '.join(char.get('traits', []))}\n"
+            f"  行为规则: {'; '.join(char.get('behavior_rules', [])[:2])}\n"
+            f"  外观: {char.get('current_appearance', '无描述')[:100]}"
             for char in self.characters_details.values()
         ])
         
@@ -370,8 +398,21 @@ class IlluminatiInitializer:
             for rule in social_rules
         ])
         
+        # 从 world_state 获取当前场景和天气信息
+        current_scene = world_state.get("current_scene", {})
+        weather = world_state.get("weather", {})
+        characters_present = world_state.get("characters_present", [])
+        world_situation = world_state.get("world_situation", {})
+        
+        # 当前在场角色
+        present_chars_text = "\n".join([
+            f"- {char.get('name')} (ID: {char.get('id')}): {char.get('mood')}, {char.get('activity')}"
+            for char in characters_present
+        ])
+        
         prompt = f"""你是命运编织者（Plot Director），负责为互动叙事游戏生成起始场景和开场剧本。
 
+===== 世界设定 =====
 【世界背景】
 世界名称: {world_name}
 类型: {genre}
@@ -380,29 +421,52 @@ class IlluminatiInitializer:
 【可用地点】
 {locations_text}
 
-【主要角色】
-{characters_text}
-
 【社会规则】
 {rules_text}
 
-请生成一个引人入胜的起始场景和开场剧本。要求：
-1. 选择一个合适的开场地点
-2. 安排2-3个重要角色出场
-3. 设置一个有张力的开场情境
+===== 角色信息 =====
+【角色列表】
+{characters_list_text}
+
+【角色详情（角色卡）】
+{characters_detail_text}
+
+===== 当前世界状态（来自WS） =====
+【当前场景】
+地点: {current_scene.get('location_name', '未知')} ({current_scene.get('location_id', '')})
+时间: {current_scene.get('time_of_day', '傍晚')}
+场景描述: {current_scene.get('description', '')}
+
+【当前天气】
+状况: {weather.get('condition', '晴朗')}
+温度: {weather.get('temperature', '温暖')}
+
+【当前在场角色】
+{present_chars_text if present_chars_text else '暂无'}
+
+【世界形势】
+{world_situation.get('summary', '故事即将开始')}
+紧张程度: {world_situation.get('tension_level', '平静')}
+
+===== 任务 =====
+请根据以上信息，生成第一幕的起始场景和开场剧本。要求：
+1. 场景要与WS提供的当前场景保持一致
+2. 在场角色要与WS提供的当前在场角色一致
+3. 设置一个有张力的开场情境，为故事做好铺垫
 4. 为玩家的介入留下空间
+5. 所有角色ID必须使用角色列表中的ID（如 npc_001）
 
 请严格按照以下JSON格式输出（不要添加任何其他文字）：
 
 {{
     "scene": {{
-        "location_id": "地点ID",
+        "location_id": "地点ID（使用world_state中的）",
         "location_name": "地点名称",
-        "time_of_day": "时间段（如：傍晚、深夜、清晨）",
-        "weather": "天气",
+        "time_of_day": "时间段（使用world_state中的）",
+        "weather": "天气（使用world_state中的）",
         "present_characters": ["角色ID1", "角色ID2"],
         "scene_description": "场景描述（100字以内）",
-        "opening_narrative": "开场旁白（200字以内，用于展示给玩家）"
+        "opening_narrative": "开场旁白（200字以内，用于展示给玩家，要有氛围感）"
     }},
     "script": {{
         "scene": "场景简述",
@@ -644,8 +708,8 @@ class IlluminatiInitializer:
         # 1. 初始化 WS
         world_state = self.init_world_state()
         
-        # 2. 初始化 Plot 并生成起始场景/剧本
-        scene, script = self.init_plot_and_generate_opening()
+        # 2. 初始化 Plot 并生成起始场景/剧本（传入world_state作为依据）
+        scene, script = self.init_plot_and_generate_opening(world_state)
         
         # 3. 初始化 Vibe 并生成氛围
         atmosphere = self.init_vibe_and_generate_atmosphere()
@@ -670,8 +734,8 @@ class IlluminatiInitializer:
             "directory_structure": {
                 "ws": "ws/world_state.json",
                 "plot": {
-                    "scene": "plot/initial_scene.json",
-                    "script": "plot/script/initial_script.json"
+                    "scene": "plot/current_scene.json",
+                    "script": "plot/script/script_001.json"
                 },
                 "vibe": "vibe/initial_atmosphere.json"
             },
@@ -684,8 +748,9 @@ class IlluminatiInitializer:
                 "Plot": {
                     "status": "initialized",
                     "directory": "plot/",
-                    "scene_file": "plot/initial_scene.json",
+                    "scene_file": "plot/current_scene.json",
                     "script_directory": "plot/script/",
+                    "initial_script": "plot/script/script_001.json",
                     "opening_location": self.initial_scene.location_name if self.initial_scene else None
                 },
                 "Vibe": {
@@ -835,9 +900,9 @@ def main():
         print(f"     📂 ws/")
         print(f"        └─ world_state.json       # WS 世界状态")
         print(f"     📂 plot/")
-        print(f"        ├─ initial_scene.json     # 起始场景")
+        print(f"        ├─ current_scene.json     # 当前场景")
         print(f"        └─ script/")
-        print(f"           └─ initial_script.json # 起始剧本")
+        print(f"           └─ script_001.json     # 第1幕剧本")
         print(f"     📂 vibe/")
         print(f"        └─ initial_atmosphere.json # 初始氛围")
         print(f"     📄 init_summary.json          # 初始化摘要")

@@ -295,7 +295,7 @@ class CreatorGod:
         
         # 如果没有预先指定世界名称，从世界设定中获取
         if not world_name:
-            world_name = world_setting.get("meta", {}).get("world_name", "未知世界")
+        world_name = world_setting.get("meta", {}).get("world_name", "未知世界")
             world_dir = settings.DATA_DIR / "worlds" / world_name
             world_dir.mkdir(parents=True, exist_ok=True)
             self.logger.info(f"📁 从世界设定中获取世界名称: {world_name}")
