@@ -25,7 +25,7 @@ def test_auto_retry_logic():
     world_path = project_root / "data" / "worlds" / "未知世界"
     
     if not world_path.exists():
-        logger.error("❌ 未找到'未知世界'文件夹，请先运行创世组(run_genesis.py)")
+        logger.error("❌ 未找到'未知世界'文件夹，请先运行创世组(run_creator_god.py)")
         return False
     
     characters_list_path = world_path / "characters_list.json"

@@ -52,5 +52,5 @@
 # Critical Constraints
 1. **ID一致性：** 必须使用角色普查表中确定的ID。当前角色ID为 "{target_id}"，relationship_matrix 中引用其他角色时也必须使用普查表中的ID。
 2. **Relationship Matrix:** 必须区分"面子"和"里子"。address_as 是口头称呼，attitude 是内心独白。二者可能一致也可能不一致。
-3. **Traits:** 在能准确表达意思的基础上不要使用长句，必须是 Tag。
+3. **Traits:** 在能准确表达意思的基础上不要使用长句。
 4. **Voice Samples:** 必须直接摘录原文，不要自己编造。

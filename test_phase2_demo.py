@@ -30,7 +30,7 @@ def test_os_initialization():
     
     if not genesis_path.exists():
         print("❌ 未找到Genesis.json文件")
-        print(f"   请先运行: python run_genesis.py")
+        print(f"   请先运行: python run_creator_god.py")
         print(f"   生成Genesis数据包")
         return None
     

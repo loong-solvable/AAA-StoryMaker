@@ -12,7 +12,7 @@ def main():
     print("⚠️  此功能尚未实现")
     print()
     print("当前可用功能：")
-    print("  1. 运行创世组：python run_genesis.py")
+    print("  1. 运行创世组：python run_creator_god.py")
     print()
     print("=" * 70)
 

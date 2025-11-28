@@ -55,7 +55,7 @@ MODEL_NAME=glm-4
 
 **第一次运行 - 生成世界:**
 ```bash
-python run_genesis.py
+python run_creator_god.py
 ```
 
 **开始游戏:**
@@ -218,7 +218,7 @@ data/worlds/都市迷局/
 ### Q3: 如何使用自己的小说？
 
 1. 将你的小说文本文件（`.txt`格式）放入 `data/novels/` 目录
-2. 修改 `run_genesis.py` 中的文件名，或直接运行：
+2. 修改 `run_creator_god.py` 中的文件名，或直接运行：
 
 ```python
 from agents.offline.genesis_group import create_world

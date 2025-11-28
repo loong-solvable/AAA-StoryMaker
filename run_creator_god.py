@@ -1,5 +1,5 @@
 """
-运行创世组的入口脚本
+运行创世组 CreatorGod 的入口脚本
 三阶段世界构建流程：大中正 → Demiurge → 许劭
 """
 from agents.offline.genesis_group import create_world
@@ -13,7 +13,7 @@ def main():
     print("🎭 欢迎使用 Infinite Story - 无限故事机")
     print("=" * 70)
     print()
-    print("📌 创世组三阶段构建流程:")
+    print("📌 CreatorGod 创世组三阶段构建流程:")
     print("   1️⃣ 大中正 - 角色普查，识别所有角色并评估重要性")
     print("   2️⃣ Demiurge - 提取世界观设定（物理法则、社会规则、地点）")
     print("   3️⃣ 许劭 - 为每个角色创建详细档案（角色卡）")

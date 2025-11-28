@@ -249,7 +249,7 @@ class GenesisGroupTester:
         print("✅ 流式输出正常工作")
         print("✅ 数据解析正常工作")
         print()
-        print("现在可以安全使用 run_genesis.py 运行完整流程了！")
+        print("现在可以安全使用 run_creator_god.py 运行完整流程了！")
         print()
         
         logger.info("✅ 全部测试通过！")
