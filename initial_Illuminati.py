@@ -371,8 +371,14 @@ class IlluminatiInitializer:
         """
         构建 Plot 的 Prompt
         
+        数据来源：
+        - self.world_setting: world_setting.json（世界名称、类型、描述、地点、社会规则）
+        - self.characters_list: characters_list.json（角色花名册）
+        - self.characters_details: characters/*.json（角色卡详情）
+        - world_state: WS初始化生成的世界状态（当前场景、天气、在场角色）
+        
         Args:
-            world_state: WS生成的世界状态
+            world_state: WS初始化生成的世界状态
         """
         # 获取世界信息
         meta = self.world_setting.get("meta", {})
@@ -431,6 +437,7 @@ class IlluminatiInitializer:
 
 【可用地点】
 {locations_text}
+你也可以自己创造地点，但需要符合世界观设定。
 
 【社会规则】
 {rules_text}
@@ -456,7 +463,7 @@ class IlluminatiInitializer:
 
 1. 以第三人称视角书写，富有文学性和画面感
 2. 描绘当前场景的氛围和环境
-3. 让2-3个重要角色自然登场，展现他们的性格特征
+3. 让1-3个重要角色自然登场，展现他们的性格特征
 4. 通过对话和行为推动情节，制造适当的戏剧张力
 5. 为玩家角色的介入留下空间和契机
 6. 符合世界观设定和社会规则
