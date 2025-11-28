@@ -40,12 +40,8 @@ class InitialScene:
 
 @dataclass
 class InitialScript:
-    """起始剧本数据结构"""
-    scene: str
-    characters: List[str]
-    actions: List[Dict[str, Any]]
-    narrative: str
-    hints: List[str]
+    """起始剧本数据结构（纯文本）"""
+    content: str  # 约500字的纯文本剧本
 
 
 @dataclass
@@ -310,7 +306,8 @@ class IlluminatiInitializer:
         
         生成：
         - 当前场景 (plot/current_scene.json)
-        - 起始剧本 (plot/script/script_001.json)
+        - 当前剧本 (plot/current_script.json)
+        - 历史剧本存档目录 (plot/history/)
         """
         logger.info("")
         logger.info("─" * 60)
@@ -320,8 +317,9 @@ class IlluminatiInitializer:
         # 创建 Plot 目录结构
         plot_dir = self.runtime_dir / "plot"
         plot_dir.mkdir(parents=True, exist_ok=True)
-        script_dir = plot_dir / "script"
-        script_dir.mkdir(parents=True, exist_ok=True)
+        # 创建历史剧本存档文件夹（供运行时使用）
+        history_dir = plot_dir / "history"
+        history_dir.mkdir(parents=True, exist_ok=True)
         
         # 构建 Prompt（传入world_state）
         prompt = self._build_plot_prompt(world_state)
@@ -334,8 +332,8 @@ class IlluminatiInitializer:
             response = self.llm.invoke(prompt)
             content = response.content if hasattr(response, 'content') else str(response)
             
-            # 解析响应
-            scene, script = self._parse_plot_response(content)
+            # 解析响应（传入 world_state 用于构建场景数据）
+            scene, script = self._parse_plot_response(content, world_state)
             
             self.initial_scene = scene
             self.initial_script = script
@@ -345,12 +343,11 @@ class IlluminatiInitializer:
             with open(scene_file, "w", encoding="utf-8") as f:
                 json.dump(asdict(scene), f, ensure_ascii=False, indent=2)
             
-            # 保存起始剧本到 plot/script 目录，使用序号命名
-            script_number = 1
-            script_file = script_dir / f"script_{script_number:03d}.json"
+            # 保存当前剧本到 plot 目录（初始化只生成当前剧本）
+            script_file = plot_dir / "current_script.json"
             script_data = asdict(script)
-            script_data["script_number"] = script_number  # 添加序号标识
             script_data["is_initial"] = True  # 标记为初始剧本
+            script_data["created_at"] = datetime.now().isoformat()  # 记录创建时间
             with open(script_file, "w", encoding="utf-8") as f:
                 json.dump(script_data, f, ensure_ascii=False, indent=2)
             
@@ -360,7 +357,8 @@ class IlluminatiInitializer:
             char_names = [c.get('name', c.get('id', '未知')) if isinstance(c, dict) else c for c in scene.present_characters]
             logger.info(f"   - 在场角色: {', '.join(char_names)}")
             logger.info(f"   - 场景文件: {scene_file}")
-            logger.info(f"   - 剧本文件: {script_file}")
+            logger.info(f"   - 当前剧本: {script_file}")
+            logger.info(f"   - 历史存档: {history_dir}")
             
             return scene, script
             
@@ -424,10 +422,9 @@ class IlluminatiInitializer:
             for char in characters_present
         ])
         
-        prompt = f"""你是命运编织者（Plot Director），负责为互动叙事游戏生成起始场景和开场剧本。
+        prompt = f"""你是命运编织者（Plot Director），负责为互动叙事游戏生成开场剧本。
 
 ===== 世界设定 =====
-【世界背景】
 世界名称: {world_name}
 类型: {genre}
 描述: {description}
@@ -438,99 +435,72 @@ class IlluminatiInitializer:
 【社会规则】
 {rules_text}
 
-===== 角色花名册 =====
-以下是所有可能登场的角色，由你（Plot）决定谁在何时登场：
+===== 角色信息 =====
+【角色花名册】
 {characters_list_text}
 
-【角色详情（角色卡）】
+【角色详情】
 {characters_detail_text}
 
-===== 当前世界状态（来自WS） =====
-【当前场景】
-地点: {current_scene.get('location_name', '未知')} ({current_scene.get('location_id', '')})
+===== 当前世界状态 =====
+地点: {current_scene.get('location_name', '未知')}
 时间: {current_scene.get('time_of_day', '傍晚')}
-场景描述: {current_scene.get('description', '')}
-
-【当前天气】
-状况: {weather.get('condition', '晴朗')}
-温度: {weather.get('temperature', '温暖')}
+天气: {weather.get('condition', '晴朗')}，{weather.get('temperature', '温暖')}
+世界形势: {world_situation.get('summary', '故事即将开始')}
 
 【当前在场角色】
 {present_chars_text if present_chars_text else '暂无'}
 
-【世界形势】
-{world_situation.get('summary', '故事即将开始')}
-紧张程度: {world_situation.get('tension_level', '平静')}
-
 ===== 任务 =====
-请根据以上信息，生成第一幕的起始场景和开场剧本。要求：
-1. 场景要与WS提供的当前场景保持一致
-2. 从花名册中选择2-3个重要角色首次登场
-3. 设置一个有张力的开场情境，为故事做好铺垫
-4. 为玩家的介入留下空间
-5. 所有角色ID必须使用花名册中的ID（如 npc_001）
-6. 这是角色的首次登场，请在 present_characters 中标注 `first_appearance: true`
+请根据以上信息，创作一段约500字的开场剧本。要求：
 
-请严格按照以下JSON格式输出（不要添加任何其他文字）：
+1. 以第三人称视角书写，富有文学性和画面感
+2. 描绘当前场景的氛围和环境
+3. 让2-3个重要角色自然登场，展现他们的性格特征
+4. 通过对话和行为推动情节，制造适当的戏剧张力
+5. 为玩家角色的介入留下空间和契机
+6. 符合世界观设定和社会规则
 
-{{
-    "scene": {{
-        "location_id": "地点ID（使用world_state中的）",
-        "location_name": "地点名称",
-        "time_of_day": "时间段（使用world_state中的）",
-        "weather": "天气（使用world_state中的）",
-        "present_characters": [
-            {{"id": "npc_001", "name": "角色名", "first_appearance": true}},
-            {{"id": "npc_002", "name": "角色名", "first_appearance": true}}
-        ],
-        "scene_description": "场景描述（100字以内）",
-        "opening_narrative": "开场旁白（200字以内，用于展示给玩家，要有氛围感）"
-    }},
-    "script": {{
-        "scene": "场景简述",
-        "characters": ["角色ID列表"],
-        "actions": [
-            {{"character": "角色ID", "action": "行为描述", "dialogue": "台词（可选）", "emotion": "情绪"}}
-        ],
-        "narrative": "旁白文本",
-        "hints": ["剧情提示1", "剧情提示2"]
-    }}
-}}"""
+直接输出剧本内容，不要添加标题、格式标记或任何额外说明。"""
         
         return prompt
     
-    def _parse_plot_response(self, content: str) -> tuple[InitialScene, InitialScript]:
-        """解析 Plot 的响应"""
-        import re
+    def _parse_plot_response(self, content: str, world_state: Dict[str, Any]) -> tuple[InitialScene, InitialScript]:
+        """
+        解析 Plot 的响应
         
-        # 尝试提取 JSON
-        json_match = re.search(r'\{[\s\S]*\}', content)
-        if not json_match:
-            raise ValueError("无法从响应中提取JSON")
+        Args:
+            content: LLM 生成的纯文本剧本
+            world_state: WS 生成的世界状态（用于构建场景数据）
+        """
+        # 场景数据从 world_state 获取（保持与 WS 一致）
+        current_scene = world_state.get("current_scene", {})
+        weather = world_state.get("weather", {})
+        characters_present = world_state.get("characters_present", [])
         
-        data = json.loads(json_match.group())
+        # 构建在场角色列表（标记为首次登场）
+        present_characters = [
+            {
+                "id": char.get("id"),
+                "name": char.get("name"),
+                "first_appearance": True
+            }
+            for char in characters_present
+        ]
         
-        # 解析场景
-        scene_data = data.get("scene", {})
+        # 构建场景
         scene = InitialScene(
-            location_id=scene_data.get("location_id", "unknown"),
-            location_name=scene_data.get("location_name", "未知地点"),
-            time_of_day=scene_data.get("time_of_day", "傍晚"),
-            weather=scene_data.get("weather", "晴朗"),
-            present_characters=scene_data.get("present_characters", []),
-            scene_description=scene_data.get("scene_description", ""),
-            opening_narrative=scene_data.get("opening_narrative", "")
+            location_id=current_scene.get("location_id", "unknown"),
+            location_name=current_scene.get("location_name", "未知地点"),
+            time_of_day=current_scene.get("time_of_day", "傍晚"),
+            weather=f"{weather.get('condition', '晴朗')}，{weather.get('temperature', '温暖')}",
+            present_characters=present_characters,
+            scene_description=current_scene.get("description", ""),
+            opening_narrative=content.strip()[:200]  # 取前200字作为开场旁白
         )
         
-        # 解析剧本
-        script_data = data.get("script", {})
-        script = InitialScript(
-            scene=script_data.get("scene", ""),
-            characters=script_data.get("characters", []),
-            actions=script_data.get("actions", []),
-            narrative=script_data.get("narrative", ""),
-            hints=script_data.get("hints", [])
-        )
+        # 剧本为纯文本
+        script = InitialScript(content=content.strip())
         
         return scene, script
     
@@ -557,14 +527,8 @@ class IlluminatiInitializer:
     
     def _create_default_script(self) -> InitialScript:
         """创建默认起始剧本"""
-        important_chars = [c["id"] for c in self.characters_list if c.get("importance", 0) >= 0.8][:2]
-        
         return InitialScript(
-            scene="开场场景",
-            characters=important_chars,
-            actions=[],
-            narrative="故事即将展开...",
-            hints=["探索周围环境", "与角色交谈"]
+            content="故事即将展开...这个世界正等待着新的冒险者。周围的一切都充满了神秘与期待，似乎有什么重要的事情即将发生。"
         )
     
     # ==========================================
@@ -762,7 +726,8 @@ class IlluminatiInitializer:
                 "ws": "ws/world_state.json",
                 "plot": {
                     "scene": "plot/current_scene.json",
-                    "script": "plot/script/script_001.json"
+                    "script": "plot/current_script.json",
+                    "history": "plot/history/"
                 },
                 "vibe": "vibe/initial_atmosphere.json"
             },
@@ -776,8 +741,8 @@ class IlluminatiInitializer:
                     "status": "initialized",
                     "directory": "plot/",
                     "scene_file": "plot/current_scene.json",
-                    "script_directory": "plot/script/",
-                    "initial_script": "plot/script/script_001.json",
+                    "current_script": "plot/current_script.json",
+                    "history_directory": "plot/history/",
                     "opening_location": self.initial_scene.location_name if self.initial_scene else None
                 },
                 "Vibe": {
@@ -970,8 +935,8 @@ def main():
         print(f"        └─ world_state.json       # WS 世界状态")
         print(f"     📂 plot/")
         print(f"        ├─ current_scene.json     # 当前场景")
-        print(f"        └─ script/")
-        print(f"           └─ script_001.json     # 第1幕剧本")
+        print(f"        ├─ current_script.json    # 当前剧本")
+        print(f"        └─ history/               # 历史剧本存档（运行时使用）")
         print(f"     📂 vibe/")
         print(f"        └─ initial_atmosphere.json # 初始氛围")
         print(f"     📄 init_summary.json          # 初始化摘要")
