@@ -1,0 +1,135 @@
+{
+  "meta": {
+    "world_name": "江城市",
+    "genre_type": "REALISTIC",
+    "description": "2024年现代都市中国江城市，科技公司数据泄露阴谋与正义记者、技术宅的追查对抗。"
+  },
+  "physics_logic": {
+    "mode": "STANDARD_REALITY",
+    "hard_constraints": [
+      "人类无法飞行或超自然移动",
+      "黑客操作需真实设备如电脑、U盘、网络连接，无法凭空入侵",
+      "物理追逐受限于人体耐力和城市交通，无法瞬间消失",
+      "数据加密破解需专业技术时间，无法瞬时完成",
+      "威胁与监视依赖现实手段如电话跟踪、翻家，无法远程心灵感应"
+    ],
+    "supernatural_system": null
+  },
+  "social_logic": [
+    {
+      "rule_name": "商业数据交易黑幕",
+      "trigger_condition": "持有或调查大型科技公司敏感数据",
+      "consequence": "公司派人跟踪、威胁、翻家、远程黑客攻击，甚至威胁家人",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "警方介入门槛",
+      "trigger_condition": "报警但证据不足",
+      "consequence": "警方不予立案，调查无效",
+      "is_rigid": true
+    },
+    {
+      "rule_name": "媒体曝光机制",
+      "trigger_condition": "将实质证据交给正直记者或媒体",
+      "consequence": "引发全网热议、警方正式介入、高管被捕",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "职场技术宅文化",
+      "trigger_condition": "技术专家卷入事件",
+      "consequence": "利用专业技能反追踪服务器，但需躲藏转移以避风险",
+      "is_rigid": false
+    }
+  ],
+  "geography": {
+    "locations": [
+      {
+        "id": "city_center_cafe",
+        "name": "市中心咖啡馆",
+        "region_type": "室内/都市街头",
+        "sensory_profile": {
+          "visual": "繁华车水马龙、深秋街景、夕阳光影",
+          "auditory": "车辆喧嚣、人群交谈",
+          "olfactory": "咖啡香气、城市尘土",
+          "atmosphere": "惊喜相遇、都市忙碌"
+        },
+        "connected_to": [
+          "tea_house",
+          "luxury_hotel"
+        ]
+      },
+      {
+        "id": "suburb_apartment",
+        "name": "江城郊区老旧公寓出租屋",
+        "region_type": "室内/住宅",
+        "sensory_profile": {
+          "visual": "堆满电脑设备和技术书籍、昏暗灯光",
+          "auditory": "键盘敲击、粉丝嗡鸣",
+          "olfactory": "电子设备热气、尘土味",
+          "atmosphere": "孤寂技术宅、紧张破解"
+        },
+        "connected_to": [
+          "internet_cafe"
+        ]
+      },
+      {
+        "id": "tea_house",
+        "name": "隐蔽茶馆",
+        "region_type": "室内/隐秘场所",
+        "sensory_profile": {
+          "visual": "昏暗灯光、木质桌椅",
+          "auditory": "低声交谈、茶水沸腾",
+          "olfactory": "茶叶清香",
+          "atmosphere": "凝重讨论、警觉危机"
+        },
+        "connected_to": [
+          "city_center_cafe",
+          "internet_cafe"
+        ]
+      },
+      {
+        "id": "internet_cafe",
+        "name": "老旧网吧",
+        "region_type": "室内/小巷躲藏",
+        "sensory_profile": {
+          "visual": "烟雾缭绕、老式电脑屏幕闪烁",
+          "auditory": "键盘密集声、风扇噪音",
+          "olfactory": "烟味、汗臭、廉价零食",
+          "atmosphere": "气喘吁吁、紧张逃亡"
+        },
+        "connected_to": [
+          "tea_house",
+          "motel"
+        ]
+      },
+      {
+        "id": "motel",
+        "name": "便宜小旅馆",
+        "region_type": "室内/临时藏身",
+        "sensory_profile": {
+          "visual": "简陋陈设、昏黄灯光",
+          "auditory": "远处街声、空调嗡鸣",
+          "olfactory": "霉味、廉价洗涤剂",
+          "atmosphere": "躲躲藏藏、持续警惕"
+        },
+        "connected_to": [
+          "internet_cafe"
+        ]
+      },
+      {
+        "id": "luxury_hotel",
+        "name": "市中心高档酒店",
+        "region_type": "室内/高端会面",
+        "sensory_profile": {
+          "visual": "奢华装修、水晶灯辉映",
+          "auditory": "低沉背景音乐",
+          "olfactory": "高级香氛",
+          "atmosphere": "优雅对峙、寒意威胁"
+        },
+        "connected_to": [
+          "city_center_cafe"
+        ]
+      }
+    ]
+  }
+}
