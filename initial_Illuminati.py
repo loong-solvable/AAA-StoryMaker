@@ -22,6 +22,7 @@ from dataclasses import dataclass, asdict
 from config.settings import settings
 from utils.logger import setup_logger
 from utils.llm_factory import get_llm
+from langchain_core.messages import SystemMessage, HumanMessage
 
 logger = setup_logger("Illuminati", "illuminati_init.log")
 
@@ -171,9 +172,11 @@ class IlluminatiInitializer:
     
     def init_world_state(self) -> Dict[str, Any]:
         """
-        初始化 WS（世界状态运行者）
+        初始化 WS（世界状态运行者）- 调用 LLM 生成初始世界状态
         
-        依据数据：
+        提示词来源：prompts/online/ws_system.txt
+        
+        数据来源：
         - world_setting.json - 世界设定
         - characters_list.json - 角色列表（确保ID一致性）
         - characters/*.json - 角色详细档案
@@ -190,48 +193,148 @@ class IlluminatiInitializer:
         ws_dir = self.runtime_dir / "ws"
         ws_dir.mkdir(parents=True, exist_ok=True)
         
-        # 提取地点信息
-        locations = self.world_setting.get("geography", {}).get("locations", [])
+        # 读取 WS 系统提示词
+        ws_prompt_path = settings.BASE_DIR / "prompts" / "online" / "ws_system.txt"
+        with open(ws_prompt_path, "r", encoding="utf-8") as f:
+            system_prompt = f.read()
         
-        # 选择初始地点（默认第一个）
+        # 构建用户消息
+        user_message = self._build_ws_user_message()
+        
+        logger.info("🤖 正在调用 LLM 生成初始世界状态...")
+        
+        try:
+            # 调用 LLM（使用消息格式）
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_message)
+            ]
+            response = self.llm.invoke(messages)
+            content = response.content if hasattr(response, 'content') else str(response)
+            
+            # 解析 JSON 响应
+            world_state = self._parse_ws_response(content)
+            
+            # 补充 meta 信息（确保时间戳正确）
+            if "meta" not in world_state:
+                world_state["meta"] = {}
+            world_state["meta"]["game_turn"] = 0
+            world_state["meta"]["last_updated"] = datetime.now().isoformat()
+            world_state["meta"]["total_elapsed_time"] = "0分钟"
+            
+            # 保存世界状态到 ws 目录
+            state_file = ws_dir / "world_state.json"
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump(world_state, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"✅ WS 初始化完成")
+            logger.info(f"   - 初始场景: {world_state.get('current_scene', {}).get('location_name', '未知')}")
+            logger.info(f"   - 在场角色: {len(world_state.get('characters_present', []))} 人")
+            logger.info(f"   - 状态文件: {state_file}")
+            
+            return world_state
+            
+        except Exception as e:
+            logger.error(f"❌ WS 初始化失败: {e}", exc_info=True)
+            # 返回默认世界状态
+            return self._create_default_world_state(ws_dir)
+    
+    def _build_ws_user_message(self) -> str:
+        """构建 WS 初始化的用户消息"""
+        # 世界设定
+        meta = self.world_setting.get("meta", {})
+        
+        # 地点信息
+        locations = self.world_setting.get("geography", {}).get("locations", [])
+        locations_text = "\n".join([
+            f"- {loc['name']} ({loc['id']}): {loc.get('sensory_profile', {}).get('atmosphere', '')}"
+            for loc in locations
+        ])
+        
+        # 社会规则
+        social_rules = self.world_setting.get("social_logic", [])
+        rules_text = "\n".join([
+            f"- {rule.get('rule_name', '')}: {rule.get('trigger_condition', '')} → {rule.get('consequence', '')}"
+            for rule in social_rules
+        ])
+        
+        # 角色花名册
+        characters_list_text = json.dumps(self.characters_list, ensure_ascii=False, indent=2)
+        
+        # 角色详情
+        characters_detail_text = "\n".join([
+            f"【{char.get('name', char_id)}】(ID: {char_id})\n"
+            f"  特征: {', '.join(char.get('traits', []))}\n"
+            f"  外观: {char.get('current_appearance', '无描述')[:100]}"
+            for char_id, char in self.characters_details.items()
+        ])
+        
+        return f"""请以【初始化模式】生成初始世界状态。
+
+===== 世界设定 (world_setting.json) =====
+世界名称: {meta.get('world_name', self.world_name)}
+类型: {meta.get('genre_type', 'REALISTIC')}
+描述: {meta.get('description', '')}
+
+【可用地点】
+{locations_text}
+
+【社会规则】
+{rules_text}
+
+===== 角色花名册 (characters_list.json) =====
+{characters_list_text}
+
+===== 角色详情 (角色档案) =====
+{characters_detail_text}
+
+===== 任务 =====
+请生成初始世界状态 JSON。要求：
+1. 选择一个合适的初始场景（从可用地点中选择，或创建符合世界观的新场景）
+2. 设置合理的初始天气和时间
+3. 选择1-3个重要角色作为初始在场角色（按重要性选择）
+4. relationship_matrix 初始化时留空 {{}}
+5. 描述世界初始形势
+6. 所有角色ID必须使用 characters_list.json 中的ID
+
+直接输出 JSON，不要添加其他文字。"""
+    
+    def _parse_ws_response(self, content: str) -> Dict[str, Any]:
+        """解析 WS 的 JSON 响应"""
+        import re
+        
+        # 尝试提取 JSON
+        json_match = re.search(r'\{[\s\S]*\}', content)
+        if not json_match:
+            raise ValueError("无法从响应中提取JSON")
+        
+        return json.loads(json_match.group())
+    
+    def _create_default_world_state(self, ws_dir: Path) -> Dict[str, Any]:
+        """创建默认世界状态（LLM 调用失败时使用）"""
+        locations = self.world_setting.get("geography", {}).get("locations", [])
         initial_location = locations[0] if locations else {"id": "unknown", "name": "未知地点"}
         
-        # 获取初始在场角色（从 characters_list 中选择重要性较高的角色，确保 ID 一致性）
-        characters_present = []
-        # 按重要性排序 characters_list
+        # 获取重要角色
         sorted_chars = sorted(
             self.characters_list,
             key=lambda x: x.get("importance", 0),
             reverse=True
-        )[:3]  # 初始场景最多3个角色
+        )[:3]
         
+        characters_present = []
         for char_info in sorted_chars:
-            char_id = char_info.get("id")  # 使用 characters_list 中的 ID
-            char_name = char_info.get("name", "")
-            # 从角色档案中获取详细信息
+            char_id = char_info.get("id")
             char_detail = self.characters_details.get(char_id, {})
             characters_present.append({
-                "id": char_id,  # 确保使用 characters_list 中的 ID
-                "name": char_name,
+                "id": char_id,
+                "name": char_info.get("name", ""),
                 "mood": "平静",
                 "activity": "在场",
                 "appearance_note": char_detail.get("current_appearance", "")
             })
         
-        # NPC关系矩阵初始化时留空
-        # 只有当角色在Plot生成的剧本中登场后，才会被加入关系矩阵
-        # WS会在后续根据Plot的剧本来更新关系矩阵
-        relationship_matrix = {}
-        
-        # 构建世界整体形势
         meta = self.world_setting.get("meta", {})
-        world_situation = {
-            "summary": f"故事在{meta.get('world_name', self.world_name)}展开，一切刚刚开始。",
-            "tension_level": "平静",
-            "key_developments": []
-        }
-        
-        # 构建符合新格式的世界状态
         world_state = {
             "current_scene": {
                 "location_id": initial_location.get("id", "unknown"),
@@ -244,9 +347,13 @@ class IlluminatiInitializer:
                 "temperature": "22°C"
             },
             "characters_present": characters_present,
-            "characters_absent": [],  # 初始化时为空
-            "relationship_matrix": relationship_matrix,
-            "world_situation": world_situation,
+            "characters_absent": [],
+            "relationship_matrix": {},
+            "world_situation": {
+                "summary": f"故事在{meta.get('world_name', self.world_name)}展开，一切刚刚开始。",
+                "tension_level": "平静",
+                "key_developments": []
+            },
             "meta": {
                 "game_turn": 0,
                 "last_updated": datetime.now().isoformat(),
@@ -254,17 +361,12 @@ class IlluminatiInitializer:
             }
         }
         
-        # 保存世界状态到 ws 目录
+        # 保存
         state_file = ws_dir / "world_state.json"
         with open(state_file, "w", encoding="utf-8") as f:
             json.dump(world_state, f, ensure_ascii=False, indent=2)
         
-        logger.info(f"✅ WS 初始化完成")
-        logger.info(f"   - 初始场景: {initial_location.get('name', '未知')}")
-        logger.info(f"   - 在场角色: {len(characters_present)} 人")
-        logger.info(f"   - 关系矩阵: {len(relationship_matrix)} 个角色")
-        logger.info(f"   - 状态文件: {state_file}")
-        
+        logger.warning("⚠️ 使用默认世界状态")
         return world_state
     
     def _build_relationship_matrix(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
