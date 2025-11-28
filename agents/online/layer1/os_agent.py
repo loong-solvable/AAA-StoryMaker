@@ -1,11 +1,29 @@
 """
 信息中枢 (OS - Operating System)
-系统的总线与路由器，负责Agent间消息传递和全局状态管理
+
+核心职能：
+1. 剧本拆分：接收 Plot（命运编织者）产出的完整剧本
+2. 智能分发：将剧本拆解为每个演员（NPC Agent）的专属小剧本
+3. 消息路由：将小剧本分发给对应的演员 Agent
+4. 状态管理：维护游戏全局状态和世界上下文
+
+数据流：
+    Plot (完整剧本)
+        │
+        ▼
+    OS (信息中枢)
+        │ 解析剧本、提取角色戏份
+        │
+        ├─→ NPC-A 的小剧本 → NPC-A Agent
+        ├─→ NPC-B 的小剧本 → NPC-B Agent
+        └─→ NPC-C 的小剧本 → NPC-C Agent
 """
 import json
+import re
 from typing import Dict, Any, Optional, List, Callable
 from pathlib import Path
 from datetime import datetime
+from dataclasses import dataclass, field
 from utils.logger import setup_logger
 from config.settings import settings
 from agents.message_protocol import (
@@ -15,10 +33,52 @@ from agents.message_protocol import (
 logger = setup_logger("OS", "os.log")
 
 
+@dataclass
+class ActorScript:
+    """
+    演员小剧本 - 分发给单个 NPC Agent 的戏份
+    """
+    character_id: str           # 角色ID
+    character_name: str         # 角色名称
+    scene_context: str          # 场景上下文（简短描述当前场景）
+    dialogue_lines: List[str]   # 该角色的台词列表
+    action_directions: List[str] # 该角色的行为指示
+    emotion_hint: str           # 情绪提示（如：愤怒、紧张、平静）
+    interaction_targets: List[str] # 互动对象（其他在场角色ID）
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        return {
+            "character_id": self.character_id,
+            "character_name": self.character_name,
+            "scene_context": self.scene_context,
+            "dialogue_lines": self.dialogue_lines,
+            "action_directions": self.action_directions,
+            "emotion_hint": self.emotion_hint,
+            "interaction_targets": self.interaction_targets
+        }
+
+
+@dataclass 
+class ParsedScript:
+    """
+    解析后的完整剧本结构
+    """
+    scene_description: str      # 场景描述
+    involved_characters: List[str]  # 参与角色ID列表
+    actor_scripts: Dict[str, ActorScript]  # 各角色的小剧本
+    narrative_text: str         # 旁白/叙述文本
+    plot_hints: List[str]       # Plot 给出的剧情提示
+
+
 class OperatingSystem:
     """
     信息中枢 - 游戏的操作系统
-    非LLM Agent，纯逻辑组件
+    
+    核心职责：
+    1. 剧本拆分：将 Plot 的完整剧本拆分为各演员的小剧本
+    2. 消息分发：将小剧本分发给对应的 NPC Agent
+    3. 状态管理：维护游戏全局状态
     """
     
     def __init__(self, genesis_path: Optional[Path] = None):
@@ -38,16 +98,210 @@ class OperatingSystem:
         
         # Agent注册表
         self.registered_agents: Dict[AgentRole, Any] = {}
+        self.npc_agents: Dict[str, Any] = {}  # character_id -> NPC Agent
         
         # 消息队列
         self.message_queue: List[Message] = []
         self.message_handlers: Dict[AgentRole, Callable] = {}
+        self.npc_handlers: Dict[str, Callable] = {}  # character_id -> handler
         
         # 加载Genesis数据
         if genesis_path:
             self.load_genesis(genesis_path)
         
         logger.info("✅ 信息中枢OS初始化完成")
+    
+    # ==========================================
+    # 剧本拆分与分发（核心功能）
+    # ==========================================
+    
+    def parse_script(self, plot_script: Dict[str, Any]) -> ParsedScript:
+        """
+        解析 Plot 产出的完整剧本
+        
+        Args:
+            plot_script: Plot Agent 产出的剧本数据
+                expected format:
+                {
+                    "scene": "场景描述",
+                    "characters": ["char_id_1", "char_id_2"],
+                    "actions": [
+                        {"character": "char_id", "action": "行为", "dialogue": "台词", "emotion": "情绪"}
+                    ],
+                    "narrative": "旁白文本",
+                    "hints": ["剧情提示"]
+                }
+        
+        Returns:
+            ParsedScript: 解析后的剧本结构
+        """
+        logger.info("📜 开始解析Plot剧本...")
+        
+        scene_description = plot_script.get("scene", "")
+        involved_characters = plot_script.get("characters", [])
+        actions = plot_script.get("actions", [])
+        narrative = plot_script.get("narrative", "")
+        hints = plot_script.get("hints", [])
+        
+        # 为每个角色创建小剧本
+        actor_scripts: Dict[str, ActorScript] = {}
+        
+        for char_id in involved_characters:
+            # 获取角色名称
+            char_data = self.get_character_data(char_id)
+            char_name = char_data.get("name", char_id) if char_data else char_id
+            
+            # 提取该角色的所有行动
+            char_actions = [a for a in actions if a.get("character") == char_id]
+            
+            # 构建小剧本
+            dialogue_lines = [a.get("dialogue", "") for a in char_actions if a.get("dialogue")]
+            action_directions = [a.get("action", "") for a in char_actions if a.get("action")]
+            emotion_hint = char_actions[0].get("emotion", "平静") if char_actions else "平静"
+            
+            # 互动对象（除自己外的其他在场角色）
+            interaction_targets = [c for c in involved_characters if c != char_id]
+            
+            actor_scripts[char_id] = ActorScript(
+                character_id=char_id,
+                character_name=char_name,
+                scene_context=scene_description,
+                dialogue_lines=dialogue_lines,
+                action_directions=action_directions,
+                emotion_hint=emotion_hint,
+                interaction_targets=interaction_targets
+            )
+            
+            logger.info(f"   📝 {char_name}: {len(dialogue_lines)}条台词, {len(action_directions)}个行为")
+        
+        parsed = ParsedScript(
+            scene_description=scene_description,
+            involved_characters=involved_characters,
+            actor_scripts=actor_scripts,
+            narrative_text=narrative,
+            plot_hints=hints
+        )
+        
+        logger.info(f"✅ 剧本解析完成: {len(involved_characters)}个角色参与")
+        return parsed
+    
+    def dispatch_script(self, parsed_script: ParsedScript) -> Dict[str, Any]:
+        """
+        将解析后的剧本分发给各个 NPC Agent
+        
+        Args:
+            parsed_script: 解析后的剧本
+        
+        Returns:
+            Dict: 各角色的响应结果
+            {
+                "character_id": {
+                    "success": bool,
+                    "response": Any,
+                    "error": str (if failed)
+                }
+            }
+        """
+        logger.info(f"📤 开始分发剧本给 {len(parsed_script.actor_scripts)} 个演员...")
+        
+        results: Dict[str, Any] = {}
+        
+        for char_id, actor_script in parsed_script.actor_scripts.items():
+            logger.info(f"   🎭 分发给 {actor_script.character_name}...")
+            
+            try:
+                # 检查是否有注册的 NPC handler
+                if char_id in self.npc_handlers:
+                    handler = self.npc_handlers[char_id]
+                    response = handler(actor_script.to_dict())
+                    results[char_id] = {
+                        "success": True,
+                        "response": response,
+                        "character_name": actor_script.character_name
+                    }
+                    logger.info(f"   ✅ {actor_script.character_name} 收到剧本")
+                else:
+                    # 没有注册的handler，创建消息放入队列
+                    msg = Message(
+                        from_agent=AgentRole.OS,
+                        to_agent=AgentRole.NPC,
+                        message_type=MessageType.SCRIPT,
+                        content=actor_script.to_dict(),
+                        context={"character_id": char_id}
+                    )
+                    self.message_queue.append(msg)
+                    results[char_id] = {
+                        "success": True,
+                        "response": None,
+                        "character_name": actor_script.character_name,
+                        "note": "消息已入队，等待NPC Agent处理"
+                    }
+                    logger.info(f"   📬 {actor_script.character_name} 的剧本已入队")
+                    
+            except Exception as e:
+                logger.error(f"   ❌ 分发给 {actor_script.character_name} 失败: {e}")
+                results[char_id] = {
+                    "success": False,
+                    "error": str(e),
+                    "character_name": actor_script.character_name
+                }
+        
+        success_count = sum(1 for r in results.values() if r["success"])
+        logger.info(f"✅ 剧本分发完成: {success_count}/{len(results)} 成功")
+        
+        return results
+    
+    def process_plot_output(self, plot_script: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        处理 Plot 的完整输出（解析 + 分发一站式）
+        
+        Args:
+            plot_script: Plot Agent 产出的剧本
+        
+        Returns:
+            处理结果，包含旁白文本和各角色响应
+        """
+        logger.info("🎬 处理Plot输出...")
+        
+        # 1. 解析剧本
+        parsed = self.parse_script(plot_script)
+        
+        # 2. 分发给各演员
+        dispatch_results = self.dispatch_script(parsed)
+        
+        # 3. 返回综合结果
+        return {
+            "narrative": parsed.narrative_text,
+            "scene": parsed.scene_description,
+            "actor_results": dispatch_results,
+            "hints": parsed.plot_hints
+        }
+    
+    def register_npc_handler(self, character_id: str, handler: Callable):
+        """
+        注册 NPC 消息处理器
+        
+        Args:
+            character_id: 角色ID
+            handler: 处理函数，接收 ActorScript dict，返回响应
+        """
+        self.npc_handlers[character_id] = handler
+        logger.info(f"✅ 注册NPC处理器: {character_id}")
+    
+    def register_npc_agent(self, character_id: str, agent_instance: Any):
+        """
+        注册 NPC Agent 实例
+        
+        Args:
+            character_id: 角色ID
+            agent_instance: NPC Agent实例
+        """
+        self.npc_agents[character_id] = agent_instance
+        logger.info(f"✅ 注册NPC Agent: {character_id}")
+    
+    # ==========================================
+    # 基础消息路由功能
+    # ==========================================
     
     def load_genesis(self, genesis_path: Path):
         """加载Genesis世界数据"""
@@ -171,6 +425,10 @@ class OperatingSystem:
         
         return responses
     
+    # ==========================================
+    # 状态管理功能
+    # ==========================================
+    
     def get_world_context(self) -> Optional[WorldContext]:
         """获取当前世界上下文"""
         return self.world_context
@@ -248,6 +506,7 @@ class OperatingSystem:
             "world_context": self.world_context.dict() if self.world_context else None,
             "history_count": len(self.game_history),
             "registered_agents": [role.value for role in self.registered_agents.keys()],
+            "registered_npcs": list(self.npc_agents.keys()),
             "message_count": len(self.message_queue)
         }
     
@@ -284,4 +543,3 @@ class OperatingSystem:
             self.save_game_state()
         
         logger.info("✅ 信息中枢OS已关闭")
-
