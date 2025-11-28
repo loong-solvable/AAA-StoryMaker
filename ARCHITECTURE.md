@@ -43,7 +43,7 @@
 │                                                                │
 │   • 大中正 (The Censor) - 角色普查与重要性评估                   │
 │   • Demiurge (造物主) - 世界规则与背景提取                       │
-│   • 藻鉴 (角色雕刻师) - 角色档案与角色卡制作                     │
+│   • 许劭 (角色雕刻师) - 角色档案与角色卡制作                     │
 └──────────────────────────────────────────────────────────────┘
                              │
                              ▼
@@ -67,7 +67,7 @@
                              ▼
               ┌──────────────────────────┐
               │ 阶段3：角色档案创建       │
-              │ 【藻鉴 - 角色雕刻师】     │
+              │ 【许劭 - 角色雕刻师】     │
               │                          │
               │ • 为每个角色建立档案      │
               │ • 提取性格特质            │
@@ -138,7 +138,7 @@
 
 #### 3. character_<id>.json - 角色详细档案
 
-由 **藻鉴（角色雕刻师）** 为每个角色生成独立档案。
+由 **许劭（角色雕刻师）** 为每个角色生成独立档案。
 
 ```json
 {
@@ -555,7 +555,7 @@ logs/
 │   └── character_cards_diff.jsonl # - 角色卡变更记录（未来）
 │
 └── genesis/                     # 创世组离线构建日志
-    └── build_YYYYMMDD.log       #   - 世界数据生成日志（大中正+Demiurge+藻鉴）
+    └── build_YYYYMMDD.log       #   - 世界数据生成日志（大中正+Demiurge+许劭）
 ```
 
 #### 记忆变更追踪格式
@@ -623,14 +623,14 @@ AAA-StoryMaker/
 │
 ├── agents/                    # Agent实现层
 │   ├── offline/              # 离线构建（✅ 实现）
-│   │   └── creatorGod/       #   - 创世组（大中正+Demiurge+藻鉴）
+│   │   └── creatorGod/       #   - 创世组（大中正+Demiurge+许劭）
 │   └── online/               # 在线运行（🔜 未来）
 │       ├── layer1/           #   - Logic + OS
 │       ├── layer2/           #   - WS + Plot + Vibe
 │       └── layer3/           #   - NPC Agents
 │
 ├── prompts/                   # Prompt工程层
-│   ├── offline/              #   - 创世组提示词（大中正、Demiurge、藻鉴）
+│   ├── offline/              #   - 创世组提示词（大中正、Demiurge、许劭）
 │   └── online/               #   - 运行时Agents提示词
 │
 ├── utils/                     # 工具层
@@ -694,7 +694,7 @@ AAA-StoryMaker/
 ### ✅ 已实现（v0.1.0）
 - [x] 项目架构设计
 - [x] 基础设施（Config/Logger/LLM Factory）
-- [x] 创世组Agent（大中正+Demiurge+藻鉴三阶段处理）
+- [x] 创世组Agent（大中正+Demiurge+许劭三阶段处理）
 - [x] Prompt工程（创世组三成员的专属提示词）
 - [x] 世界数据生成（拆分式结构）
 
