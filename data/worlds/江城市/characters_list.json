@@ -10,13 +10,13 @@
     "importance": 1.0
   },
   {
-    "id": "dichennansheng",
-    "name": "低沉男声",
+    "id": "niming_xianren",
+    "name": "匿名线人",
     "importance": 0.1
   },
   {
-    "id": "heisexizhuangren",
-    "name": "黑色西装的人",
+    "id": "chuanshiren",
+    "name": "传话人",
     "importance": 0.1
   },
   {
@@ -27,16 +27,16 @@
   {
     "id": "liwan",
     "name": "李婉",
-    "importance": 0.5
-  },
-  {
-    "id": "linchenmuqin",
-    "name": "林晨的母亲",
-    "importance": 0.1
+    "importance": 0.7
   },
   {
     "id": "laojizhe",
     "name": "老记者",
     "importance": 0.5
+  },
+  {
+    "id": "linchen_muqin",
+    "name": "林晨的母亲",
+    "importance": 0.1
   }
 ]

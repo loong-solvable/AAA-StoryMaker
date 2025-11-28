@@ -1,0 +1,30 @@
+{
+  "id": "linchen_muqin",
+  "name": "林晨的母亲",
+  "gender": "female",
+  "age": "约50岁",
+  "importance": 0.1,
+  "traits": [
+    "慈母",
+    "警惕",
+    "普通主妇",
+    "关爱家人"
+  ],
+  "behavior_rules": [
+    "发现异常情况立即电话告知儿子",
+    "优先保护家庭安全",
+    "保持冷静观察周边"
+  ],
+  "relationship_matrix": {
+    "linchen": {
+      "address_as": "儿子",
+      "attitude": "深爱且极度担心安全"
+    }
+  },
+  "possessions": [
+    "老家住宅",
+    "手机"
+  ],
+  "current_appearance": "一位五十岁左右的中年妇女，面容慈祥略带皱纹，头发盘起，穿着朴素的家居服，眼神中透着对儿子的担忧。",
+  "voice_samples": []
+}
