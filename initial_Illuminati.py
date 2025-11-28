@@ -177,13 +177,18 @@ class IlluminatiInitializer:
         """
         初始化 WS（世界状态运行者）
         
-        读取 world_setting.json，初始化世界状态
+        依据数据：
+        - world_setting.json - 世界设定
+        - characters_list.json - 角色列表（确保ID一致性）
+        - characters/*.json - 角色详细档案
+        
         保存到 data/runtime/{world_name}/ws/world_state.json
         """
         logger.info("")
         logger.info("─" * 60)
         logger.info("🌍 初始化 WS（世界状态运行者）")
         logger.info("─" * 60)
+        logger.info(f"   依据: world_setting, characters_list({len(self.characters_list)}个), {len(self.characters_details)}个角色卡")
         
         # 创建 WS 目录
         ws_dir = self.runtime_dir / "ws"
@@ -195,21 +200,26 @@ class IlluminatiInitializer:
         # 选择初始地点（默认第一个）
         initial_location = locations[0] if locations else {"id": "unknown", "name": "未知地点"}
         
-        # 获取初始在场角色（选择重要性较高的角色）
+        # 获取初始在场角色（从 characters_list 中选择重要性较高的角色，确保 ID 一致性）
         characters_present = []
-        important_chars = sorted(
-            self.characters_details.values(),
+        # 按重要性排序 characters_list
+        sorted_chars = sorted(
+            self.characters_list,
             key=lambda x: x.get("importance", 0),
             reverse=True
         )[:3]  # 初始场景最多3个角色
         
-        for char in important_chars:
+        for char_info in sorted_chars:
+            char_id = char_info.get("id")  # 使用 characters_list 中的 ID
+            char_name = char_info.get("name", "")
+            # 从角色档案中获取详细信息
+            char_detail = self.characters_details.get(char_id, {})
             characters_present.append({
-                "id": char.get("id", "unknown"),
-                "name": char.get("name", ""),
+                "id": char_id,  # 确保使用 characters_list 中的 ID
+                "name": char_name,
                 "mood": "平静",
                 "activity": "在场",
-                "appearance_note": char.get("current_appearance", "")
+                "appearance_note": char_detail.get("current_appearance", "")
             })
         
         # 构建NPC关系矩阵（从角色档案中提取）
