@@ -423,15 +423,16 @@ class IlluminatiInitializer:
         history_dir = plot_dir / "history"
         history_dir.mkdir(parents=True, exist_ok=True)
         
-        # 构建 Prompt（传入world_state）
-        prompt = self._build_plot_prompt(world_state)
+        # 构建消息（使用外部提示词文件）
+        messages = self._build_plot_messages(world_state)
         
         logger.info("🤖 正在调用 LLM 生成起始场景和剧本...")
+        logger.info(f"   提示词: prompts/online/plot_system.txt")
         logger.info(f"   依据: world_setting, characters_list, {len(self.characters_details)}个角色卡, world_state")
         
         try:
             # 调用 LLM
-            response = self.llm.invoke(prompt)
+            response = self.llm.invoke(messages)
             content = response.content if hasattr(response, 'content') else str(response)
             
             # 解析响应（传入 world_state 用于构建场景数据）
@@ -469,9 +470,11 @@ class IlluminatiInitializer:
             # 返回默认值
             return self._create_default_scene(), self._create_default_script()
     
-    def _build_plot_prompt(self, world_state: Dict[str, Any]) -> str:
+    def _build_plot_messages(self, world_state: Dict[str, Any]) -> list:
         """
-        构建 Plot 的 Prompt
+        构建 Plot 的消息列表（使用外部提示词文件）
+        
+        提示词来源：prompts/online/plot_system.txt
         
         数据来源：
         - self.world_setting: world_setting.json（世界名称、类型、描述、地点、社会规则）
@@ -482,6 +485,11 @@ class IlluminatiInitializer:
         Args:
             world_state: WS初始化生成的世界状态
         """
+        # 读取 Plot 系统提示词
+        plot_prompt_path = settings.PROMPTS_DIR / "online" / "plot_system.txt"
+        with open(plot_prompt_path, "r", encoding="utf-8") as f:
+            system_prompt = f.read()
+        
         # 获取世界信息
         meta = self.world_setting.get("meta", {})
         world_name = meta.get("world_name", self.world_name)
@@ -495,16 +503,12 @@ class IlluminatiInitializer:
             for loc in locations
         ])
         
-        # 获取角色花名册信息（Plot用于决定角色登场）
-        characters_list_text = "\n".join([
-            f"- {char.get('name')} (ID: {char.get('id')}, 重要性: {char.get('importance', 0.5)})"
-            for char in self.characters_list
-        ])
+        # 获取角色花名册
+        characters_list_text = json.dumps(self.characters_list, ensure_ascii=False, indent=2)
         
         # 获取角色详细信息（角色卡）
         characters_detail_text = "\n".join([
-            f"【{char.get('name', char.get('id'))}】\n"
-            f"  ID: {char.get('id')}\n"
+            f"【{char.get('name', char.get('id'))}】(ID: {char.get('id')})\n"
             f"  特征: {', '.join(char.get('traits', []))}\n"
             f"  行为规则: {'; '.join(char.get('behavior_rules', [])[:2])}\n"
             f"  外观: {char.get('current_appearance', '无描述')[:100]}"
@@ -530,7 +534,10 @@ class IlluminatiInitializer:
             for char in characters_present
         ])
         
-        prompt = f"""你是命运编织者（Plot Director），负责为互动叙事游戏生成开场剧本。
+        user_message = f"""请生成【第一幕】的导演场记单。
+
+===== 花名册 (characters_list.json) =====
+{characters_list_text}
 
 ===== 世界设定 =====
 世界名称: {world_name}
@@ -539,20 +546,12 @@ class IlluminatiInitializer:
 
 【可用地点】
 {locations_text}
-你也可以自己创造地点，但需要符合世界观设定。
 
 【社会规则】
 {rules_text}
 
-===== 角色信息 =====
-【角色花名册】
-{characters_list_text}
-
-【角色详情】
-{characters_detail_text}
-
-===== 当前世界状态 =====
-地点: {current_scene.get('location_name', '未知')}
+===== 当前状态 =====
+地点: {current_scene.get('location_name', '未知')} ({current_scene.get('location_id', '')})
 时间: {current_scene.get('time_of_day', '傍晚')}
 天气: {weather.get('condition', '晴朗')}，{weather.get('temperature', '温暖')}
 世界形势: {world_situation.get('summary', '故事即将开始')}
@@ -560,19 +559,21 @@ class IlluminatiInitializer:
 【当前在场角色】
 {present_chars_text if present_chars_text else '暂无'}
 
-===== 任务 =====
-请根据以上信息，创作一段约500字的开场剧本。要求：
+===== 角色详情 =====
+{characters_detail_text}
 
-1. 以第三人称视角书写，富有文学性和画面感
-2. 描绘当前场景的氛围和环境
-3. 让1-3个重要角色自然登场，展现他们的性格特征
-4. 通过对话和行为推动情节，制造适当的戏剧张力
-5. 为玩家角色的介入留下空间和契机
-6. 符合世界观设定和社会规则
+===== 历史剧本 =====
+（空，这是第一幕开场）
 
-直接输出剧本内容，不要添加标题、格式标记或任何额外说明。"""
+===== 玩家行动 =====
+（无，玩家尚未介入）
+
+请按照你的输出格式，生成第一幕的导演场记单。"""
         
-        return prompt
+        return [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_message)
+        ]
     
     def _parse_plot_response(self, content: str, world_state: Dict[str, Any]) -> tuple[InitialScene, InitialScript]:
         """
@@ -670,10 +671,11 @@ class IlluminatiInitializer:
         locations = self.world_setting.get("geography", {}).get("locations", [])
         location = next((loc for loc in locations if loc.get("id") == location_id), None)
         
-        # 构建 Prompt（传入剧本内容）
-        prompt = self._build_vibe_prompt(location, self.initial_script.content)
+        # 构建消息（使用外部提示词文件）
+        messages = self._build_vibe_messages(location, self.initial_script.content)
         
         logger.info("🤖 正在调用 LLM 生成初始氛围描写...")
+        logger.info(f"   提示词: prompts/online/vibe_system.txt")
         
         # 创建 Vibe 目录
         vibe_dir = self.runtime_dir / "vibe"
@@ -681,10 +683,10 @@ class IlluminatiInitializer:
         
         try:
             # 调用 LLM
-            response = self.llm.invoke(prompt)
+            response = self.llm.invoke(messages)
             content = response.content if hasattr(response, 'content') else str(response)
             
-            # 解析响应
+            # 解析响应（适配 vibe_system.txt 的输出格式）
             atmosphere = self._parse_vibe_response(content)
             
             self.initial_atmosphere = atmosphere
@@ -704,28 +706,29 @@ class IlluminatiInitializer:
             logger.error(f"❌ Vibe 生成失败: {e}", exc_info=True)
             return self._create_default_atmosphere()
     
-    def _build_vibe_prompt(self, location: Optional[Dict[str, Any]], script_content: str) -> str:
+    def _build_vibe_messages(self, location: Optional[Dict[str, Any]], script_content: str) -> list:
         """
-        构建 Vibe 的 Prompt
+        构建 Vibe 的消息列表（使用外部提示词文件）
+        
+        提示词来源：prompts/online/vibe_system.txt
         
         Args:
             location: 地点信息（包含感官描述）
             script_content: Plot 生成的剧本内容（核心依据）
         """
-        # 获取世界信息
-        meta = self.world_setting.get("meta", {})
-        genre = meta.get("genre_type", "REALISTIC")
+        # 读取 Vibe 系统提示词
+        vibe_prompt_path = settings.PROMPTS_DIR / "online" / "vibe_system.txt"
+        with open(vibe_prompt_path, "r", encoding="utf-8") as f:
+            system_prompt = f.read()
         
         # 获取地点感官信息
         sensory = location.get("sensory_profile", {}) if location else {}
         
-        prompt = f"""你是氛围感受者（Atmosphere Creator），负责基于剧本内容创作沉浸式的环境氛围描写。
+        # 构建导演指令（来自 Plot 的剧本）
+        user_message = f"""请为以下场景生成氛围描写。
 
-【世界类型】
-{genre}
-
-【当前场所】
-位置名称: {self.initial_scene.location_name}
+===== 导演指令 =====
+场所: {self.initial_scene.location_name}
 时间: {self.initial_scene.time_of_day}
 天气: {self.initial_scene.weather}
 
@@ -739,27 +742,19 @@ class IlluminatiInitializer:
 {script_content}
 ==========================================
 
-请基于上述剧本内容，提取并强化其中的环境氛围元素，创作一段让玩家身临其境的氛围描写。要求：
-
-1. **必须与剧本内容一致**：氛围描写要反映剧本中的场景、角色状态和情节氛围
-2. 融合视觉、听觉、嗅觉等多种感官
-3. 体现剧本中的情绪基调和戏剧张力
-4. 200-300字
-
-请严格按照以下JSON格式输出（不要添加任何其他文字）：
-
-{{
-    "visual_description": "视觉描写（50-80字，基于剧本场景）",
-    "auditory_description": "听觉描写（30-50字，基于剧本场景）",
-    "olfactory_description": "嗅觉描写（20-30字，基于剧本场景）",
-    "emotional_tone": "情绪基调（2-3个词，反映剧本氛围）",
-    "full_atmosphere_text": "完整的氛围描写文本（200-300字，与剧本内容呼应）"
-}}"""
+请基于上述剧本内容，提取并强化其中的环境氛围元素，按照你的输出格式生成氛围描写 JSON。"""
         
-        return prompt
+        return [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_message)
+        ]
     
     def _parse_vibe_response(self, content: str) -> InitialAtmosphere:
-        """解析 Vibe 的响应"""
+        """
+        解析 Vibe 的响应
+        
+        适配 vibe_system.txt 的输出格式，转换为 InitialAtmosphere 结构
+        """
         import re
         
         # 尝试提取 JSON
@@ -769,12 +764,28 @@ class IlluminatiInitializer:
         
         data = json.loads(json_match.group())
         
+        # 适配 vibe_system.txt 的输出格式
+        sensory_details = data.get("sensory_details", {})
+        
+        # 将数组转换为字符串
+        def join_list(items):
+            if isinstance(items, list):
+                return "；".join(items) if items else ""
+            return str(items) if items else ""
+        
+        # 优先使用 vibe_system.txt 格式，兼容旧格式
+        visual = join_list(sensory_details.get("visual", [])) or data.get("visual_description", "")
+        auditory = join_list(sensory_details.get("auditory", [])) or data.get("auditory_description", "")
+        olfactory = join_list(sensory_details.get("olfactory", [])) or data.get("olfactory_description", "")
+        emotional = join_list(data.get("mood_keywords", [])) or data.get("emotional_tone", "平静")
+        full_text = data.get("atmosphere_description", "") or data.get("full_atmosphere_text", "")
+        
         return InitialAtmosphere(
-            visual_description=data.get("visual_description", ""),
-            auditory_description=data.get("auditory_description", ""),
-            olfactory_description=data.get("olfactory_description", ""),
-            emotional_tone=data.get("emotional_tone", "平静"),
-            full_atmosphere_text=data.get("full_atmosphere_text", "")
+            visual_description=visual,
+            auditory_description=auditory,
+            olfactory_description=olfactory,
+            emotional_tone=emotional,
+            full_atmosphere_text=full_text
         )
     
     def _create_default_atmosphere(self) -> InitialAtmosphere:
