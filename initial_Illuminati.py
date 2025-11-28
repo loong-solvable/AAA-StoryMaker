@@ -33,7 +33,7 @@ class InitialScene:
     location_name: str
     time_of_day: str
     weather: str
-    present_characters: List[str]
+    present_characters: List[Dict[str, Any]]  # 包含 id, name, first_appearance
     scene_description: str
     opening_narrative: str
 
@@ -222,8 +222,10 @@ class IlluminatiInitializer:
                 "appearance_note": char_detail.get("current_appearance", "")
             })
         
-        # 构建NPC关系矩阵（从角色档案中提取）
-        relationship_matrix = self._build_relationship_matrix()
+        # NPC关系矩阵初始化时留空
+        # 只有当角色在Plot生成的剧本中登场后，才会被加入关系矩阵
+        # WS会在后续根据Plot的剧本来更新关系矩阵
+        relationship_matrix = {}
         
         # 构建世界整体形势
         meta = self.world_setting.get("meta", {})
@@ -354,7 +356,9 @@ class IlluminatiInitializer:
             
             logger.info(f"✅ Plot 初始化完成")
             logger.info(f"   - 起始地点: {scene.location_name}")
-            logger.info(f"   - 在场角色: {', '.join(scene.present_characters)}")
+            # 从字典列表中提取角色名
+            char_names = [c.get('name', c.get('id', '未知')) if isinstance(c, dict) else c for c in scene.present_characters]
+            logger.info(f"   - 在场角色: {', '.join(char_names)}")
             logger.info(f"   - 场景文件: {scene_file}")
             logger.info(f"   - 剧本文件: {script_file}")
             
@@ -385,7 +389,7 @@ class IlluminatiInitializer:
             for loc in locations
         ])
         
-        # 获取角色列表信息
+        # 获取角色花名册信息（Plot用于决定角色登场）
         characters_list_text = "\n".join([
             f"- {char.get('name')} (ID: {char.get('id')}, 重要性: {char.get('importance', 0.5)})"
             for char in self.characters_list
@@ -434,8 +438,8 @@ class IlluminatiInitializer:
 【社会规则】
 {rules_text}
 
-===== 角色信息 =====
-【角色列表】
+===== 角色花名册 =====
+以下是所有可能登场的角色，由你（Plot）决定谁在何时登场：
 {characters_list_text}
 
 【角色详情（角色卡）】
@@ -461,10 +465,11 @@ class IlluminatiInitializer:
 ===== 任务 =====
 请根据以上信息，生成第一幕的起始场景和开场剧本。要求：
 1. 场景要与WS提供的当前场景保持一致
-2. 在场角色要与WS提供的当前在场角色一致
+2. 从花名册中选择2-3个重要角色首次登场
 3. 设置一个有张力的开场情境，为故事做好铺垫
 4. 为玩家的介入留下空间
-5. 所有角色ID必须使用角色列表中的ID（如 npc_001）
+5. 所有角色ID必须使用花名册中的ID（如 npc_001）
+6. 这是角色的首次登场，请在 present_characters 中标注 `first_appearance: true`
 
 请严格按照以下JSON格式输出（不要添加任何其他文字）：
 
@@ -474,7 +479,10 @@ class IlluminatiInitializer:
         "location_name": "地点名称",
         "time_of_day": "时间段（使用world_state中的）",
         "weather": "天气（使用world_state中的）",
-        "present_characters": ["角色ID1", "角色ID2"],
+        "present_characters": [
+            {{"id": "npc_001", "name": "角色名", "first_appearance": true}},
+            {{"id": "npc_002", "name": "角色名", "first_appearance": true}}
+        ],
         "scene_description": "场景描述（100字以内）",
         "opening_narrative": "开场旁白（200字以内，用于展示给玩家，要有氛围感）"
     }},
@@ -531,8 +539,11 @@ class IlluminatiInitializer:
         locations = self.world_setting.get("geography", {}).get("locations", [])
         first_loc = locations[0] if locations else {"id": "unknown", "name": "未知地点"}
         
-        # 获取重要角色
-        important_chars = [c["id"] for c in self.characters_list if c.get("importance", 0) >= 0.8][:2]
+        # 获取重要角色（转换为字典格式）
+        important_chars = [
+            {"id": c["id"], "name": c["name"], "first_appearance": True}
+            for c in self.characters_list if c.get("importance", 0) >= 0.8
+        ][:2]
         
         return InitialScene(
             location_id=first_loc.get("id", "unknown"),
@@ -625,7 +636,9 @@ class IlluminatiInitializer:
         
         # 获取在场角色外观
         appearances = []
-        for char_id in self.initial_scene.present_characters:
+        for char_info in self.initial_scene.present_characters:
+            # 支持新格式（字典）和旧格式（字符串ID）
+            char_id = char_info.get("id") if isinstance(char_info, dict) else char_info
             char = self.characters_details.get(char_id, {})
             appearance = char.get("current_appearance", f"{char.get('name', char_id)}在场")
             appearances.append(f"- {char.get('name', char_id)}: {appearance}")
