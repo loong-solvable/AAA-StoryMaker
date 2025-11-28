@@ -91,7 +91,7 @@ genesis_data = load_genesis_data("data/genesis/genesis.json")
 - `load_world_data(world_dir)` - 加载完整的世界数据（三份文件）
 - `load_world_setting(world_dir)` - 仅加载世界设定（Demiurge生成）
 - `load_characters_list(world_dir)` - 仅加载角色列表（大中正生成）
-- `load_character_details(world_dir, character_id)` - 加载单个角色档案（Minos生成）
+- `load_character_details(world_dir, character_id)` - 加载单个角色档案（藻鉴生成）
 - `load_all_characters(world_dir)` - 加载所有角色档案
 - `list_available_worlds()` - 列出所有可用世界
 
