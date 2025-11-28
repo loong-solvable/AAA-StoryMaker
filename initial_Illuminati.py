@@ -178,11 +178,16 @@ class IlluminatiInitializer:
         初始化 WS（世界状态运行者）
         
         读取 world_setting.json，初始化世界状态
+        保存到 data/runtime/{world_name}/ws/world_state.json
         """
         logger.info("")
         logger.info("─" * 60)
         logger.info("🌍 初始化 WS（世界状态运行者）")
         logger.info("─" * 60)
+        
+        # 创建 WS 目录
+        ws_dir = self.runtime_dir / "ws"
+        ws_dir.mkdir(parents=True, exist_ok=True)
         
         # 提取地点信息
         locations = self.world_setting.get("geography", {}).get("locations", [])
@@ -190,42 +195,90 @@ class IlluminatiInitializer:
         # 选择初始地点（默认第一个）
         initial_location = locations[0] if locations else {"id": "unknown", "name": "未知地点"}
         
-        # 初始化 NPC 状态
-        npc_states = {}
-        for char in self.characters_details.values():
-            char_id = char.get("id", "unknown")
-            npc_states[char_id] = {
-                "name": char.get("name", char_id),
-                "current_location": initial_location.get("id"),
-                "current_activity": "日常活动",
-                "mood": "平静",
-                "last_interaction": None
-            }
+        # 获取初始在场角色（选择重要性较高的角色）
+        characters_present = []
+        important_chars = sorted(
+            self.characters_details.values(),
+            key=lambda x: x.get("importance", 0),
+            reverse=True
+        )[:3]  # 初始场景最多3个角色
         
-        # 构建世界状态
-        world_state = {
-            "world_name": self.world_setting.get("meta", {}).get("world_name", self.world_name),
-            "current_time": "傍晚",
-            "weather": "晴朗",
-            "locations": locations,
-            "npc_states": npc_states,
-            "physics_rules": self.world_setting.get("physics_logic", {}),
-            "social_rules": self.world_setting.get("social_logic", []),
-            "triggered_events": [],
-            "game_turn": 0
+        for char in important_chars:
+            characters_present.append({
+                "id": char.get("id", "unknown"),
+                "name": char.get("name", ""),
+                "mood": "平静",
+                "activity": "在场",
+                "appearance_note": char.get("current_appearance", "")
+            })
+        
+        # 构建NPC关系矩阵（从角色档案中提取）
+        relationship_matrix = self._build_relationship_matrix()
+        
+        # 构建世界整体形势
+        meta = self.world_setting.get("meta", {})
+        world_situation = {
+            "summary": f"故事在{meta.get('world_name', self.world_name)}展开，一切刚刚开始。",
+            "tension_level": "平静",
+            "key_developments": []
         }
         
-        # 保存世界状态
-        state_file = self.runtime_dir / "world_state.json"
+        # 构建符合新格式的世界状态
+        world_state = {
+            "current_scene": {
+                "location_id": initial_location.get("id", "unknown"),
+                "location_name": initial_location.get("name", "未知地点"),
+                "time_of_day": "傍晚",
+                "description": initial_location.get("sensory_profile", {}).get("atmosphere", "故事即将展开的地方")
+            },
+            "weather": {
+                "condition": "晴朗",
+                "temperature": "温暖",
+                "atmosphere": "天气宜人，微风轻拂"
+            },
+            "characters_present": characters_present,
+            "characters_absent": [],  # 初始化时为空
+            "relationship_matrix": relationship_matrix,
+            "world_situation": world_situation,
+            "meta": {
+                "game_turn": 0,
+                "last_updated": datetime.now().isoformat(),
+                "total_elapsed_time": "0分钟"
+            }
+        }
+        
+        # 保存世界状态到 ws 目录
+        state_file = ws_dir / "world_state.json"
         with open(state_file, "w", encoding="utf-8") as f:
             json.dump(world_state, f, ensure_ascii=False, indent=2)
         
         logger.info(f"✅ WS 初始化完成")
-        logger.info(f"   - 地点数量: {len(locations)}")
-        logger.info(f"   - NPC数量: {len(npc_states)}")
+        logger.info(f"   - 初始场景: {initial_location.get('name', '未知')}")
+        logger.info(f"   - 在场角色: {len(characters_present)} 人")
+        logger.info(f"   - 关系矩阵: {len(relationship_matrix)} 个角色")
         logger.info(f"   - 状态文件: {state_file}")
         
         return world_state
+    
+    def _build_relationship_matrix(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        """
+        从角色档案中构建NPC关系矩阵
+        """
+        relationship_matrix = {}
+        
+        for char_id, char_data in self.characters_details.items():
+            char_relations = char_data.get("relationship_matrix", {})
+            if char_relations:
+                relationship_matrix[char_id] = {}
+                for target_id, relation_info in char_relations.items():
+                    # 从角色档案的关系数据转换为WS格式
+                    relationship_matrix[char_id][target_id] = {
+                        "relation_type": "相关",  # 默认值，可根据attitude推断
+                        "attitude": relation_info.get("attitude", "中立"),
+                        "recent_change": None
+                    }
+        
+        return relationship_matrix
     
     # ==========================================
     # Plot 初始化
@@ -249,6 +302,12 @@ class IlluminatiInitializer:
         
         logger.info("🤖 正在调用 LLM 生成起始场景和剧本...")
         
+        # 创建 Plot 目录结构
+        plot_dir = self.runtime_dir / "plot"
+        plot_dir.mkdir(parents=True, exist_ok=True)
+        script_dir = plot_dir / "script"
+        script_dir.mkdir(parents=True, exist_ok=True)
+        
         try:
             # 调用 LLM
             response = self.llm.invoke(prompt)
@@ -260,13 +319,13 @@ class IlluminatiInitializer:
             self.initial_scene = scene
             self.initial_script = script
             
-            # 保存起始场景
-            scene_file = self.runtime_dir / "initial_scene.json"
+            # 保存起始场景到 plot 目录
+            scene_file = plot_dir / "initial_scene.json"
             with open(scene_file, "w", encoding="utf-8") as f:
                 json.dump(asdict(scene), f, ensure_ascii=False, indent=2)
             
-            # 保存起始剧本
-            script_file = self.runtime_dir / "initial_script.json"
+            # 保存起始剧本到 plot/script 目录
+            script_file = script_dir / "initial_script.json"
             with open(script_file, "w", encoding="utf-8") as f:
                 json.dump(asdict(script), f, ensure_ascii=False, indent=2)
             
@@ -274,7 +333,7 @@ class IlluminatiInitializer:
             logger.info(f"   - 起始地点: {scene.location_name}")
             logger.info(f"   - 在场角色: {', '.join(scene.present_characters)}")
             logger.info(f"   - 场景文件: {scene_file}")
-            logger.info(f"   - 剧本文件: {script_file}")
+            logger.info(f"   - 剧本目录: {script_dir}")
             
             return scene, script
             
@@ -452,6 +511,10 @@ class IlluminatiInitializer:
         
         logger.info("🤖 正在调用 LLM 生成初始氛围描写...")
         
+        # 创建 Vibe 目录
+        vibe_dir = self.runtime_dir / "vibe"
+        vibe_dir.mkdir(parents=True, exist_ok=True)
+        
         try:
             # 调用 LLM
             response = self.llm.invoke(prompt)
@@ -462,14 +525,14 @@ class IlluminatiInitializer:
             
             self.initial_atmosphere = atmosphere
             
-            # 保存氛围数据
-            atmo_file = self.runtime_dir / "initial_atmosphere.json"
+            # 保存氛围数据到 vibe 目录
+            atmo_file = vibe_dir / "initial_atmosphere.json"
             with open(atmo_file, "w", encoding="utf-8") as f:
                 json.dump(asdict(atmosphere), f, ensure_ascii=False, indent=2)
             
             logger.info(f"✅ Vibe 初始化完成")
             logger.info(f"   - 情绪基调: {atmosphere.emotional_tone}")
-            logger.info(f"   - 氛围文件: {atmo_file}")
+            logger.info(f"   - 氛围目录: {vibe_dir}")
             
             return atmosphere
             
@@ -604,19 +667,31 @@ class IlluminatiInitializer:
             "world_name": self.world_name,
             "initialized_at": datetime.now().isoformat(),
             "runtime_dir": str(self.runtime_dir),
+            "directory_structure": {
+                "ws": "ws/world_state.json",
+                "plot": {
+                    "scene": "plot/initial_scene.json",
+                    "script": "plot/script/initial_script.json"
+                },
+                "vibe": "vibe/initial_atmosphere.json"
+            },
             "components": {
                 "WS": {
                     "status": "initialized",
-                    "file": "world_state.json"
+                    "directory": "ws/",
+                    "state_file": "ws/world_state.json"
                 },
                 "Plot": {
                     "status": "initialized",
-                    "files": ["initial_scene.json", "initial_script.json"],
+                    "directory": "plot/",
+                    "scene_file": "plot/initial_scene.json",
+                    "script_directory": "plot/script/",
                     "opening_location": self.initial_scene.location_name if self.initial_scene else None
                 },
                 "Vibe": {
                     "status": "initialized",
-                    "file": "initial_atmosphere.json",
+                    "directory": "vibe/",
+                    "atmosphere_file": "vibe/initial_atmosphere.json",
                     "emotional_tone": self.initial_atmosphere.emotional_tone if self.initial_atmosphere else None
                 }
             },
@@ -756,12 +831,16 @@ def main():
         print()
         print(f"  📁 运行时数据目录: {runtime_dir}")
         print()
-        print("  📖 生成的文件:")
-        print(f"     - world_state.json        # WS 初始化的世界状态")
-        print(f"     - initial_scene.json      # Plot 生成的起始场景")
-        print(f"     - initial_script.json     # Plot 生成的起始剧本")
-        print(f"     - initial_atmosphere.json # Vibe 生成的初始氛围")
-        print(f"     - init_summary.json       # 初始化摘要")
+        print("  📖 生成的目录结构:")
+        print(f"     📂 ws/")
+        print(f"        └─ world_state.json       # WS 世界状态")
+        print(f"     📂 plot/")
+        print(f"        ├─ initial_scene.json     # 起始场景")
+        print(f"        └─ script/")
+        print(f"           └─ initial_script.json # 起始剧本")
+        print(f"     📂 vibe/")
+        print(f"        └─ initial_atmosphere.json # 初始氛围")
+        print(f"     📄 init_summary.json          # 初始化摘要")
         print()
         
         # 显示开场内容预览

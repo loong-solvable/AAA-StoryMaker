@@ -1,0 +1,25 @@
+{
+  "world_name": "江城市",
+  "initialized_at": "2025-11-28T15:40:26.039132",
+  "runtime_dir": "D:\\code\\AAA-StoryMaker\\data\\runtime\\江城市_20251128_153904",
+  "components": {
+    "WS": {
+      "status": "initialized",
+      "file": "world_state.json"
+    },
+    "Plot": {
+      "status": "initialized",
+      "files": [
+        "initial_scene.json",
+        "initial_script.json"
+      ],
+      "opening_location": "江城郊区老旧公寓出租屋"
+    },
+    "Vibe": {
+      "status": "initialized",
+      "file": "initial_atmosphere.json",
+      "emotional_tone": "紧张、孤寂、压抑"
+    }
+  },
+  "ready_for_game": true
+}

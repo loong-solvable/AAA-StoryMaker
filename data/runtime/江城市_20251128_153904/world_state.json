@@ -1,0 +1,196 @@
+{
+  "world_name": "江城市",
+  "current_time": "傍晚",
+  "weather": "晴朗",
+  "locations": [
+    {
+      "id": "city_center_cafe",
+      "name": "市中心咖啡馆",
+      "region_type": "室内/商业区",
+      "sensory_profile": {
+        "visual": "繁华车水马龙，温暖灯光，行人匆匆",
+        "auditory": "街头喧闹，咖啡机嗡鸣，人声交谈",
+        "olfactory": "咖啡香气混杂城市尾气",
+        "atmosphere": "热闹却略带疲惫的都市日常"
+      },
+      "connected_to": [
+        "hidden_teahouse",
+        "alleys"
+      ]
+    },
+    {
+      "id": "rental_apartment",
+      "name": "江城郊区老旧公寓出租屋",
+      "region_type": "室内/住宅",
+      "sensory_profile": {
+        "visual": "堆满电脑设备和技术书籍，昏暗灯光",
+        "auditory": "电脑风扇嗡鸣，郊区安静",
+        "olfactory": "电子设备热气和尘土味",
+        "atmosphere": "孤寂的技术宅巢穴，紧张工作氛围"
+      },
+      "connected_to": [
+        "netbars",
+        "motels"
+      ]
+    },
+    {
+      "id": "hidden_teahouse",
+      "name": "隐蔽茶馆",
+      "region_type": "室内/隐秘场所",
+      "sensory_profile": {
+        "visual": "低调昏暗，木质桌椅",
+        "auditory": "茶水轻沸，门外脚步警觉",
+        "olfactory": "淡淡茶香",
+        "atmosphere": "凝重紧张，危机四伏"
+      },
+      "connected_to": [
+        "city_center_cafe",
+        "old_netbar",
+        "alleys"
+      ]
+    },
+    {
+      "id": "old_netbar",
+      "name": "老旧网吧",
+      "region_type": "室内/临时藏身",
+      "sensory_profile": {
+        "visual": "烟雾缭绕，旧式电脑屏幕闪烁",
+        "auditory": "键盘敲击，风扇噪音，喘息声",
+        "olfactory": "烟味、汗臭和廉价零食",
+        "atmosphere": "压抑逃亡，气喘吁吁的慌乱"
+      },
+      "connected_to": [
+        "hidden_teahouse",
+        "cheap_motel",
+        "alleys"
+      ]
+    },
+    {
+      "id": "cheap_motel",
+      "name": "便宜小旅馆",
+      "region_type": "室内/临时住宿",
+      "sensory_profile": {
+        "visual": "简陋陈旧，昏黄灯光",
+        "auditory": "夜间寂静，远处车声",
+        "olfactory": "霉味和廉价洗涤剂",
+        "atmosphere": "躲藏不安，低调生存"
+      },
+      "connected_to": [
+        "rental_apartment",
+        "old_netbar",
+        "luxury_hotel"
+      ]
+    },
+    {
+      "id": "luxury_hotel",
+      "name": "市中心高档酒店",
+      "region_type": "室内/高端商业",
+      "sensory_profile": {
+        "visual": "金碧辉煌，大堂水晶灯，优雅装潢",
+        "auditory": "低沉背景音乐，服务员轻步",
+        "olfactory": "高级香氛，清新空调",
+        "atmosphere": "表面优雅，暗藏威胁与谈判张力"
+      },
+      "connected_to": [
+        "city_center_cafe",
+        "cheap_motel"
+      ]
+    }
+  ],
+  "npc_states": {
+    "npc_001": {
+      "name": "林晨",
+      "current_location": "city_center_cafe",
+      "current_activity": "日常活动",
+      "mood": "平静",
+      "last_interaction": null
+    },
+    "npc_002": {
+      "name": "苏晴雨",
+      "current_location": "city_center_cafe",
+      "current_activity": "日常活动",
+      "mood": "平静",
+      "last_interaction": null
+    },
+    "npc_003": {
+      "name": "电话中的神秘男子",
+      "current_location": "city_center_cafe",
+      "current_activity": "日常活动",
+      "mood": "平静",
+      "last_interaction": null
+    },
+    "npc_004": {
+      "name": "张瑞峰",
+      "current_location": "city_center_cafe",
+      "current_activity": "日常活动",
+      "mood": "平静",
+      "last_interaction": null
+    },
+    "npc_005": {
+      "name": "李婉",
+      "current_location": "city_center_cafe",
+      "current_activity": "日常活动",
+      "mood": "平静",
+      "last_interaction": null
+    },
+    "npc_006": {
+      "name": "林晨的母亲",
+      "current_location": "city_center_cafe",
+      "current_activity": "日常活动",
+      "mood": "平静",
+      "last_interaction": null
+    },
+    "npc_007": {
+      "name": "老记者",
+      "current_location": "city_center_cafe",
+      "current_activity": "日常活动",
+      "mood": "平静",
+      "last_interaction": null
+    }
+  },
+  "physics_rules": {
+    "mode": "STANDARD_REALITY",
+    "hard_constraints": [
+      "人类无法飞行、瞬移或超自然移动",
+      "数据加密破解需专业设备、时间和技术知识，无法瞬间完成",
+      "黑客入侵可被远程检测、反制或物理断网中断",
+      "追逐逃跑受限于人体体能、交通工具和小巷地形",
+      "电话追踪需技术手段，无法匿名绝对保密"
+    ],
+    "supernatural_system": null
+  },
+  "social_rules": [
+    {
+      "rule_name": "商业数据交易潜规则",
+      "trigger_condition": "科技公司倒卖用户数据",
+      "consequence": "引发警方调查、高管被捕、社会舆论风暴",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "证据不足报警限制",
+      "trigger_condition": "无实质证据直接报警",
+      "consequence": "警方不予立案，调查受阻",
+      "is_rigid": true
+    },
+    {
+      "rule_name": "公司威胁与封口",
+      "trigger_condition": "掌握公司黑料后被发现",
+      "consequence": "遭遇翻家、电话警告、律师函或针对家人骚扰",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "媒体曝光机制",
+      "trigger_condition": "向正直记者提交确凿证据",
+      "consequence": "报道刷屏、警方介入、企业高管落网",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "职场技术宅地位",
+      "trigger_condition": "技术专家卷入事件",
+      "consequence": "被求助但易陷危险，需躲藏转移",
+      "is_rigid": false
+    }
+  ],
+  "triggered_events": [],
+  "game_turn": 0
+}
