@@ -20,7 +20,7 @@ class CharacterFilterAgent:
         prompt_filename: str = "character_filter.txt",
         logger=None,
     ):
-        self.logger = logger or setup_logger("CharacterFilter", "architect.log")
+        self.logger = logger or setup_logger("大中正", "genesis_group.log")
         self.llm = llm or get_llm()
         self.prompt_text = escape_braces(load_prompt(prompt_filename))
 

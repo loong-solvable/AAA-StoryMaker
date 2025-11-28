@@ -1,5 +1,5 @@
 """
-测试architect的自动重试功能
+测试创世组的自动重试功能
 验证角色创建失败后能否自动重试
 """
 import sys
@@ -9,7 +9,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from agents.offline.architect import ArchitectAgent
+from agents.offline.genesis_group import GenesisGroup
 from utils.logger import setup_logger
 
 logger = setup_logger("AutoRetryTest", "auto_retry_test.log")
@@ -18,14 +18,14 @@ logger = setup_logger("AutoRetryTest", "auto_retry_test.log")
 def test_auto_retry_logic():
     """测试自动重试逻辑"""
     logger.info("=" * 80)
-    logger.info("🧪 测试：Architect自动重试功能")
+    logger.info("🧪 测试：创世组自动重试功能")
     logger.info("=" * 80)
     
     # 检查未知世界是否存在失败的角色
     world_path = project_root / "data" / "worlds" / "未知世界"
     
     if not world_path.exists():
-        logger.error("❌ 未找到'未知世界'文件夹，请先运行architect")
+        logger.error("❌ 未找到'未知世界'文件夹，请先运行创世组(run_genesis.py)")
         return False
     
     characters_list_path = world_path / "characters_list.json"
@@ -68,7 +68,7 @@ def test_auto_retry_logic():
     logger.info("=" * 80)
     
     if failed_count > 0:
-        logger.info("💡 下次运行architect时，这些失败的角色将自动重试")
+        logger.info("💡 下次运行创世组时，这些失败的角色将自动重试")
         logger.info("   或者手动运行：python temp/retry_failed_characters.py 未知世界 data/novels/example_novel.txt")
     else:
         logger.info("🎉 所有角色状态正常！")

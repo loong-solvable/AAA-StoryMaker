@@ -20,7 +20,7 @@ class CharacterDetailAgent:
         prompt_filename: str = "character_detail.txt",
         logger=None,
     ):
-        self.logger = logger or setup_logger("CharacterDetail", "architect.log")
+        self.logger = logger or setup_logger("许劭", "genesis_group.log")
         self.llm = llm or get_llm()
         self.prompt_template = load_prompt(prompt_filename)
 

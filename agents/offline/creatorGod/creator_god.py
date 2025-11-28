@@ -35,7 +35,7 @@ class CreatorGod:
         ] = None,
         logger=None,
     ):
-        self.logger = logger or setup_logger("CreatorGod", "architect.log")
+        self.logger = logger or setup_logger("CreatorGod", "genesis_group.log")
         self.stage_llm_configs = {
             key: self._normalize_config(cfg)
             for key, cfg in (stage_llm_configs or {}).items()

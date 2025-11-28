@@ -62,7 +62,7 @@ def main():
     if not genesis_path.exists():
         print("❌ 未找到Genesis.json文件")
         print(f"\n请先运行以下命令生成世界数据:")
-        print(f"  python run_architect.py")
+        print(f"  python run_genesis.py")
         print()
         return
     

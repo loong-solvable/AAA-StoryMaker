@@ -68,7 +68,7 @@ copy .env.example .env
 
 **第一阶段：创世组（离线构建）**
 ```bash
-python run_architect.py
+python run_genesis.py
 ```
 该脚本会执行创世组的三阶段处理：
 1. **大中正** - 角色普查，识别所有角色并评估重要性

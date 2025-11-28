@@ -12,7 +12,7 @@ def main():
     print("⚠️  此功能尚未实现")
     print()
     print("当前可用功能：")
-    print("  1. 运行架构师Agent：python run_architect.py")
+    print("  1. 运行创世组：python run_genesis.py")
     print()
     print("=" * 70)
 

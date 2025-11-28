@@ -9,7 +9,7 @@ from typing import Any
 from config.settings import settings
 from utils.logger import setup_logger
 
-logger = setup_logger("CreatorGod", "architect.log")
+logger = setup_logger("CreatorGod", "genesis_group.log")
 
 
 def load_prompt(filename: str) -> str:

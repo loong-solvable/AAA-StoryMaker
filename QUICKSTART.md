@@ -55,7 +55,7 @@ MODEL_NAME=glm-4
 
 **第一次运行 - 生成世界:**
 ```bash
-python run_architect.py
+python run_genesis.py
 ```
 
 **开始游戏:**
@@ -188,7 +188,7 @@ data/worlds/都市迷局/
 
 ### 运行日志
 
-- **位置**: `logs/architect.log`
+- **位置**: `logs/genesis_group.log`
 - **包含**: 创世组（大中正+Demiurge+许劭）完整的三阶段处理流程和调试信息
 
 ---
@@ -213,15 +213,15 @@ data/worlds/都市迷局/
 2. ✅ 依赖已正确安装 (`pip list` 查看)
 3. ✅ `.env` 文件已创建且API密钥正确
 4. ✅ 网络连接正常
-5. ✅ 查看 `logs/architect.log` 了解详细错误
+5. ✅ 查看 `logs/genesis_group.log` 了解详细错误
 
 ### Q3: 如何使用自己的小说？
 
 1. 将你的小说文本文件（`.txt`格式）放入 `data/novels/` 目录
-2. 修改 `run_architect.py` 中的文件名，或直接运行：
+2. 修改 `run_genesis.py` 中的文件名，或直接运行：
 
 ```python
-from agents.offline.architect import create_world
+from agents.offline.genesis_group import create_world
 
 # 使用你的小说文件
 world_dir = create_world("your_novel.txt")

@@ -20,7 +20,7 @@ class WorldSettingAgent:
         prompt_filename: str = "world_setting.txt",
         logger=None,
     ):
-        self.logger = logger or setup_logger("WorldSetting", "architect.log")
+        self.logger = logger or setup_logger("Demiurge", "genesis_group.log")
         self.llm = llm or get_llm()
         self.prompt_text = escape_braces(load_prompt(prompt_filename))
 

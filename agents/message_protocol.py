@@ -43,7 +43,7 @@ class MessageType(str, Enum):
 class AgentRole(str, Enum):
     """Agent角色枚举"""
     # 离线构建
-    ARCHITECT = "architect"               # 架构师
+    GENESIS_GROUP = "genesis_group"       # 创世组（大中正+Demiurge+许劭）
     
     # 第一层
     OS = "os"                            # 信息中枢

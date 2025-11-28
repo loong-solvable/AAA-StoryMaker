@@ -182,7 +182,7 @@ def test_stage2_world_extraction():
         print("  ✅ JSON解析工作正常")
         print("  ✅ 数据结构完整")
         print()
-        print("💡 现在可以安全运行 run_architect.py 了！")
+        print("💡 现在可以安全运行 run_genesis.py 了！")
         print()
         
         logger.info(f"✅ 阶段2测试成功，耗时 {elapsed_time:.2f}秒")

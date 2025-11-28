@@ -1,6 +1,6 @@
 """
 临时工具：重试失败的角色创建
-用于修复 architect 运行时因 API 限流/超时导致的角色档案缺失
+用于修复创世组运行时因 API 限流/超时导致的角色档案缺失
 
 使用方法：
     python temp/retry_failed_characters.py <世界名称> [小说路径]
@@ -16,7 +16,7 @@ from typing import List, Tuple
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from agents.offline.architect import ArchitectAgent
+from agents.offline.genesis_group import GenesisGroup
 from utils.logger import setup_logger
 
 logger = setup_logger("CharacterRetry", "character_retry.log")
@@ -31,8 +31,8 @@ class CharacterRetryTool:
         self.characters_dir = self.world_path / "characters"
         self.characters_list_path = self.world_path / "characters_list.json"
 
-        # 初始化 architect（复用其 CreatorGod 与子客体）
-        self.architect = ArchitectAgent()
+        # 初始化创世组（复用其 CreatorGod 与子客体）
+        self.genesis = GenesisGroup()
 
         logger.info(f"🔧 初始化角色重试工具")
         logger.info(f"📁 世界路径: {self.world_path}")
@@ -116,8 +116,8 @@ class CharacterRetryTool:
                 "name": char_name,
                 "importance": importance,
             }
-            logger.info("🤖 正在调用角色档案子客体...")
-            char_data = self.architect.creator_god.character_detail_agent.create_one(
+            logger.info("🤖 正在调用许劭（角色档案Agent）...")
+            char_data = self.genesis.xu_shao.create_one(
                 novel_text=novel_text,
                 char_info=char_info,
             )
@@ -214,7 +214,7 @@ class CharacterRetryTool:
 def main():
     print("=" * 80)
     print("🔧 角色重试工具 (临时工具)")
-    print("   用于修复 architect 因 API 限流导致的角色创建失败问题")
+    print("   用于修复创世组因 API 限流导致的角色创建失败问题")
     print("=" * 80)
 
     if len(sys.argv) < 2:

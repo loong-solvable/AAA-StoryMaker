@@ -1,5 +1,5 @@
 """
-架构师Agent测试脚本 - 流式输出版本
+创世组测试脚本 - 流式输出版本
 用于测试超时修复效果，并通过流式输出监控LLM响应进度
 """
 import json
@@ -9,15 +9,15 @@ from utils.llm_factory import get_llm
 from utils.logger import setup_logger
 from config.settings import settings
 
-logger = setup_logger("ArchitectTest", "architect_test.log")
+logger = setup_logger("GenesisGroupTest", "genesis_group_test.log")
 
 
-class ArchitectTester:
-    """架构师测试类 - 使用流式输出"""
+class GenesisGroupTester:
+    """创世组测试类 - 使用流式输出"""
     
     def __init__(self):
         """初始化测试器"""
-        logger.info("🧪 初始化架构师测试器...")
+        logger.info("🧪 初始化创世组测试器...")
         self.llm = get_llm()
         logger.info("✅ LLM初始化完成")
     
@@ -249,7 +249,7 @@ class ArchitectTester:
         print("✅ 流式输出正常工作")
         print("✅ 数据解析正常工作")
         print()
-        print("现在可以安全使用 run_architect.py 运行完整流程了！")
+        print("现在可以安全使用 run_genesis.py 运行完整流程了！")
         print()
         
         logger.info("✅ 全部测试通过！")
@@ -264,17 +264,17 @@ def main():
         settings.ensure_directories()
         
         # 运行测试
-        tester = ArchitectTester()
+        tester = GenesisGroupTester()
         success = tester.run_full_test("example_novel.txt")
         
         if not success:
             print("\n⚠️  测试未完全通过，请检查日志文件")
-            print(f"   {settings.LOGS_DIR}/architect_test.log")
+            print(f"   {settings.LOGS_DIR}/genesis_group_test.log")
     
     except Exception as e:
         logger.error(f"❌ 测试运行失败: {e}", exc_info=True)
         print(f"\n❌ 测试运行失败: {e}")
-        print(f"详情请查看: {settings.LOGS_DIR}/architect_test.log")
+        print(f"详情请查看: {settings.LOGS_DIR}/genesis_group_test.log")
 
 
 if __name__ == "__main__":
