@@ -9,8 +9,8 @@
 生成的运行时数据保存在: data/runtime/<世界名>_<时间戳>/
 
 使用方法：
-    python initial_Illuminati.py --world <世界名>
-    python initial_Illuminati.py --world 江城市
+    python initial_Illuminati.py               # 自动检测世界（单个则直接使用，多个则选择）
+    python initial_Illuminati.py --world 江城市  # 指定世界名称
 """
 import json
 import argparse
@@ -640,6 +640,44 @@ def print_banner():
     print()
 
 
+def get_available_worlds() -> List[str]:
+    """获取所有可用的世界列表"""
+    worlds_dir = settings.DATA_DIR / "worlds"
+    available = []
+    if worlds_dir.exists():
+        for w in worlds_dir.iterdir():
+            if w.is_dir() and (w / "world_setting.json").exists():
+                available.append(w.name)
+    return available
+
+
+def select_world(available_worlds: List[str]) -> Optional[str]:
+    """让用户选择世界"""
+    print("📂 检测到多个世界，请选择要初始化的世界：")
+    print()
+    for i, world in enumerate(available_worlds, 1):
+        print(f"   [{i}] {world}")
+    print()
+    print(f"   [0] 退出")
+    print()
+    
+    while True:
+        try:
+            choice = input("请输入数字选择 > ").strip()
+            if choice == "0":
+                return None
+            idx = int(choice) - 1
+            if 0 <= idx < len(available_worlds):
+                return available_worlds[idx]
+            else:
+                print(f"❌ 请输入 0-{len(available_worlds)} 之间的数字")
+        except ValueError:
+            print("❌ 请输入有效的数字")
+        except (KeyboardInterrupt, EOFError):
+            print("\n已取消")
+            return None
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
@@ -649,8 +687,9 @@ def main():
     parser.add_argument(
         "--world",
         type=str,
-        required=True,
-        help="世界名称（对应 data/worlds/<world>/ 目录）"
+        required=False,
+        default=None,
+        help="世界名称（对应 data/worlds/<world>/ 目录），不指定则自动检测"
     )
     
     args = parser.parse_args()
@@ -665,22 +704,49 @@ def main():
         print("请检查 .env 文件中的 API 密钥配置")
         return
     
-    # 检查世界是否存在
-    world_dir = settings.DATA_DIR / "worlds" / args.world
-    if not world_dir.exists():
-        print(f"❌ 世界不存在: {args.world}")
+    # 获取可用世界列表
+    available_worlds = get_available_worlds()
+    
+    if not available_worlds:
+        print("❌ 未找到任何可用的世界")
         print()
-        print("可用的世界:")
-        worlds_dir = settings.DATA_DIR / "worlds"
-        if worlds_dir.exists():
-            for w in worlds_dir.iterdir():
-                if w.is_dir() and (w / "world_setting.json").exists():
-                    print(f"   - {w.name}")
+        print("请先运行创世组生成世界数据：")
+        print("   python run_creator_god.py")
         return
+    
+    # 确定要使用的世界
+    world_name = args.world
+    
+    if world_name:
+        # 用户指定了世界，验证是否存在
+        if world_name not in available_worlds:
+            print(f"❌ 世界不存在: {world_name}")
+            print()
+            print("可用的世界:")
+            for w in available_worlds:
+                print(f"   - {w}")
+            return
+    else:
+        # 自动检测
+        if len(available_worlds) == 1:
+            # 只有一个世界，直接使用
+            world_name = available_worlds[0]
+            print(f"📂 检测到唯一世界: {world_name}")
+            print()
+        else:
+            # 多个世界，让用户选择
+            world_name = select_world(available_worlds)
+            if not world_name:
+                print("已取消初始化")
+                return
+            print()
+    
+    print(f"🌍 选定世界: {world_name}")
+    print()
     
     try:
         # 初始化光明会
-        initializer = IlluminatiInitializer(args.world)
+        initializer = IlluminatiInitializer(world_name)
         runtime_dir = initializer.run()
         
         print()
