@@ -750,10 +750,14 @@ class IlluminatiInitializer:
     
     def _save_init_summary(self):
         """保存初始化摘要"""
+        # 获取当前 LLM 配置信息
+        llm_config = self._get_llm_config()
+        
         summary = {
             "world_name": self.world_name,
             "initialized_at": datetime.now().isoformat(),
             "runtime_dir": str(self.runtime_dir),
+            "llm_config": llm_config,
             "directory_structure": {
                 "ws": "ws/world_state.json",
                 "plot": {
@@ -791,6 +795,30 @@ class IlluminatiInitializer:
             json.dump(summary, f, ensure_ascii=False, indent=2)
         
         logger.info(f"📋 初始化摘要: {summary_file}")
+    
+    def _get_llm_config(self) -> Dict[str, Any]:
+        """获取当前 LLM 配置信息"""
+        provider = settings.LLM_PROVIDER
+        
+        if provider == "openrouter":
+            model = settings.OPENROUTER_MODEL
+            api_base = settings.OPENROUTER_BASE_URL
+        elif provider == "zhipu":
+            model = settings.MODEL_NAME
+            api_base = "https://open.bigmodel.cn/api/paas/v4/"
+        elif provider == "openai":
+            model = settings.MODEL_NAME
+            api_base = "https://api.openai.com/v1"
+        else:
+            model = settings.MODEL_NAME
+            api_base = "unknown"
+        
+        return {
+            "provider": provider,
+            "model": model,
+            "temperature": settings.TEMPERATURE,
+            "api_base": api_base
+        }
 
 
 def print_banner():
@@ -905,6 +933,24 @@ def main():
             print()
     
     print(f"🌍 选定世界: {world_name}")
+    print()
+    
+    # 显示当前 LLM 配置
+    print("🤖 LLM 配置:")
+    if settings.LLM_PROVIDER == "openrouter":
+        print(f"   Provider: OpenRouter")
+        print(f"   Model: {settings.OPENROUTER_MODEL}")
+        print(f"   API Base: {settings.OPENROUTER_BASE_URL}")
+    elif settings.LLM_PROVIDER == "zhipu":
+        print(f"   Provider: 智谱清言 (ZhipuAI)")
+        print(f"   Model: {settings.MODEL_NAME}")
+    elif settings.LLM_PROVIDER == "openai":
+        print(f"   Provider: OpenAI")
+        print(f"   Model: {settings.MODEL_NAME}")
+    else:
+        print(f"   Provider: {settings.LLM_PROVIDER}")
+        print(f"   Model: {settings.MODEL_NAME}")
+    print(f"   Temperature: {settings.TEMPERATURE}")
     print()
     
     try:

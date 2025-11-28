@@ -1,0 +1,47 @@
+{
+  "current_scene": {
+    "location_id": "cafe_center",
+    "location_name": "市中心咖啡馆",
+    "time_of_day": "傍晚",
+    "description": "惊喜偶遇，略带都市忙碌"
+  },
+  "weather": {
+    "condition": "晴朗",
+    "temperature": "22°C"
+  },
+  "characters_present": [
+    {
+      "id": "npc_001",
+      "name": "林晨",
+      "mood": "平静",
+      "activity": "在场",
+      "appearance_note": "二十多岁的年轻男子，身材瘦削，穿着简便休闲装，戴眼镜，眼神专注略带疲惫，散发内向技术宅气质。"
+    },
+    {
+      "id": "npc_002",
+      "name": "苏晴雨",
+      "mood": "平静",
+      "activity": "在场",
+      "appearance_note": "一位二十多岁的年轻女性，面容略显疲惫，长发微乱，眼神锐利而坚定，穿着简便干练的休闲外套和牛仔裤，散发着独立记者的韧劲。"
+    },
+    {
+      "id": "npc_004",
+      "name": "张瑞峰",
+      "mood": "平静",
+      "activity": "在场",
+      "appearance_note": "四十多岁的中年男子，身材挺拔，西装笔挺，头发梳得一丝不苟，眼神阴鸷锐利，嘴角常挂着冷峻的商人微笑。"
+    }
+  ],
+  "characters_absent": [],
+  "relationship_matrix": {},
+  "world_situation": {
+    "summary": "故事在江城市展开，一切刚刚开始。",
+    "tension_level": "平静",
+    "key_developments": []
+  },
+  "meta": {
+    "game_turn": 0,
+    "last_updated": "2025-11-28T16:47:08.242566",
+    "total_elapsed_time": "0分钟"
+  }
+}
