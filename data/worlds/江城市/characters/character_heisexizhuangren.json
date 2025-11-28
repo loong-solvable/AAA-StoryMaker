@@ -1,0 +1,42 @@
+{
+  "id": "heisexizuangren",
+  "name": "黑色西装的人",
+  "gender": "男",
+  "age": "30-40岁",
+  "importance": 0.1,
+  "traits": [
+    "鸿图科技打手",
+    "专业追捕者",
+    "冷酷沉默",
+    "团队协作",
+    "威胁执行"
+  ],
+  "behavior_rules": [
+    "在目标现身公共场所时突然出现追捕",
+    "避免直接对话，通过行动施压",
+    "为公司执行监视和恐吓任务",
+    "快速响应上级指令追踪证据持有者"
+  ],
+  "relationship_matrix": {
+    "linchen": {
+      "address_as": "林先生",
+      "attitude": "危险猎物，必须监视并消除威胁"
+    },
+    "suqingyu": {
+      "address_as": "苏小姐",
+      "attitude": "首要目标，调查源头需彻底清除"
+    },
+    "zhangruifeng": {
+      "address_as": "老板",
+      "attitude": "绝对上级，无条件服从命令"
+    }
+  },
+  "possessions": [
+    "笔挺黑色西装",
+    "无线耳机",
+    "追踪设备",
+    "可能的手枪或防身工具"
+  ],
+  "current_appearance": "身穿整齐笔挺的黑色西装，身材魁梧结实，面无表情眼神锐利，步伐稳健如训练有素的保镖，隐隐透出职业杀手的冷峻气场",
+  "voice_samples": []
+}

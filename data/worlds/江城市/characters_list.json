@@ -1,0 +1,42 @@
+[
+  {
+    "id": "linchen",
+    "name": "林晨",
+    "importance": 1.0
+  },
+  {
+    "id": "suqingyu",
+    "name": "苏晴雨",
+    "importance": 1.0
+  },
+  {
+    "id": "dichennansheng",
+    "name": "低沉男声",
+    "importance": 0.1
+  },
+  {
+    "id": "heisexizhuangren",
+    "name": "黑色西装的人",
+    "importance": 0.1
+  },
+  {
+    "id": "zhangruifeng",
+    "name": "张瑞峰",
+    "importance": 1.0
+  },
+  {
+    "id": "liwan",
+    "name": "李婉",
+    "importance": 0.5
+  },
+  {
+    "id": "linchenmuqin",
+    "name": "林晨的母亲",
+    "importance": 0.1
+  },
+  {
+    "id": "laojizhe",
+    "name": "老记者",
+    "importance": 0.5
+  }
+]

@@ -85,18 +85,18 @@ genesis_data = load_genesis_data("data/genesis/genesis.json")
 
 ### 2️⃣➕ init_world.py - World数据加载（新格式）⭐ 推荐
 
-**功能：** 加载拆分后的世界数据（world_setting.json + characters_list.json + characters/*.json）
+**功能：** 加载创世组生成的拆分式世界数据（world_setting.json + characters_list.json + characters/*.json）
 
 **主要函数：**
 - `load_world_data(world_dir)` - 加载完整的世界数据（三份文件）
-- `load_world_setting(world_dir)` - 仅加载世界设定
-- `load_characters_list(world_dir)` - 仅加载角色列表
-- `load_character_details(world_dir, character_id)` - 加载单个角色档案
+- `load_world_setting(world_dir)` - 仅加载世界设定（Demiurge生成）
+- `load_characters_list(world_dir)` - 仅加载角色列表（大中正生成）
+- `load_character_details(world_dir, character_id)` - 加载单个角色档案（Minos生成）
 - `load_all_characters(world_dir)` - 加载所有角色档案
 - `list_available_worlds()` - 列出所有可用世界
 
 **使用场景：**
-- 加载架构师生成的新格式世界数据
+- 加载创世组生成的新格式世界数据
 - 按需加载世界的不同部分（提高性能）
 - 管理多个世界
 
