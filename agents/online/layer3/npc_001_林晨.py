@@ -1,6 +1,8 @@
 """
 林晨 (npc_001) - 角色专属Agent
-自动生成于 2025-12-01 14:23:30
+自动生成于 2025-12-01 14:56:33
+
+提示词文件: prompts/online/npc_prompt/npc_001_林晨_prompt.txt
 """
 import json
 from typing import Dict, Any, Optional, List
@@ -20,22 +22,14 @@ class Npc001Agent:
     
     角色ID: npc_001
     角色名称: 林晨
+    
+    提示词: 从 prompts/online/npc_prompt/npc_001_林晨_prompt.txt 读取
+    角色数据已预填充到提示词文件中，运行时只需填充剧本相关变量
     """
     
     CHARACTER_ID = "npc_001"
     CHARACTER_NAME = "林晨"
-    PROMPT_FILE = "npc_system.txt"  # 使用通用模板
-    
-    # 角色静态数据（从角色卡提取）
-    CHARACTER_DATA = {
-        "npc_id": "npc_001",
-        "npc_name": "林晨",
-        "traits": "AI算法工程师, 内向技术宅, 技术天才, 逐渐勇敢, 责任感强",
-        "behavior_rules": "面对技术难题时专注投入，全力破解; 初始犹豫但一旦卷入会主动出击反追踪敌人; 优先保护伙伴和家人安全; 利用备份机制防范数据丢失风险",
-        "appearance": "二十五岁左右的年轻男子，戴着眼镜，穿着简朴的衬衫和牛仔裤，面容清瘦略显疲惫，眼神专注而坚定，散发技术宅的书卷气。",
-        "relationships": """- 对 晴雨(npc_002): 坚定勇敢的可靠伙伴，值得信任并愿意共同冒险\n- 对 张瑞峰(npc_003): 心狠手辣的商业罪魁，必须揭露其罪行\n- 对 李婉(npc_004): 优雅却威胁性的对手，绝不妥协其金钱诱惑\n- 对 老记者(npc_005): 正直可靠的媒体盟友，可托付关键证据\n- 对 你是谁(npc_006): 神秘监视者和威胁者，高度警惕其背后的势力\n- 对 母亲(npc_007): 深爱并担忧的家人，必须保护其免受牵连""",
-        "voice_samples": """「这个加密方式很特殊，不像是普通的商业加密。给我点时间，我试试看。」\n「你是谁？为什么监视我？」\n「晴雨，情况比我们想象的要严重。我们被盯上了。」\n「我有个想法，既然他们在追我们，那我们就主动出击。我可以利用技术手段，反向追踪他们的服务器，找到更多证据。」\n「我知道。但有些事，总要有人去做。」"""
-    }
+    PROMPT_FILE = "npc_prompt/npc_001_林晨_prompt.txt"  # 专属提示词文件
     
     def __init__(self):
         """初始化角色Agent"""
@@ -55,14 +49,18 @@ class Npc001Agent:
         # 场景记忆板
         self.scene_memory = None
         
-        # 加载提示词模板
+        # 加载专属提示词文件（角色数据已预填充）
         self.prompt_template = self._load_prompt_template()
         
         logger.info(f"✅ {self.CHARACTER_NAME} 初始化完成")
+        logger.info(f"   📝 提示词文件: {self.PROMPT_FILE}")
     
     def _load_prompt_template(self) -> str:
-        """加载提示词模板"""
+        """加载专属提示词文件"""
         prompt_file = settings.PROMPTS_DIR / "online" / self.PROMPT_FILE
+        if not prompt_file.exists():
+            logger.warning(f"⚠️ 专属提示词文件不存在，使用通用模板: {prompt_file}")
+            prompt_file = settings.PROMPTS_DIR / "online" / "npc_system.txt"
         with open(prompt_file, "r", encoding="utf-8") as f:
             return f.read()
     
@@ -88,7 +86,11 @@ class Npc001Agent:
         return True
     
     def _build_prompt(self, current_input: str = "") -> str:
-        """构建完整的提示词"""
+        """
+        构建完整的提示词
+        
+        角色数据已在提示词文件中预填充，这里只需填充剧本相关的动态变量
+        """
         mission = self.current_script.get("mission", {}) if self.current_script else {}
         
         # 从场景记忆板获取对话历史
@@ -101,11 +103,8 @@ class Npc001Agent:
         key_topics = mission.get("key_topics", [])
         key_topics_str = ", ".join(key_topics) if isinstance(key_topics, list) else str(key_topics)
         
-        # 填充模板
+        # 只填充剧本相关的动态变量（角色数据已在提示词文件中）
         filled_prompt = self.prompt_template
-        for key, value in self.CHARACTER_DATA.items():
-            filled_prompt = filled_prompt.replace("{" + key + "}", str(value))
-        
         script_vars = {
             "global_context": self.current_script.get("global_context", "未知场景") if self.current_script else "未知场景",
             "scene_summary": self.current_script.get("scene_summary", "未知剧情") if self.current_script else "未知剧情",

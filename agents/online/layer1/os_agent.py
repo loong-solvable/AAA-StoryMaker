@@ -682,15 +682,22 @@ class OperatingSystem:
         if not template_file.exists():
             return {"success": False, "error": f"提示词模板不存在: {template_file}"}
         
-        # 3. 生成专属 agent.py 文件（包含角色数据）
+        # 3. 生成角色专属提示词文件
+        prompt_file = self._generate_npc_prompt_file(
+            char_id=char_id,
+            char_name=char_name,
+            character_data=character_data,
+            template_file=template_file
+        )
+        logger.info(f"   📝 生成提示词文件: {prompt_file.name}")
+        
+        # 4. 生成专属 agent.py 文件
         agent_file = self._generate_character_agent(
             char_id=char_id,
             char_name=char_name,
-            character_data=character_data
+            character_data=character_data,
+            prompt_file=prompt_file
         )
-        
-        # prompt_file 现在使用通用模板
-        prompt_file = template_file
         
         # 5. 动态加载并注册 Agent
         agent_instance = self._load_and_register_agent(
@@ -707,6 +714,77 @@ class OperatingSystem:
             "agent_instance": agent_instance
         }
     
+    def _generate_npc_prompt_file(
+        self,
+        char_id: str,
+        char_name: str,
+        character_data: Dict[str, Any],
+        template_file: Path
+    ) -> Path:
+        """
+        生成 NPC 角色专属提示词文件
+        
+        结合角色卡数据和 npc_system.txt 模板，生成专属提示词文件。
+        角色相关的占位符（npc_id, npc_name, traits 等）会被填充，
+        剧本相关的占位符（global_context, objective 等）保留给运行时填充。
+        
+        Args:
+            char_id: 角色ID
+            char_name: 角色名称
+            character_data: 角色卡数据
+            template_file: 模板文件路径 (npc_system.txt)
+        
+        Returns:
+            生成的提示词文件路径
+        """
+        # 读取模板
+        with open(template_file, "r", encoding="utf-8") as f:
+            template = f.read()
+        
+        # 格式化角色数据
+        traits = ", ".join(character_data.get("traits", []))
+        behavior_rules = "; ".join(character_data.get("behavior_rules", []))
+        appearance = character_data.get("current_appearance", "未知外貌")
+        
+        # 格式化人际关系
+        relationships_lines = []
+        for other_id, rel_info in character_data.get("relationship_matrix", {}).items():
+            address = rel_info.get("address_as", other_id)
+            attitude = rel_info.get("attitude", "未知")
+            relationships_lines.append(f"- 对 {address}({other_id}): {attitude}")
+        relationships = "\n".join(relationships_lines) if relationships_lines else "无已知关系"
+        
+        # 格式化语音样本
+        voice_samples = character_data.get("voice_samples", [])
+        voice_samples_str = "\n".join([f"「{s}」" for s in voice_samples[:5]])
+        
+        # 填充角色相关的占位符（这些是静态的，初始化时就确定）
+        filled_prompt = template
+        filled_prompt = filled_prompt.replace("{npc_id}", char_id)
+        filled_prompt = filled_prompt.replace("{npc_name}", char_name)
+        filled_prompt = filled_prompt.replace("{traits}", traits)
+        filled_prompt = filled_prompt.replace("{behavior_rules}", behavior_rules)
+        filled_prompt = filled_prompt.replace("{appearance}", appearance)
+        filled_prompt = filled_prompt.replace("{relationships}", relationships)
+        filled_prompt = filled_prompt.replace("{voice_samples}", voice_samples_str)
+        
+        # 剧本相关的占位符保留（运行时动态填充）:
+        # {global_context}, {scene_summary}, {role_in_scene}, {objective},
+        # {emotional_arc}, {key_topics}, {outcome_direction}, {special_notes},
+        # {dialogue_history}
+        
+        # 确保目录存在
+        npc_prompt_dir = settings.PROMPTS_DIR / "online" / "npc_prompt"
+        npc_prompt_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 保存到 prompts/online/npc_prompt/ 目录
+        prompt_file = npc_prompt_dir / f"{char_id}_{char_name}_prompt.txt"
+        
+        with open(prompt_file, "w", encoding="utf-8") as f:
+            f.write(filled_prompt)
+        
+        return prompt_file
+    
     def _generate_character_prompt(
         self,
         char_id: str,
@@ -715,34 +793,12 @@ class OperatingSystem:
         prompt_template: str
     ) -> Path:
         """
-        生成角色专属提示词文件
-        
-        Args:
-            char_id: 角色ID
-            char_name: 角色名称
-            character_data: 角色卡数据
-            prompt_template: 提示词模板
-        
-        Returns:
-            生成的提示词文件路径
+        生成角色专属提示词文件（已废弃，使用 _generate_npc_prompt_file 代替）
         """
-        # 格式化角色卡为可读文本
-        character_card = self._format_character_card(character_data)
-        
-        # 填充模板中的占位符
-        # 模板使用 {id}, {id_character}, {id_script} 等占位符
-        filled_prompt = prompt_template.replace("{id}", char_id)
-        filled_prompt = filled_prompt.replace("{id_character}", character_card)
-        # {id_script} 会在运行时动态填充，这里保留占位符
-        
-        # 保存到 prompts/online/ 目录
-        prompt_file = settings.PROMPTS_DIR / "online" / f"{char_id}_{char_name}.txt"
-        
-        with open(prompt_file, "w", encoding="utf-8") as f:
-            f.write(filled_prompt)
-        
-        logger.info(f"   📝 生成提示词文件: {prompt_file.name}")
-        return prompt_file
+        return self._generate_npc_prompt_file(
+            char_id, char_name, character_data,
+            settings.PROMPTS_DIR / "online" / "npc_system.txt"
+        )
     
     def _format_character_card(self, character_data: Dict[str, Any]) -> str:
         """
@@ -807,7 +863,8 @@ class OperatingSystem:
         self,
         char_id: str,
         char_name: str,
-        character_data: Dict[str, Any]
+        character_data: Dict[str, Any],
+        prompt_file: Path = None
     ) -> Path:
         """
         生成角色专属 agent.py 文件
@@ -816,12 +873,13 @@ class OperatingSystem:
             char_id: 角色ID
             char_name: 角色名称
             character_data: 角色卡数据
+            prompt_file: 专属提示词文件路径
         
         Returns:
             生成的 agent.py 文件路径
         """
         # 生成 agent.py 文件内容
-        agent_code = self._generate_agent_code(char_id, char_name, character_data)
+        agent_code = self._generate_agent_code(char_id, char_name, character_data, prompt_file)
         
         # 保存到 agents/online/layer3/ 目录
         layer3_dir = Path(__file__).parent.parent / "layer3"
@@ -837,7 +895,8 @@ class OperatingSystem:
         self,
         char_id: str,
         char_name: str,
-        character_data: Dict[str, Any]
+        character_data: Dict[str, Any],
+        prompt_file: Path = None
     ) -> str:
         """
         生成角色 Agent 的 Python 代码
@@ -846,6 +905,7 @@ class OperatingSystem:
             char_id: 角色ID
             char_name: 角色名称
             character_data: 角色卡数据
+            prompt_file: 专属提示词文件路径
         
         Returns:
             生成的 Python 代码字符串
@@ -853,26 +913,14 @@ class OperatingSystem:
         # 类名使用驼峰命名（移除下划线，首字母大写）
         class_name = "".join(word.capitalize() for word in char_id.split("_")) + "Agent"
         
-        # 格式化角色数据
-        traits = ", ".join(character_data.get("traits", []))
-        behavior_rules = "; ".join(character_data.get("behavior_rules", []))
-        appearance = character_data.get("current_appearance", "未知外貌")
-        
-        # 格式化人际关系
-        relationships_lines = []
-        for other_id, rel_info in character_data.get("relationship_matrix", {}).items():
-            address = rel_info.get("address_as", other_id)
-            attitude = rel_info.get("attitude", "未知")
-            relationships_lines.append(f"- 对 {address}({other_id}): {attitude}")
-        relationships = "\\n".join(relationships_lines) if relationships_lines else "无已知关系"
-        
-        # 格式化语音样本
-        voice_samples = character_data.get("voice_samples", [])
-        voice_samples_str = "\\n".join([f"「{s}」" for s in voice_samples[:5]])
+        # 提示词文件名（相对于 prompts/online/npc_prompt/）
+        prompt_filename = f"{char_id}_{char_name}_prompt.txt" if prompt_file else "npc_system.txt"
         
         code = f'''"""
 {char_name} ({char_id}) - 角色专属Agent
 自动生成于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+提示词文件: prompts/online/npc_prompt/{prompt_filename}
 """
 import json
 from typing import Dict, Any, Optional, List
@@ -892,22 +940,14 @@ class {class_name}:
     
     角色ID: {char_id}
     角色名称: {char_name}
+    
+    提示词: 从 prompts/online/npc_prompt/{prompt_filename} 读取
+    角色数据已预填充到提示词文件中，运行时只需填充剧本相关变量
     """
     
     CHARACTER_ID = "{char_id}"
     CHARACTER_NAME = "{char_name}"
-    PROMPT_FILE = "npc_system.txt"  # 使用通用模板
-    
-    # 角色静态数据（从角色卡提取）
-    CHARACTER_DATA = {{
-        "npc_id": "{char_id}",
-        "npc_name": "{char_name}",
-        "traits": "{traits}",
-        "behavior_rules": "{behavior_rules}",
-        "appearance": "{appearance}",
-        "relationships": """{relationships}""",
-        "voice_samples": """{voice_samples_str}"""
-    }}
+    PROMPT_FILE = "npc_prompt/{prompt_filename}"  # 专属提示词文件
     
     def __init__(self):
         """初始化角色Agent"""
@@ -927,14 +967,18 @@ class {class_name}:
         # 场景记忆板
         self.scene_memory = None
         
-        # 加载提示词模板
+        # 加载专属提示词文件（角色数据已预填充）
         self.prompt_template = self._load_prompt_template()
         
         logger.info(f"✅ {{self.CHARACTER_NAME}} 初始化完成")
+        logger.info(f"   📝 提示词文件: {{self.PROMPT_FILE}}")
     
     def _load_prompt_template(self) -> str:
-        """加载提示词模板"""
+        """加载专属提示词文件"""
         prompt_file = settings.PROMPTS_DIR / "online" / self.PROMPT_FILE
+        if not prompt_file.exists():
+            logger.warning(f"⚠️ 专属提示词文件不存在，使用通用模板: {{prompt_file}}")
+            prompt_file = settings.PROMPTS_DIR / "online" / "npc_system.txt"
         with open(prompt_file, "r", encoding="utf-8") as f:
             return f.read()
     
@@ -960,7 +1004,11 @@ class {class_name}:
         return True
     
     def _build_prompt(self, current_input: str = "") -> str:
-        """构建完整的提示词"""
+        """
+        构建完整的提示词
+        
+        角色数据已在提示词文件中预填充，这里只需填充剧本相关的动态变量
+        """
         mission = self.current_script.get("mission", {{}}) if self.current_script else {{}}
         
         # 从场景记忆板获取对话历史
@@ -973,11 +1021,8 @@ class {class_name}:
         key_topics = mission.get("key_topics", [])
         key_topics_str = ", ".join(key_topics) if isinstance(key_topics, list) else str(key_topics)
         
-        # 填充模板
+        # 只填充剧本相关的动态变量（角色数据已在提示词文件中）
         filled_prompt = self.prompt_template
-        for key, value in self.CHARACTER_DATA.items():
-            filled_prompt = filled_prompt.replace("{{" + key + "}}", str(value))
-        
         script_vars = {{
             "global_context": self.current_script.get("global_context", "未知场景") if self.current_script else "未知场景",
             "scene_summary": self.current_script.get("scene_summary", "未知剧情") if self.current_script else "未知剧情",
@@ -1744,3 +1789,249 @@ def create_agent() -> {class_name}:
                 "is_scene_finished": False,
                 "routing_reason": "LLM 响应解析失败，使用默认"
             }
+    
+    # ==========================================
+    # 场景对话循环
+    # ==========================================
+    
+    def run_scene_loop(
+        self,
+        runtime_dir: Path,
+        world_dir: Path,
+        max_turns: int = 20,
+        user_input_callback = None
+    ) -> Dict[str, Any]:
+        """
+        运行完整的场景对话循环
+        
+        流程:
+        1. 角色演绎 → 保存到场景记忆板 + 传递给 OS
+        2. OS 使用 os_system.txt 决定下一位发言者
+        3. 如果是 NPC，调用该 NPC 继续演绎
+        4. 如果是 user，暂停等待玩家输入
+        5. 循环直到 is_scene_finished=true 或达到最大轮数
+        
+        Args:
+            runtime_dir: 运行时数据目录
+            world_dir: 世界数据目录
+            max_turns: 最大对话轮数
+            user_input_callback: 获取玩家输入的回调函数，签名: (prompt: str) -> str
+        
+        Returns:
+            场景执行结果
+        """
+        from utils.scene_memory import create_scene_memory
+        
+        logger.info("=" * 60)
+        logger.info("🎬 开始场景对话循环")
+        logger.info("=" * 60)
+        
+        # 创建场景记忆板
+        scene_memory = create_scene_memory(runtime_dir, turn_id=1)
+        
+        # 获取在场角色信息
+        active_npc_info = {}
+        for npc_id, agent in self.npc_agents.items():
+            active_npc_info[npc_id] = {
+                "name": agent.CHARACTER_NAME,
+                "traits": getattr(agent, "CHARACTER_DATA", {}).get("traits", "")
+            }
+        
+        active_npcs = list(self.npc_agents.keys())
+        
+        if not active_npcs:
+            logger.warning("⚠️ 没有在场的 NPC，场景无法进行")
+            return {"success": False, "error": "没有在场的 NPC"}
+        
+        # 为所有 NPC 绑定场景记忆板和加载小剧本
+        for npc_id, agent in self.npc_agents.items():
+            agent.bind_scene_memory(scene_memory)
+            script_file = runtime_dir / "npc" / f"{npc_id}_script.json"
+            if script_file.exists():
+                agent.load_script(script_file)
+        
+        logger.info(f"👥 在场角色: {[active_npc_info[nid]['name'] for nid in active_npcs]}")
+        
+        # 选择第一个发言者
+        current_speaker_id = active_npcs[0]
+        
+        turn_count = 0
+        scene_finished = False
+        dialogue_history = []
+        
+        logger.info(f"🎬 场景开始！第一位发言者: {active_npc_info[current_speaker_id]['name']}")
+        
+        while turn_count < max_turns and not scene_finished:
+            turn_count += 1
+            logger.info(f"\n{'─' * 40}")
+            logger.info(f"【第 {turn_count} 轮对话】")
+            
+            # 处理玩家输入
+            if current_speaker_id == "user":
+                logger.info("⏸️ 等待玩家输入...")
+                
+                if user_input_callback:
+                    user_input = user_input_callback("请输入你的回应: ")
+                else:
+                    user_input = "(玩家沉默)"
+                
+                if user_input:
+                    # 将玩家输入写入场景记忆板
+                    scene_memory.add_dialogue(
+                        speaker_id="user",
+                        speaker_name="玩家",
+                        content=user_input,
+                        addressing_target="everyone"
+                    )
+                    dialogue_history.append({
+                        "turn": turn_count,
+                        "speaker": "user",
+                        "content": user_input
+                    })
+                    logger.info(f"👤 玩家: {user_input}")
+                
+                # 玩家发言后，选择下一个 NPC 发言
+                # 简单策略：选择第一个 NPC
+                current_speaker_id = active_npcs[0]
+                continue
+            
+            # NPC 演绎
+            if current_speaker_id not in self.npc_agents:
+                logger.warning(f"⚠️ 未找到 NPC Agent: {current_speaker_id}")
+                current_speaker_id = active_npcs[0] if active_npcs else "user"
+                continue
+            
+            current_agent = self.npc_agents[current_speaker_id]
+            speaker_name = current_agent.CHARACTER_NAME
+            
+            logger.info(f"🎭 {speaker_name} ({current_speaker_id}) 正在演绎...")
+            
+            # 调用 NPC 演绎
+            actor_response = current_agent.react()
+            
+            # 记录对话历史
+            dialogue_history.append({
+                "turn": turn_count,
+                "speaker": current_speaker_id,
+                "speaker_name": speaker_name,
+                "response": actor_response
+            })
+            
+            # 显示演绎结果
+            logger.info(f"   💭 {actor_response.get('thought', '')[:50]}...")
+            logger.info(f"   😊 情绪: {actor_response.get('emotion', '')}")
+            logger.info(f"   💬 台词: {actor_response.get('content', '')[:60]}...")
+            logger.info(f"   🎯 对象: {actor_response.get('addressing_target', 'everyone')}")
+            logger.info(f"   🏁 结束: {actor_response.get('is_scene_finished', False)}")
+            
+            # 检查场景是否结束
+            if actor_response.get("is_scene_finished"):
+                scene_finished = True
+                logger.info("🏁 演员标记场景结束！")
+                break
+            
+            # OS 进行路由决策
+            logger.info("📨 OS 进行路由决策...")
+            
+            # 使用 LLM 进行智能路由（当 addressing_target 为 everyone 时）
+            addressing_target = actor_response.get("addressing_target", "everyone")
+            
+            if addressing_target == "everyone":
+                # 使用 LLM 智能裁决
+                routing_result = self.route_dialogue_with_llm(
+                    actor_response=actor_response,
+                    active_npcs=active_npc_info,
+                    scene_memory=scene_memory
+                )
+            else:
+                # 使用简单路由
+                routing_result = self.route_dialogue(
+                    actor_response=actor_response,
+                    active_npcs=active_npcs,
+                    scene_memory=scene_memory
+                )
+            
+            logger.info(f"   ➡️ 路由结果: {routing_result.get('routing_reason')}")
+            logger.info(f"   🎯 下一位: {routing_result.get('next_speaker_id')}")
+            
+            # 更新下一位发言者
+            next_speaker = routing_result.get("next_speaker_id")
+            
+            if routing_result.get("is_scene_finished"):
+                scene_finished = True
+                logger.info("🏁 OS 判断场景结束！")
+                break
+            
+            if routing_result.get("should_pause_for_user"):
+                current_speaker_id = "user"
+            elif next_speaker:
+                current_speaker_id = next_speaker
+            else:
+                # 没有下一位，结束
+                scene_finished = True
+                logger.info("🏁 没有可用的下一位发言者，场景结束")
+        
+        # 场景结束
+        logger.info("\n" + "=" * 60)
+        logger.info("🎬 场景对话循环结束")
+        logger.info("=" * 60)
+        
+        if turn_count >= max_turns:
+            logger.info(f"⏰ 达到最大轮数限制 ({max_turns})")
+        
+        # 设置场景状态
+        scene_memory.set_scene_status("FINISHED")
+        
+        # 返回结果
+        result = {
+            "success": True,
+            "total_turns": turn_count,
+            "scene_finished": scene_finished,
+            "dialogue_count": scene_memory.get_dialogue_count(),
+            "dialogue_history": dialogue_history,
+            "final_status": scene_memory.get_scene_status()
+        }
+        
+        logger.info(f"📊 总对话轮数: {turn_count}")
+        logger.info(f"📊 对话记录数: {scene_memory.get_dialogue_count()}")
+        
+        return result
+    
+    def continue_scene_from_user_input(
+        self,
+        user_input: str,
+        scene_memory,
+        active_npcs: List[str]
+    ) -> Dict[str, Any]:
+        """
+        从玩家输入继续场景
+        
+        Args:
+            user_input: 玩家的输入
+            scene_memory: 场景记忆板
+            active_npcs: 在场 NPC 列表
+        
+        Returns:
+            下一步操作信息
+        """
+        # 将玩家输入写入场景记忆板
+        scene_memory.add_dialogue(
+            speaker_id="user",
+            speaker_name="玩家",
+            content=user_input,
+            addressing_target="everyone"
+        )
+        
+        logger.info(f"👤 玩家: {user_input}")
+        
+        # 选择下一个 NPC 响应
+        # 可以使用 LLM 来决定谁最适合响应玩家
+        if active_npcs:
+            next_speaker = active_npcs[0]  # 简单策略：第一个 NPC
+        else:
+            next_speaker = None
+        
+        return {
+            "next_speaker_id": next_speaker,
+            "should_continue": next_speaker is not None
+        }

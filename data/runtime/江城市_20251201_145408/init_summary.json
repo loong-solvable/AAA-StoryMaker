@@ -1,7 +1,7 @@
 {
   "world_name": "江城市",
-  "initialized_at": "2025-12-01T14:22:52.782798",
-  "runtime_dir": "D:\\code\\AAA-StoryMaker\\data\\runtime\\江城市_20251201_142107",
+  "initialized_at": "2025-12-01T14:55:39.482851",
+  "runtime_dir": "D:\\code\\AAA-StoryMaker\\data\\runtime\\江城市_20251201_145408",
   "llm_config": {
     "provider": "openrouter",
     "model": "x-ai/grok-4.1-fast:free",
@@ -35,7 +35,7 @@
       "status": "initialized",
       "directory": "vibe/",
       "atmosphere_file": "vibe/initial_atmosphere.json",
-      "emotional_tone": "孤寂；紧张；专注；昏暗"
+      "emotional_tone": "孤寂；紧张；专注"
     }
   },
   "ready_for_game": true

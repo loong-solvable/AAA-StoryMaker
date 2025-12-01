@@ -1,0 +1,4 @@
+# NPC专属提示词目录
+# 由 OS Agent 初始化角色时自动生成
+# 文件命名格式: {npc_id}_{name}_prompt.txt
+
