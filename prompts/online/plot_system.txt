@@ -9,13 +9,30 @@ PLOT_PLANNER_PROMPT = """
 不要写的太过于细节，要留给演员发挥空间。
 如：A走进咖啡馆，看到了B，两个人寒暄了一会，最终由于A提到B欠A的钱没有还而不欢而散。（这个例子太简短了，但大概就是这样的，写的笼统一点，体现出事情走向、原因等）
 
-# 输入数据说明
-你将基于以下信息进行决策：
-1. **花名册 (Roster)**: `characters_list.json`。包含所有可用角色及其重要性。
-2. **世界设定 (World)**: 物理法则与社会规则。
-3. **当前状态 (State)**: 现在的场景、时间和在场角色。
-4. **历史剧本 (History)**: 之前的剧情摘要。**如果为空，说明你是开场导演，正在生成第一幕。**
-5. **玩家行动 (User Action)**: 玩家刚刚做的决定。（可为空）
+---
+
+# 输入数据
+
+## 1. 花名册 (characters_list.json)
+{characters_list}
+
+## 2. 世界设定 (world_setting.json)
+{world_setting}
+
+## 3. 当前世界状态 (world_state.json)
+{world_state}
+
+## 4. 历史剧情摘要 (all_scene_memory.json)
+{story_history}
+
+## 5. 上一幕发生的事 (scene_memory.json)
+{last_scene_dialogues}
+
+## 6. 角色详情
+{characters_details}
+
+## 7. 玩家最近的行动
+{user_action}
 
 # 决策核心逻辑
 

@@ -2111,3 +2111,347 @@ def create_agent() -> {class_name}:
             json.dump(history_data, f, ensure_ascii=False, indent=2)
         
         logger.info(f"   📜 保存 {actor_name} 历史: {history_file.name}")
+    
+    # ==========================================
+    # 幕间处理 (Scene Transition)
+    # ==========================================
+    
+    def process_scene_transition(
+        self,
+        runtime_dir: Path,
+        world_dir: Path,
+        scene_memory,
+        scene_summary: str = ""
+    ) -> Dict[str, Any]:
+        """
+        幕间处理：一幕结束后，准备下一幕
+        
+        流程:
+        1. 归档当前场景记忆到 all_scene_memory.json
+        2. WS 读取场景记忆，更新 world_state.json
+        3. Plot 生成下一幕剧本
+        
+        Args:
+            runtime_dir: 运行时目录
+            world_dir: 世界数据目录
+            scene_memory: 当前幕的场景记忆板
+            scene_summary: 本幕剧情摘要（可选）
+        
+        Returns:
+            下一幕准备结果
+        """
+        from utils.scene_memory import create_all_scene_memory
+        
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("🎭 开始幕间处理")
+        logger.info("=" * 60)
+        
+        result = {
+            "success": False,
+            "scene_archived": False,
+            "world_state_updated": False,
+            "next_script_generated": False,
+            "next_scene_id": 0
+        }
+        
+        try:
+            # 1. 归档当前场景记忆到全剧记事板
+            logger.info("📚 步骤1: 归档场景记忆...")
+            all_memory = create_all_scene_memory(runtime_dir)
+            all_memory.archive_scene(scene_memory, scene_summary)
+            result["scene_archived"] = True
+            result["next_scene_id"] = all_memory.get_next_scene_id()
+            logger.info(f"   ✅ 已归档到全剧记事板，下一幕ID: {result['next_scene_id']}")
+            
+            # 2. WS 更新 world_state.json
+            logger.info("🌍 步骤2: WS 更新世界状态...")
+            ws_result = self._update_world_state_from_scene(
+                runtime_dir=runtime_dir,
+                world_dir=world_dir,
+                scene_memory=scene_memory
+            )
+            result["world_state_updated"] = ws_result.get("success", False)
+            if ws_result.get("success"):
+                logger.info("   ✅ 世界状态已更新")
+            else:
+                logger.warning(f"   ⚠️ 世界状态更新失败: {ws_result.get('error')}")
+            
+            # 3. Plot 生成下一幕剧本
+            logger.info("🎬 步骤3: Plot 生成下一幕剧本...")
+            plot_result = self._generate_next_scene_script(
+                runtime_dir=runtime_dir,
+                world_dir=world_dir,
+                all_memory=all_memory,
+                scene_memory=scene_memory
+            )
+            result["next_script_generated"] = plot_result.get("success", False)
+            if plot_result.get("success"):
+                logger.info("   ✅ 下一幕剧本已生成")
+            else:
+                logger.warning(f"   ⚠️ 剧本生成失败: {plot_result.get('error')}")
+            
+            result["success"] = (
+                result["scene_archived"] and 
+                result["world_state_updated"] and 
+                result["next_script_generated"]
+            )
+            
+            logger.info("")
+            logger.info("=" * 60)
+            if result["success"]:
+                logger.info("✅ 幕间处理完成，可以开始下一幕")
+            else:
+                logger.info("⚠️ 幕间处理部分完成")
+            logger.info("=" * 60)
+            
+        except Exception as e:
+            logger.error(f"❌ 幕间处理失败: {e}", exc_info=True)
+            result["error"] = str(e)
+        
+        return result
+    
+    def _parse_json_from_llm(self, response: str) -> Optional[Dict[str, Any]]:
+        """
+        从 LLM 响应中解析 JSON
+        
+        Args:
+            response: LLM 的响应文本
+        
+        Returns:
+            解析后的字典，解析失败返回 None
+        """
+        result = response.strip()
+        
+        # 移除 markdown 代码块标记
+        if result.startswith("```json"):
+            result = result[7:]
+        if result.startswith("```"):
+            result = result[3:]
+        if result.endswith("```"):
+            result = result[:-3]
+        result = result.strip()
+        
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ JSON 解析失败: {e}")
+            logger.error(f"原始响应前200字符: {result[:200]}...")
+            return None
+    
+    def _update_world_state_from_scene(
+        self,
+        runtime_dir: Path,
+        world_dir: Path,
+        scene_memory
+    ) -> Dict[str, Any]:
+        """
+        WS 读取场景记忆板，更新 world_state.json
+        """
+        try:
+            # 读取当前世界状态
+            ws_file = runtime_dir / "ws" / "world_state.json"
+            with open(ws_file, "r", encoding="utf-8") as f:
+                current_world_state = json.load(f)
+            
+            # 读取世界设定（获取可用地点）
+            world_setting_file = world_dir / "world_setting.json"
+            with open(world_setting_file, "r", encoding="utf-8") as f:
+                world_setting = json.load(f)
+            
+            # 获取场景记忆
+            scene_data = scene_memory.to_dict()
+            scene_dialogues = scene_memory.get_dialogue_for_prompt(limit=20)
+            
+            # 读取 WS 更新提示词
+            prompt_file = settings.PROMPTS_DIR / "online" / "ws_update_system.txt"
+            with open(prompt_file, "r", encoding="utf-8") as f:
+                prompt_template = f.read()
+            
+            # 填充提示词
+            filled_prompt = prompt_template.replace(
+                "{current_world_state}", json.dumps(current_world_state, ensure_ascii=False, indent=2)
+            ).replace(
+                "{scene_memory}", scene_dialogues
+            ).replace(
+                "{world_setting}", json.dumps(
+                    world_setting.get("geography", {}).get("locations", []),
+                    ensure_ascii=False, indent=2
+                )
+            )
+            
+            # 转义花括号
+            escaped_prompt = filled_prompt.replace("{", "{{").replace("}", "}}")
+            
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", escaped_prompt),
+                ("human", "请根据场景记录更新世界状态，输出 JSON。")
+            ])
+            
+            chain = prompt | self.llm | StrOutputParser()
+            response = chain.invoke({})
+            
+            # 解析响应
+            new_world_state = self._parse_json_from_llm(response)
+            
+            if new_world_state:
+                # 保存更新后的世界状态
+                with open(ws_file, "w", encoding="utf-8") as f:
+                    json.dump(new_world_state, f, ensure_ascii=False, indent=2)
+                
+                logger.info(f"   📍 新场景: {new_world_state.get('current_scene', {}).get('location_name', '未知')}")
+                
+                return {"success": True, "world_state": new_world_state}
+            else:
+                return {"success": False, "error": "JSON 解析失败"}
+            
+        except Exception as e:
+            logger.error(f"❌ WS 更新失败: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+    
+    def _generate_next_scene_script(
+        self,
+        runtime_dir: Path,
+        world_dir: Path,
+        all_memory,
+        scene_memory
+    ) -> Dict[str, Any]:
+        """
+        Plot 生成下一幕剧本
+        """
+        try:
+            # 读取所需数据
+            # 1. 角色列表
+            characters_file = world_dir / "characters_list.json"
+            with open(characters_file, "r", encoding="utf-8") as f:
+                characters_list = json.load(f)
+            
+            # 2. 世界设定
+            world_setting_file = world_dir / "world_setting.json"
+            with open(world_setting_file, "r", encoding="utf-8") as f:
+                world_setting = json.load(f)
+            
+            # 3. 当前世界状态
+            ws_file = runtime_dir / "ws" / "world_state.json"
+            with open(ws_file, "r", encoding="utf-8") as f:
+                world_state = json.load(f)
+            
+            # 4. 角色详情
+            characters_dir = world_dir / "characters"
+            characters_details = []
+            if characters_dir.exists():
+                for char_file in characters_dir.glob("character_*.json"):
+                    with open(char_file, "r", encoding="utf-8") as f:
+                        char_data = json.load(f)
+                        characters_details.append(
+                            f"【{char_data.get('name')}】(ID: {char_data.get('id')})\n"
+                            f"  特征: {', '.join(char_data.get('traits', []))}\n"
+                            f"  外观: {char_data.get('current_appearance', '无描述')[:100]}"
+                        )
+            
+            # 读取 Plot 提示词
+            prompt_file = settings.PROMPTS_DIR / "online" / "plot_system.txt"
+            with open(prompt_file, "r", encoding="utf-8") as f:
+                prompt_template = f.read()
+            
+            # 填充提示词
+            filled_prompt = prompt_template.replace(
+                "{characters_list}", json.dumps(characters_list, ensure_ascii=False, indent=2)
+            ).replace(
+                "{world_setting}", json.dumps(world_setting, ensure_ascii=False, indent=2)
+            ).replace(
+                "{world_state}", json.dumps(world_state, ensure_ascii=False, indent=2)
+            ).replace(
+                "{story_history}", all_memory.get_story_summary(max_scenes=5)
+            ).replace(
+                "{last_scene_dialogues}", scene_memory.get_dialogue_for_prompt(limit=15)
+            ).replace(
+                "{characters_details}", "\n\n".join(characters_details)
+            ).replace(
+                "{user_action}", "（无玩家行动）"
+            )
+            
+            # 转义花括号
+            escaped_prompt = filled_prompt.replace("{", "{{").replace("}", "}}")
+            
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", escaped_prompt),
+                ("human", f"请生成【第{all_memory.get_next_scene_id()}幕】的导演场记单。")
+            ])
+            
+            chain = prompt | self.llm | StrOutputParser()
+            response = chain.invoke({})
+            
+            # 保存剧本
+            script_file = runtime_dir / "plot" / "current_script.json"
+            script_data = {
+                "scene_id": all_memory.get_next_scene_id(),
+                "content": response.strip(),
+                "created_at": datetime.now().isoformat()
+            }
+            with open(script_file, "w", encoding="utf-8") as f:
+                json.dump(script_data, f, ensure_ascii=False, indent=2)
+            
+            # 解析角色登场信息并更新 current_scene.json
+            self._parse_and_update_scene_from_plot(runtime_dir, response, world_state)
+            
+            logger.info(f"   📜 剧本已保存: {script_file.name}")
+            
+            return {"success": True, "script": response}
+            
+        except Exception as e:
+            logger.error(f"❌ 剧本生成失败: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
+    
+    def _parse_and_update_scene_from_plot(
+        self,
+        runtime_dir: Path,
+        plot_content: str,
+        world_state: Dict[str, Any]
+    ):
+        """
+        从 Plot 输出解析角色登场信息，更新 current_scene.json
+        """
+        import re
+        
+        present_characters = []
+        
+        # 解析入场角色
+        entry_pattern = r'\*\*入场\*\*:\s*(\S+)\s*\((\w+)\)\s*\[First Appearance:\s*(True|False)\]'
+        for match in re.finditer(entry_pattern, plot_content, re.IGNORECASE):
+            name, char_id, first_app = match.groups()
+            present_characters.append({
+                "id": char_id,
+                "name": name,
+                "first_appearance": first_app.lower() == "true"
+            })
+        
+        # 解析在场角色
+        present_pattern = r'\*\*在场\*\*:\s*(\S+)\s*\((\w+)\)'
+        for match in re.finditer(present_pattern, plot_content, re.IGNORECASE):
+            name, char_id = match.groups()
+            if not any(c["id"] == char_id for c in present_characters):
+                present_characters.append({
+                    "id": char_id,
+                    "name": name,
+                    "first_appearance": False
+                })
+        
+        # 更新 current_scene.json
+        current_scene = world_state.get("current_scene", {})
+        
+        scene_data = {
+            "location_id": current_scene.get("location_id", "unknown"),
+            "location_name": current_scene.get("location_name", "未知地点"),
+            "time_of_day": current_scene.get("time_of_day", "傍晚"),
+            "weather": world_state.get("weather", {}).get("condition", "晴朗"),
+            "present_characters": present_characters,
+            "scene_description": current_scene.get("description", ""),
+            "opening_narrative": plot_content[:500]
+        }
+        
+        scene_file = runtime_dir / "plot" / "current_scene.json"
+        with open(scene_file, "w", encoding="utf-8") as f:
+            json.dump(scene_data, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"   👥 下一幕角色: {[c['name'] for c in present_characters]}")
