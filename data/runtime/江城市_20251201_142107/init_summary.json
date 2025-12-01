@@ -1,7 +1,7 @@
 {
   "world_name": "江城市",
-  "initialized_at": "2025-12-01T12:06:40.769510",
-  "runtime_dir": "D:\\code\\AAA-StoryMaker\\data\\runtime\\江城市_20251201_120502",
+  "initialized_at": "2025-12-01T14:22:52.782798",
+  "runtime_dir": "D:\\code\\AAA-StoryMaker\\data\\runtime\\江城市_20251201_142107",
   "llm_config": {
     "provider": "openrouter",
     "model": "x-ai/grok-4.1-fast:free",
@@ -29,13 +29,13 @@
       "scene_file": "plot/current_scene.json",
       "current_script": "plot/current_script.json",
       "history_directory": "plot/history/",
-      "opening_location": "江城市中心咖啡馆"
+      "opening_location": "江城郊区老旧公寓出租屋"
     },
     "Vibe": {
       "status": "initialized",
       "directory": "vibe/",
       "atmosphere_file": "vibe/initial_atmosphere.json",
-      "emotional_tone": "宁静；凝重；微妙紧张"
+      "emotional_tone": "孤寂；紧张；专注；昏暗"
     }
   },
   "ready_for_game": true
