@@ -1,0 +1,36 @@
+{
+  "current_scene": {
+    "location_id": "suburb_apartment",
+    "location_name": "江城郊区老旧公寓出租屋",
+    "time_of_day": "上午",
+    "description": "狭小昏暗的出租屋内，电脑屏幕闪烁着神秘数据文件，空气中弥漫着咖啡和电子设备的味道。"
+  },
+  "weather": {
+    "condition": "晴朗",
+    "temperature": "22°C"
+  },
+  "characters_present": [
+    {
+      "id": "npc_001",
+      "name": "林晨",
+      "mood": "专注疲惫",
+      "activity": "敲击键盘分析加密文件",
+      "appearance_note": "戴着眼镜，穿着简朴衬衫和牛仔裤，清瘦面容略显疲惫"
+    }
+  ],
+  "characters_absent": [],
+  "relationship_matrix": {},
+  "world_situation": {
+    "summary": "江城市表面繁华平静，鸿图科技的数据泄露阴谋悄然酝酿中。技术工程师林晨意外卷入敏感事件，正处于故事起点。独立记者苏晴雨隐约嗅到线索。",
+    "tension_level": "平静",
+    "key_developments": [
+      "数据泄露事件初现端倪",
+      "潜在调查力量开始集结"
+    ]
+  },
+  "meta": {
+    "game_turn": 0,
+    "last_updated": "2025-12-01T15:09:17.559190",
+    "total_elapsed_time": "0分钟"
+  }
+}

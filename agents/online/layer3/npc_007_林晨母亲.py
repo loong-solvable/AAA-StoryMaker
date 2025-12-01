@@ -1,8 +1,8 @@
 """
-林晨 (npc_001) - 角色专属Agent
-自动生成于 2025-12-01 15:10:54
+林晨母亲 (npc_007) - 角色专属Agent
+自动生成于 2025-12-01 15:10:52
 
-提示词文件: prompts/online/npc_prompt/npc_001_林晨_prompt.txt
+提示词文件: prompts/online/npc_prompt/npc_007_林晨母亲_prompt.txt
 """
 import json
 from typing import Dict, Any, Optional, List
@@ -13,23 +13,23 @@ from utils.llm_factory import get_llm
 from utils.logger import setup_logger
 from config.settings import settings
 
-logger = setup_logger("npc_001", "npc_001.log")
+logger = setup_logger("npc_007", "npc_007.log")
 
 
-class Npc001Agent:
+class Npc007Agent:
     """
-    林晨 角色专属Agent
+    林晨母亲 角色专属Agent
     
-    角色ID: npc_001
-    角色名称: 林晨
+    角色ID: npc_007
+    角色名称: 林晨母亲
     
-    提示词: 从 prompts/online/npc_prompt/npc_001_林晨_prompt.txt 读取
+    提示词: 从 prompts/online/npc_prompt/npc_007_林晨母亲_prompt.txt 读取
     角色数据已预填充到提示词文件中，运行时只需填充剧本相关变量
     """
     
-    CHARACTER_ID = "npc_001"
-    CHARACTER_NAME = "林晨"
-    PROMPT_FILE = "npc_prompt/npc_001_林晨_prompt.txt"  # 专属提示词文件
+    CHARACTER_ID = "npc_007"
+    CHARACTER_NAME = "林晨母亲"
+    PROMPT_FILE = "npc_prompt/npc_007_林晨母亲_prompt.txt"  # 专属提示词文件
     
     def __init__(self):
         """初始化角色Agent"""
@@ -242,6 +242,6 @@ class Npc001Agent:
 
 
 # 便捷函数：创建Agent实例
-def create_agent() -> Npc001Agent:
-    """创建 林晨 Agent实例"""
-    return Npc001Agent()
+def create_agent() -> Npc007Agent:
+    """创建 林晨母亲 Agent实例"""
+    return Npc007Agent()

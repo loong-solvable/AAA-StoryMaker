@@ -583,20 +583,58 @@ class IlluminatiInitializer:
             content: LLM 生成的纯文本剧本
             world_state: WS 生成的世界状态（用于构建场景数据）
         """
+        import re
+        
         # 场景数据从 world_state 获取（保持与 WS 一致）
         current_scene = world_state.get("current_scene", {})
         weather = world_state.get("weather", {})
-        characters_present = world_state.get("characters_present", [])
+        characters_present_ws = world_state.get("characters_present", [])
         
-        # 构建在场角色列表（标记为首次登场）
-        present_characters = [
-            {
-                "id": char.get("id"),
-                "name": char.get("name"),
-                "first_appearance": True
-            }
-            for char in characters_present
-        ]
+        # 解析【角色登场与调度】部分
+        present_characters = []
+        
+        # 尝试从 Plot 输出中解析入场/在场角色
+        # 匹配格式: - **入场**: 角色名 (npc_xxx) [First Appearance: True/False]
+        #          - **在场**: 角色名 (npc_xxx)
+        entry_pattern = r'\*\*入场\*\*:\s*(\S+)\s*\((\w+)\)\s*\[First Appearance:\s*(True|False)\]'
+        present_pattern = r'\*\*在场\*\*:\s*(\S+)\s*\((\w+)\)'
+        
+        # 解析入场角色
+        for match in re.finditer(entry_pattern, content, re.IGNORECASE):
+            name, char_id, first_app = match.groups()
+            present_characters.append({
+                "id": char_id,
+                "name": name,
+                "first_appearance": first_app.lower() == "true"
+            })
+            logger.info(f"   📥 解析到入场角色: {name} ({char_id}) [首次: {first_app}]")
+        
+        # 解析在场角色（对于初始化场景，所有在场角色都是首次登场）
+        for match in re.finditer(present_pattern, content, re.IGNORECASE):
+            name, char_id = match.groups()
+            # 检查是否已添加
+            if not any(c["id"] == char_id for c in present_characters):
+                # 初始化阶段，所有角色都是首次登场
+                present_characters.append({
+                    "id": char_id,
+                    "name": name,
+                    "first_appearance": True  # 初始化时所有角色都是首次登场
+                })
+                logger.info(f"   📍 解析到在场角色: {name} ({char_id}) [首次登场]")
+        
+        # 如果解析失败，回退到 WS 的数据
+        if not present_characters:
+            logger.warning("   ⚠️ 未能从 Plot 输出解析角色，使用 WS 数据")
+            present_characters = [
+                {
+                    "id": char.get("id"),
+                    "name": char.get("name"),
+                    "first_appearance": True
+                }
+                for char in characters_present_ws
+            ]
+        
+        logger.info(f"   👥 最终在场角色: {[c['name'] for c in present_characters]}")
         
         # 构建场景
         scene = InitialScene(
@@ -606,7 +644,7 @@ class IlluminatiInitializer:
             weather=f"{weather.get('condition', '晴朗')}，{weather.get('temperature', '温暖')}",
             present_characters=present_characters,
             scene_description=current_scene.get("description", ""),
-            opening_narrative=content.strip()[:200]  # 取前200字作为开场旁白
+            opening_narrative=content.strip()[:500]  # 增加到500字以包含更多剧情
         )
         
         # 剧本为纯文本
