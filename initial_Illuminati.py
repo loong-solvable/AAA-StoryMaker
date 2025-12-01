@@ -593,11 +593,13 @@ class IlluminatiInitializer:
         # 解析【角色登场与调度】部分
         present_characters = []
         
-        # 尝试从 Plot 输出中解析入场/在场角色
+        # 尝试从 Plot 输出中解析入场/在场/离场角色
         # 匹配格式: - **入场**: 角色名 (npc_xxx) [First Appearance: True/False]
-        #          - **在场**: 角色名 (npc_xxx)
+        #          - **在场**: 角色名 (npc_xxx) - 描述...
+        #          - **离场**: 角色名 (npc_xxx) - 描述...
         entry_pattern = r'\*\*入场\*\*:\s*(\S+)\s*\((\w+)\)\s*\[First Appearance:\s*(True|False)\]'
         present_pattern = r'\*\*在场\*\*:\s*(\S+)\s*\((\w+)\)'
+        exit_pattern = r'\*\*离场\*\*:\s*(\S+)\s*\((\w+)\)'  # 新增：离场角色也需要初始化
         
         # 解析入场角色
         for match in re.finditer(entry_pattern, content, re.IGNORECASE):
@@ -621,6 +623,19 @@ class IlluminatiInitializer:
                     "first_appearance": True  # 初始化时所有角色都是首次登场
                 })
                 logger.info(f"   📍 解析到在场角色: {name} ({char_id}) [首次登场]")
+        
+        # 解析离场角色（离场的角色在本幕中也有戏份，需要初始化）
+        for match in re.finditer(exit_pattern, content, re.IGNORECASE):
+            name, char_id = match.groups()
+            # 检查是否已添加
+            if not any(c["id"] == char_id for c in present_characters):
+                # 离场角色在本幕中有戏份，需要初始化
+                present_characters.append({
+                    "id": char_id,
+                    "name": name,
+                    "first_appearance": True  # 初始化时所有角色都是首次登场
+                })
+                logger.info(f"   📤 解析到离场角色: {name} ({char_id}) [首次登场，本幕有戏份]")
         
         # 如果解析失败，回退到 WS 的数据
         if not present_characters:

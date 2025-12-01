@@ -2480,6 +2480,11 @@ def create_agent() -> {class_name}:
     ):
         """
         从 Plot 输出解析角色登场信息，更新 current_scene.json
+        
+        解析三种角色状态：
+        - 入场：新进入场景的角色
+        - 在场：持续在场的角色
+        - 离场：本幕有戏份但最终离开的角色（仍需初始化）
         """
         import re
         
@@ -2494,6 +2499,7 @@ def create_agent() -> {class_name}:
                 "name": name,
                 "first_appearance": first_app.lower() == "true"
             })
+            logger.info(f"      📥 入场: {name} ({char_id})")
         
         # 解析在场角色
         present_pattern = r'\*\*在场\*\*:\s*(\S+)\s*\((\w+)\)'
@@ -2505,6 +2511,19 @@ def create_agent() -> {class_name}:
                     "name": name,
                     "first_appearance": False
                 })
+                logger.info(f"      📍 在场: {name} ({char_id})")
+        
+        # 解析离场角色（离场的角色在本幕中也有戏份，需要参与演绎）
+        exit_pattern = r'\*\*离场\*\*:\s*(\S+)\s*\((\w+)\)'
+        for match in re.finditer(exit_pattern, plot_content, re.IGNORECASE):
+            name, char_id = match.groups()
+            if not any(c["id"] == char_id for c in present_characters):
+                present_characters.append({
+                    "id": char_id,
+                    "name": name,
+                    "first_appearance": True  # 离场角色如果之前没出现过，标记为首次登场
+                })
+                logger.info(f"      📤 离场(本幕有戏份): {name} ({char_id})")
         
         # 更新 current_scene.json
         current_scene = world_state.get("current_scene", {})
