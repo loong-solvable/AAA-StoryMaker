@@ -99,13 +99,13 @@ def run_scene_loop_test():
         return "..."
     
     # 运行场景循环
-    print("\n🎬 开始场景对话循环（最多 8 轮）...")
+    print("\n🎬 开始场景对话循环（最多 12 轮）...")
     print("-" * 50)
     
     result = os_agent.run_scene_loop(
         runtime_dir=runtime_dir,
         world_dir=world_dir,
-        max_turns=8,
+        max_turns=12,
         user_input_callback=mock_user_input
     )
     

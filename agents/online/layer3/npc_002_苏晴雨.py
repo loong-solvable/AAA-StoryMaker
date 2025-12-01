@@ -1,8 +1,8 @@
 """
-神秘电话男子 (npc_006) - 角色专属Agent
-自动生成于 2025-12-01 15:10:51
+苏晴雨 (npc_002) - 角色专属Agent
+自动生成于 2025-12-01 15:17:06
 
-提示词文件: prompts/online/npc_prompt/npc_006_神秘电话男子_prompt.txt
+提示词文件: prompts/online/npc_prompt/npc_002_苏晴雨_prompt.txt
 """
 import json
 from typing import Dict, Any, Optional, List
@@ -13,23 +13,23 @@ from utils.llm_factory import get_llm
 from utils.logger import setup_logger
 from config.settings import settings
 
-logger = setup_logger("npc_006", "npc_006.log")
+logger = setup_logger("npc_002", "npc_002.log")
 
 
-class Npc006Agent:
+class Npc002Agent:
     """
-    神秘电话男子 角色专属Agent
+    苏晴雨 角色专属Agent
     
-    角色ID: npc_006
-    角色名称: 神秘电话男子
+    角色ID: npc_002
+    角色名称: 苏晴雨
     
-    提示词: 从 prompts/online/npc_prompt/npc_006_神秘电话男子_prompt.txt 读取
+    提示词: 从 prompts/online/npc_prompt/npc_002_苏晴雨_prompt.txt 读取
     角色数据已预填充到提示词文件中，运行时只需填充剧本相关变量
     """
     
-    CHARACTER_ID = "npc_006"
-    CHARACTER_NAME = "神秘电话男子"
-    PROMPT_FILE = "npc_prompt/npc_006_神秘电话男子_prompt.txt"  # 专属提示词文件
+    CHARACTER_ID = "npc_002"
+    CHARACTER_NAME = "苏晴雨"
+    PROMPT_FILE = "npc_prompt/npc_002_苏晴雨_prompt.txt"  # 专属提示词文件
     
     def __init__(self):
         """初始化角色Agent"""
@@ -242,6 +242,6 @@ class Npc006Agent:
 
 
 # 便捷函数：创建Agent实例
-def create_agent() -> Npc006Agent:
-    """创建 神秘电话男子 Agent实例"""
-    return Npc006Agent()
+def create_agent() -> Npc002Agent:
+    """创建 苏晴雨 Agent实例"""
+    return Npc002Agent()

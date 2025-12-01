@@ -1917,6 +1917,15 @@ def create_agent() -> {class_name}:
                 "response": actor_response
             })
             
+            # 保存到角色专属历史文件
+            self._save_actor_history(
+                runtime_dir=runtime_dir,
+                actor_id=current_speaker_id,
+                actor_name=speaker_name,
+                turn=turn_count,
+                response=actor_response
+            )
+            
             # 显示演绎结果
             logger.info(f"   💭 {actor_response.get('thought', '')[:50]}...")
             logger.info(f"   😊 情绪: {actor_response.get('emotion', '')}")
@@ -2035,3 +2044,70 @@ def create_agent() -> {class_name}:
             "next_speaker_id": next_speaker,
             "should_continue": next_speaker is not None
         }
+    
+    # ==========================================
+    # 角色历史演绎记录
+    # ==========================================
+    
+    def _save_actor_history(
+        self,
+        runtime_dir: Path,
+        actor_id: str,
+        actor_name: str,
+        turn: int,
+        response: Dict[str, Any]
+    ) -> None:
+        """
+        保存角色的演绎历史到专属目录
+        
+        存储位置: data/runtime/{world}/npc/{actor_id}_{actor_name}/history.json
+        
+        Args:
+            runtime_dir: 运行时目录
+            actor_id: 角色ID
+            actor_name: 角色名称
+            turn: 对话轮次
+            response: 角色的演绎响应
+        """
+        from datetime import datetime
+        
+        # 创建角色专属目录
+        actor_dir = runtime_dir / "npc" / f"{actor_id}_{actor_name}"
+        actor_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 历史文件路径
+        history_file = actor_dir / "history.json"
+        
+        # 读取现有历史或创建新的
+        if history_file.exists():
+            with open(history_file, "r", encoding="utf-8") as f:
+                history_data = json.load(f)
+        else:
+            history_data = {
+                "actor_id": actor_id,
+                "actor_name": actor_name,
+                "created_at": datetime.now().isoformat(),
+                "performances": []
+            }
+        
+        # 添加本次演绎记录
+        performance = {
+            "turn": turn,
+            "timestamp": datetime.now().isoformat(),
+            "thought": response.get("thought", ""),
+            "emotion": response.get("emotion", ""),
+            "action": response.get("action", ""),
+            "content": response.get("content", ""),
+            "addressing_target": response.get("addressing_target", "everyone"),
+            "is_scene_finished": response.get("is_scene_finished", False)
+        }
+        
+        history_data["performances"].append(performance)
+        history_data["last_updated"] = datetime.now().isoformat()
+        history_data["total_performances"] = len(history_data["performances"])
+        
+        # 保存
+        with open(history_file, "w", encoding="utf-8") as f:
+            json.dump(history_data, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"   📜 保存 {actor_name} 历史: {history_file.name}")
