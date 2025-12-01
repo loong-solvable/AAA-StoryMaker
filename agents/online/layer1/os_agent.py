@@ -22,11 +22,15 @@
 import json
 import re
 import importlib.util
+import shutil
 from typing import Dict, Any, Optional, List, Callable
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, field
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 from utils.logger import setup_logger
+from utils.llm_factory import get_llm
 from config.settings import settings
 from agents.message_protocol import (
     Message, AgentRole, MessageType, WorldContext
@@ -106,6 +110,9 @@ class OperatingSystem:
         self.message_queue: List[Message] = []
         self.message_handlers: Dict[AgentRole, Callable] = {}
         self.npc_handlers: Dict[str, Callable] = {}  # character_id -> handler
+        
+        # LLM 实例（用于剧本拆分等智能任务）
+        self.llm = get_llm(temperature=0.7)
         
         # 加载Genesis数据
         if genesis_path:
@@ -1030,3 +1037,335 @@ def create_agent() -> {class_name}:
     def get_initialized_characters(self) -> List[str]:
         """获取已初始化的角色ID列表"""
         return list(self.npc_agents.keys())
+    
+    # ==========================================
+    # LLM 驱动的剧本拆分功能
+    # ==========================================
+    
+    def dispatch_script_to_actors(self, runtime_dir: Path) -> Dict[str, Any]:
+        """
+        使用 LLM 将总剧本拆分为各演员的小剧本
+        
+        读取当前场景、剧本和世界状态，调用 LLM 进行智能拆分，
+        然后将各角色的小剧本保存到 npc/ 目录。
+        
+        Args:
+            runtime_dir: 运行时目录路径，如 data/runtime/江城市_20251128_183246
+        
+        Returns:
+            Dict: 拆分结果
+            {
+                "success": bool,
+                "global_context": str,
+                "actor_scripts": {npc_id: script_path},
+                "archived": [archived_file_paths]
+            }
+        """
+        logger.info("📜 开始拆分剧本...")
+        
+        results = {
+            "success": False,
+            "global_context": "",
+            "actor_scripts": {},
+            "archived": []
+        }
+        
+        try:
+            # 1. 读取相关数据文件
+            current_scene = self._read_json_file(runtime_dir / "plot" / "current_scene.json")
+            current_script = self._read_json_file(runtime_dir / "plot" / "current_script.json")
+            world_state = self._read_json_file(runtime_dir / "ws" / "world_state.json")
+            
+            if not all([current_scene, current_script, world_state]):
+                logger.error("❌ 无法读取必要的数据文件")
+                results["error"] = "无法读取必要的数据文件"
+                return results
+            
+            # 2. 读取提示词模板
+            prompt_template = self._load_script_divider_prompt()
+            if not prompt_template:
+                results["error"] = "无法加载提示词模板"
+                return results
+            
+            # 3. 调用 LLM 进行剧本拆分
+            logger.info("🤖 调用LLM拆分剧本...")
+            llm_result = self._call_llm_for_script_division(
+                prompt_template=prompt_template,
+                current_scene=current_scene,
+                current_script=current_script,
+                world_state=world_state
+            )
+            
+            if not llm_result:
+                results["error"] = "LLM 返回结果为空"
+                return results
+            
+            # 4. 解析 LLM 返回的结果
+            parsed_result = self._parse_llm_script_result(llm_result)
+            if not parsed_result:
+                results["error"] = "无法解析 LLM 返回的结果"
+                return results
+            
+            results["global_context"] = parsed_result.get("global_context", "")
+            
+            # 5. 确保 npc 目录存在
+            npc_dir = runtime_dir / "npc"
+            npc_dir.mkdir(parents=True, exist_ok=True)
+            history_dir = npc_dir / "history"
+            history_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 6. 为每个角色保存小剧本
+            actor_missions = parsed_result.get("actor_missions", {})
+            
+            for npc_id, mission_data in actor_missions.items():
+                logger.info(f"   📝 处理 {npc_id} 的小剧本...")
+                
+                # 归档旧的小剧本（如果存在）
+                archived_path = self._archive_old_script(npc_dir, history_dir, npc_id)
+                if archived_path:
+                    results["archived"].append(str(archived_path))
+                
+                # 保存新的小剧本
+                script_file = npc_dir / f"{npc_id}_script.json"
+                script_data = {
+                    "npc_id": npc_id,
+                    "character_name": mission_data.get("character_name", npc_id),
+                    "global_context": results["global_context"],
+                    "scene_summary": parsed_result.get("scene_summary", ""),
+                    "mission": mission_data,
+                    "created_at": datetime.now().isoformat()
+                }
+                
+                with open(script_file, "w", encoding="utf-8") as f:
+                    json.dump(script_data, f, ensure_ascii=False, indent=2)
+                
+                results["actor_scripts"][npc_id] = str(script_file)
+                logger.info(f"   ✅ 保存: {script_file.name}")
+            
+            results["success"] = True
+            logger.info(f"✅ 剧本拆分完成: 为 {len(actor_missions)} 个角色生成小剧本")
+            
+        except Exception as e:
+            logger.error(f"❌ 剧本拆分失败: {e}", exc_info=True)
+            results["error"] = str(e)
+        
+        return results
+    
+    def _read_json_file(self, file_path: Path) -> Optional[Dict[str, Any]]:
+        """读取 JSON 文件"""
+        if not file_path.exists():
+            logger.error(f"❌ 文件不存在: {file_path}")
+            return None
+        
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"❌ 读取文件失败 {file_path}: {e}")
+            return None
+    
+    def _load_script_divider_prompt(self) -> Optional[str]:
+        """加载剧本拆分提示词模板"""
+        prompt_file = settings.PROMPTS_DIR / "online" / "script_divider.txt"
+        
+        if not prompt_file.exists():
+            logger.error(f"❌ 提示词文件不存在: {prompt_file}")
+            return None
+        
+        try:
+            with open(prompt_file, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception as e:
+            logger.error(f"❌ 读取提示词文件失败: {e}")
+            return None
+    
+    def _call_llm_for_script_division(
+        self,
+        prompt_template: str,
+        current_scene: Dict[str, Any],
+        current_script: Dict[str, Any],
+        world_state: Dict[str, Any]
+    ) -> Optional[str]:
+        """
+        调用 LLM 进行剧本拆分
+        
+        Args:
+            prompt_template: 提示词模板
+            current_scene: 当前场景数据
+            current_script: 当前剧本数据
+            world_state: 世界状态数据
+        
+        Returns:
+            LLM 返回的结果字符串
+        """
+        try:
+            # 将 JSON 数据转为字符串
+            scene_str = json.dumps(current_scene, ensure_ascii=False, indent=2)
+            script_str = json.dumps(current_script, ensure_ascii=False, indent=2)
+            state_str = json.dumps(world_state, ensure_ascii=False, indent=2)
+            
+            # 填充提示词模板中的占位符
+            filled_prompt = prompt_template.replace(
+                "{current_scene}", scene_str
+            ).replace(
+                "{current_script}", script_str
+            ).replace(
+                "{world_state}", state_str
+            )
+            
+            # 转义 JSON 中的花括号，避免 LangChain 将其识别为变量
+            # 将所有的 { 和 } 替换为 {{ 和 }}
+            escaped_prompt = filled_prompt.replace("{", "{{").replace("}", "}}")
+            
+            # 构建 LangChain prompt
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", escaped_prompt),
+                ("human", "请根据以上信息，为每位在场演员生成任务卡。")
+            ])
+            
+            chain = prompt | self.llm | StrOutputParser()
+            
+            response = chain.invoke({})
+            
+            logger.info("✅ LLM 返回剧本拆分结果")
+            return response
+            
+        except Exception as e:
+            logger.error(f"❌ LLM 调用失败: {e}", exc_info=True)
+            return None
+    
+    def _parse_llm_script_result(self, llm_result: str) -> Optional[Dict[str, Any]]:
+        """
+        解析 LLM 返回的剧本拆分结果
+        
+        Args:
+            llm_result: LLM 返回的原始字符串
+        
+        Returns:
+            解析后的字典
+        """
+        # 清理 markdown 代码块标记
+        result = llm_result.strip()
+        
+        # 尝试提取 JSON 块
+        # 方法1: 查找 ```json ... ``` 格式
+        json_match = re.search(r'```json\s*([\s\S]*?)\s*```', result)
+        if json_match:
+            result = json_match.group(1).strip()
+        else:
+            # 方法2: 查找 ``` ... ``` 格式
+            code_match = re.search(r'```\s*([\s\S]*?)\s*```', result)
+            if code_match:
+                result = code_match.group(1).strip()
+            else:
+                # 方法3: 尝试找到第一个 { 和最后一个 } 之间的内容
+                first_brace = result.find('{')
+                last_brace = result.rfind('}')
+                if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                    result = result[first_brace:last_brace + 1]
+        
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ JSON 解析失败: {e}")
+            logger.error(f"尝试解析的内容前500字符: {result[:500]}...")
+            
+            # 最后尝试：逐行解析找到有效的 JSON 对象
+            try:
+                # 找到 { 开始的行
+                lines = result.split('\n')
+                json_lines = []
+                in_json = False
+                brace_count = 0
+                
+                for line in lines:
+                    if '{' in line and not in_json:
+                        in_json = True
+                    
+                    if in_json:
+                        json_lines.append(line)
+                        brace_count += line.count('{') - line.count('}')
+                        
+                        if brace_count == 0:
+                            break
+                
+                if json_lines:
+                    json_str = '\n'.join(json_lines)
+                    return json.loads(json_str)
+            except:
+                pass
+            
+            return None
+    
+    def _archive_old_script(
+        self,
+        npc_dir: Path,
+        history_dir: Path,
+        npc_id: str
+    ) -> Optional[Path]:
+        """
+        归档旧的小剧本
+        
+        Args:
+            npc_dir: NPC 目录
+            history_dir: 历史归档目录
+            npc_id: 角色 ID
+        
+        Returns:
+            归档后的文件路径（如果有归档）
+        """
+        current_script = npc_dir / f"{npc_id}_script.json"
+        
+        if not current_script.exists():
+            return None
+        
+        # 计算第几幕（通过统计 history 中该角色的历史剧本数量）
+        existing_archives = list(history_dir.glob(f"{npc_id}_第*幕剧本.json"))
+        act_number = len(existing_archives) + 1
+        
+        # 归档文件名
+        archive_name = f"{npc_id}_第{act_number}幕剧本.json"
+        archive_path = history_dir / archive_name
+        
+        # 移动文件
+        shutil.move(str(current_script), str(archive_path))
+        
+        logger.info(f"   📦 归档: {current_script.name} -> history/{archive_name}")
+        return archive_path
+    
+    def get_actor_script(self, runtime_dir: Path, npc_id: str) -> Optional[Dict[str, Any]]:
+        """
+        获取指定角色的当前小剧本
+        
+        Args:
+            runtime_dir: 运行时目录
+            npc_id: 角色 ID
+        
+        Returns:
+            小剧本数据
+        """
+        script_file = runtime_dir / "npc" / f"{npc_id}_script.json"
+        return self._read_json_file(script_file)
+    
+    def get_all_actor_scripts(self, runtime_dir: Path) -> Dict[str, Dict[str, Any]]:
+        """
+        获取所有角色的当前小剧本
+        
+        Args:
+            runtime_dir: 运行时目录
+        
+        Returns:
+            {npc_id: script_data} 字典
+        """
+        npc_dir = runtime_dir / "npc"
+        if not npc_dir.exists():
+            return {}
+        
+        scripts = {}
+        for script_file in npc_dir.glob("*_script.json"):
+            npc_id = script_file.stem.replace("_script", "")
+            script_data = self._read_json_file(script_file)
+            if script_data:
+                scripts[npc_id] = script_data
+        
+        return scripts

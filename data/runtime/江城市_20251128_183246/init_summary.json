@@ -1,12 +1,19 @@
 {
   "world_name": "江城市",
-  "initialized_at": "2025-11-28T16:47:57.549280",
-  "runtime_dir": "D:\\code\\AAA-StoryMaker\\data\\runtime\\江城市_20251128_164705",
+  "initialized_at": "2025-11-28T18:33:40.927961",
+  "runtime_dir": "D:\\code\\AAA-StoryMaker\\data\\runtime\\江城市_20251128_183246",
+  "llm_config": {
+    "provider": "openrouter",
+    "model": "x-ai/grok-4.1-fast:free",
+    "temperature": 0.7,
+    "api_base": "https://openrouter.ai/api/v1"
+  },
   "directory_structure": {
     "ws": "ws/world_state.json",
     "plot": {
       "scene": "plot/current_scene.json",
-      "script": "plot/script/script_001.json"
+      "script": "plot/current_script.json",
+      "history": "plot/history/"
     },
     "vibe": "vibe/initial_atmosphere.json"
   },
@@ -20,15 +27,15 @@
       "status": "initialized",
       "directory": "plot/",
       "scene_file": "plot/current_scene.json",
-      "script_directory": "plot/script/",
-      "initial_script": "plot/script/script_001.json",
+      "current_script": "plot/current_script.json",
+      "history_directory": "plot/history/",
       "opening_location": "市中心咖啡馆"
     },
     "Vibe": {
       "status": "initialized",
       "directory": "vibe/",
       "atmosphere_file": "vibe/initial_atmosphere.json",
-      "emotional_tone": "惊喜偶遇，都市忙碌"
+      "emotional_tone": "忙碌；都市；温暖；紧张伏笔"
     }
   },
   "ready_for_game": true

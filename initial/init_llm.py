@@ -3,7 +3,7 @@ LLM初始化模块
 负责创建和配置LLM实例
 """
 from typing import Optional
-from langchain.schema import BaseLanguageModel
+from langchain_core.language_models.base import BaseLanguageModel
 from utils.llm_factory import get_llm
 from utils.logger import setup_logger
 
