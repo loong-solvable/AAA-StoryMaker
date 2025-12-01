@@ -2309,6 +2309,71 @@ def create_agent() -> {class_name}:
             logger.error(f"❌ WS 更新失败: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
     
+    def _archive_plot_files(self, runtime_dir: Path) -> bool:
+        """
+        归档当前剧本文件到 history 文件夹
+        
+        在生成新剧本之前调用，将旧的 current_scene.json 和 current_script.json
+        归档到 plot/history 目录，文件名包含场景ID和时间戳
+        
+        Args:
+            runtime_dir: 运行时目录
+            
+        Returns:
+            归档是否成功
+        """
+        import shutil
+        
+        plot_dir = runtime_dir / "plot"
+        history_dir = plot_dir / "history"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        
+        scene_file = plot_dir / "current_scene.json"
+        script_file = plot_dir / "current_script.json"
+        
+        # 如果没有旧文件，跳过归档
+        if not scene_file.exists() and not script_file.exists():
+            logger.info("   📂 无旧剧本需要归档")
+            return True
+        
+        # 获取场景ID（从current_script.json或current_scene.json中读取）
+        scene_id = "unknown"
+        try:
+            if script_file.exists():
+                with open(script_file, "r", encoding="utf-8") as f:
+                    script_data = json.load(f)
+                    scene_id = script_data.get("scene_id", "unknown")
+            elif scene_file.exists():
+                with open(scene_file, "r", encoding="utf-8") as f:
+                    scene_data = json.load(f)
+                    scene_id = scene_data.get("scene_id", "unknown")
+        except Exception as e:
+            logger.warning(f"   ⚠️ 读取场景ID失败: {e}")
+        
+        # 生成带时间戳的归档文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        try:
+            # 归档 current_scene.json
+            if scene_file.exists():
+                archive_scene_name = f"scene_{scene_id}_{timestamp}.json"
+                archive_scene_path = history_dir / archive_scene_name
+                shutil.copy2(scene_file, archive_scene_path)
+                logger.info(f"   📁 归档场景: {archive_scene_name}")
+            
+            # 归档 current_script.json
+            if script_file.exists():
+                archive_script_name = f"script_{scene_id}_{timestamp}.json"
+                archive_script_path = history_dir / archive_script_name
+                shutil.copy2(script_file, archive_script_path)
+                logger.info(f"   📁 归档剧本: {archive_script_name}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"   ❌ 归档失败: {e}")
+            return False
+    
     def _generate_next_scene_script(
         self,
         runtime_dir: Path,
@@ -2320,6 +2385,10 @@ def create_agent() -> {class_name}:
         Plot 生成下一幕剧本
         """
         try:
+            # 归档旧剧本到 history 文件夹
+            logger.info("📂 归档旧剧本...")
+            self._archive_plot_files(runtime_dir)
+            
             # 读取所需数据
             # 1. 角色列表
             characters_file = world_dir / "characters_list.json"
