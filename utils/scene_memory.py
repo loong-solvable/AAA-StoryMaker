@@ -100,6 +100,7 @@ class SceneMemory:
         content: str,
         action: str = "",
         emotion: str = "",
+        addressing_target: str = "everyone",
         thought: str = ""
     ) -> int:
         """
@@ -111,6 +112,7 @@ class SceneMemory:
             content: 对话内容
             action: 动作描述
             emotion: 情绪状态
+            addressing_target: 对话对象（角色ID、user或everyone）
             thought: 内心活动（可选，不会显示给其他角色）
         
         Returns:
@@ -125,6 +127,7 @@ class SceneMemory:
             "content": content,
             "action": action,
             "emotion": emotion,
+            "addressing_target": addressing_target,
             "timestamp": datetime.now().isoformat()
         }
         
@@ -133,7 +136,7 @@ class SceneMemory:
         self._data["dialogue_log"].append(entry)
         self._save()
         
-        logger.info(f"📝 [{order_id}] {speaker_name}: {content[:30]}...")
+        logger.info(f"📝 [{order_id}] {speaker_name} -> {addressing_target}: {content[:30]}...")
         return order_id
     
     def get_dialogue_log(self, limit: int = None) -> List[Dict[str, Any]]:
@@ -172,13 +175,36 @@ class SceneMemory:
             speaker = entry.get("speaker_name", "未知")
             content = entry.get("content", "")
             action = entry.get("action", "")
+            target = entry.get("addressing_target", "everyone")
+            
+            # 构建对话对象描述
+            target_desc = ""
+            if target and target != "everyone":
+                if target == "user":
+                    target_desc = "（对玩家）"
+                else:
+                    target_desc = f"（对{target}）"
             
             if action:
-                lines.append(f"【{speaker}】（{action}）: {content}")
+                lines.append(f"【{speaker}】{target_desc}（{action}）: {content}")
             else:
-                lines.append(f"【{speaker}】: {content}")
+                lines.append(f"【{speaker}】{target_desc}: {content}")
         
         return "\n".join(lines)
+    
+    def get_last_dialogue(self) -> Optional[Dict[str, Any]]:
+        """获取最后一条对话记录"""
+        log = self._data.get("dialogue_log", [])
+        if log:
+            return log[-1]
+        return None
+    
+    def get_last_addressing_target(self) -> Optional[str]:
+        """获取最后一条对话的对话对象"""
+        last = self.get_last_dialogue()
+        if last:
+            return last.get("addressing_target")
+        return None
     
     def get_last_speaker(self) -> Optional[str]:
         """获取最后一个说话者的ID"""

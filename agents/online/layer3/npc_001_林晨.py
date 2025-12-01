@@ -238,7 +238,8 @@ class Npc001Agent:
                     speaker_name=self.CHARACTER_NAME,
                     content=result.get("content", ""),
                     action=result.get("action", ""),
-                    emotion=result.get("emotion", "")
+                    emotion=result.get("emotion", ""),
+                    addressing_target=result.get("addressing_target", "everyone")
                 )
             
             # 更新情绪
@@ -251,6 +252,7 @@ class Npc001Agent:
             
             logger.info(f"✅ {self.CHARACTER_NAME} 演绎完成")
             logger.info(f"   情绪: {result.get('emotion', '未知')}")
+            logger.info(f"   对话对象: {result.get('addressing_target', 'everyone')}")
             logger.info(f"   场景结束: {result.get('is_scene_finished', False)}")
             
             return result
@@ -288,6 +290,7 @@ class Npc001Agent:
                 "emotion": self.current_mood,
                 "action": "",
                 "content": result[:200] if result else "...",
+                "addressing_target": "everyone",
                 "is_scene_finished": False
             }
     
@@ -300,6 +303,7 @@ class Npc001Agent:
             "emotion": self.current_mood,
             "action": "沉默了一会儿",
             "content": "嗯...",
+            "addressing_target": "everyone",
             "is_scene_finished": False
         }
     

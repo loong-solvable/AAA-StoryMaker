@@ -1051,6 +1051,7 @@ class {class_name}:
                 "emotion": self.current_mood,
                 "action": "",
                 "content": result[:200] if result else "...",
+                "addressing_target": "everyone",
                 "is_scene_finished": False
             }}
     
@@ -1063,6 +1064,7 @@ class {class_name}:
             "emotion": self.current_mood,
             "action": "沉默了一会儿",
             "content": "嗯...",
+            "addressing_target": "everyone",
             "is_scene_finished": False
         }}
     
@@ -1472,3 +1474,252 @@ def create_agent() -> {class_name}:
                 scripts[npc_id] = script_data
         
         return scripts
+    
+    # ==========================================
+    # 对话路由调度功能
+    # ==========================================
+    
+    def route_dialogue(
+        self,
+        actor_response: Dict[str, Any],
+        active_npcs: List[str],
+        scene_memory: Any = None
+    ) -> Dict[str, Any]:
+        """
+        根据演员输出路由对话到下一位发言者
+        
+        Args:
+            actor_response: 演员的响应数据（包含 addressing_target 等字段）
+            active_npcs: 当前在场的 NPC ID 列表
+            scene_memory: 场景记忆板实例（可选）
+        
+        Returns:
+            路由决策结果
+            {
+                "next_speaker_id": str,  # 下一位发言者ID
+                "should_pause_for_user": bool,  # 是否等待玩家
+                "is_scene_finished": bool,  # 场景是否结束
+                "routing_reason": str  # 路由原因
+            }
+        """
+        logger.info("🎯 开始路由对话...")
+        
+        addressing_target = actor_response.get("addressing_target", "everyone")
+        is_scene_finished = actor_response.get("is_scene_finished", False)
+        current_speaker = actor_response.get("character_id", "")
+        
+        result = {
+            "next_speaker_id": None,
+            "should_pause_for_user": False,
+            "is_scene_finished": is_scene_finished,
+            "routing_reason": ""
+        }
+        
+        # 如果场景已结束，不再路由
+        if is_scene_finished:
+            result["routing_reason"] = "场景已结束"
+            logger.info("   🏁 场景已结束，停止路由")
+            return result
+        
+        # 根据 addressing_target 决定下一位
+        if addressing_target == "user":
+            # 对话对象是玩家，暂停等待
+            result["next_speaker_id"] = "user"
+            result["should_pause_for_user"] = True
+            result["routing_reason"] = "演员指定对话对象为玩家"
+            logger.info("   ⏸️ 等待玩家输入")
+            
+        elif addressing_target in active_npcs:
+            # 对话对象是特定 NPC
+            result["next_speaker_id"] = addressing_target
+            result["routing_reason"] = f"演员指定对话对象为 {addressing_target}"
+            logger.info(f"   ➡️ 话筒递给: {addressing_target}")
+            
+        elif addressing_target == "everyone":
+            # 对话对象是所有人，由 OS 裁决
+            next_speaker = self._decide_next_speaker(
+                current_speaker=current_speaker,
+                active_npcs=active_npcs,
+                scene_memory=scene_memory
+            )
+            result["next_speaker_id"] = next_speaker
+            result["routing_reason"] = f"OS 裁决下一位发言者为 {next_speaker}"
+            logger.info(f"   🎲 OS 裁决: {next_speaker}")
+            
+        else:
+            # 未知的对话对象，尝试匹配
+            if addressing_target in active_npcs:
+                result["next_speaker_id"] = addressing_target
+            else:
+                # 默认找一个非当前发言者的 NPC
+                candidates = [nid for nid in active_npcs if nid != current_speaker]
+                if candidates:
+                    result["next_speaker_id"] = candidates[0]
+                else:
+                    result["should_pause_for_user"] = True
+                    result["next_speaker_id"] = "user"
+            result["routing_reason"] = f"未知对话对象 {addressing_target}，使用默认逻辑"
+            logger.info(f"   ⚠️ 未知对话对象，使用默认: {result['next_speaker_id']}")
+        
+        return result
+    
+    def _decide_next_speaker(
+        self,
+        current_speaker: str,
+        active_npcs: List[str],
+        scene_memory: Any = None
+    ) -> str:
+        """
+        当 addressing_target 为 everyone 时，裁决下一位发言者
+        
+        简单策略：选择非当前发言者的第一个 NPC
+        高级策略：可以调用 LLM 使用 os_system.txt 提示词进行智能裁决
+        
+        Args:
+            current_speaker: 当前发言者ID
+            active_npcs: 在场 NPC 列表
+            scene_memory: 场景记忆板
+        
+        Returns:
+            下一位发言者的 ID
+        """
+        # 排除当前发言者
+        candidates = [nid for nid in active_npcs if nid != current_speaker]
+        
+        if not candidates:
+            # 没有其他 NPC，返回玩家
+            return "user"
+        
+        # 简单策略：轮询选择
+        # 可以在这里扩展为使用 LLM 进行智能裁决
+        return candidates[0]
+    
+    def route_dialogue_with_llm(
+        self,
+        actor_response: Dict[str, Any],
+        active_npcs: Dict[str, Dict[str, Any]],
+        scene_memory: Any = None
+    ) -> Dict[str, Any]:
+        """
+        使用 LLM 进行智能对话路由（当 addressing_target 为 everyone 时）
+        
+        Args:
+            actor_response: 演员的响应数据
+            active_npcs: 在场 NPC 信息 {npc_id: {name: str, traits: str}}
+            scene_memory: 场景记忆板实例
+        
+        Returns:
+            路由决策结果
+        """
+        addressing_target = actor_response.get("addressing_target", "everyone")
+        
+        # 如果不是 everyone，使用简单路由
+        if addressing_target != "everyone":
+            return self.route_dialogue(
+                actor_response,
+                list(active_npcs.keys()),
+                scene_memory
+            )
+        
+        logger.info("🤖 使用 LLM 进行智能路由...")
+        
+        try:
+            # 加载 OS 提示词
+            prompt_file = settings.PROMPTS_DIR / "online" / "os_system.txt"
+            if not prompt_file.exists():
+                logger.warning("⚠️ os_system.txt 不存在，使用简单路由")
+                return self.route_dialogue(
+                    actor_response,
+                    list(active_npcs.keys()),
+                    scene_memory
+                )
+            
+            with open(prompt_file, "r", encoding="utf-8") as f:
+                prompt_template = f.read()
+            
+            # 格式化在场角色列表
+            char_list_lines = []
+            for npc_id, info in active_npcs.items():
+                name = info.get("name", npc_id)
+                traits = info.get("traits", "未知")
+                char_list_lines.append(f"- {npc_id}: {name} ({traits})")
+            active_char_list = "\n".join(char_list_lines)
+            
+            # 获取最近对话
+            recent_dialogue = ""
+            if scene_memory:
+                recent_dialogue = scene_memory.get_dialogue_for_prompt(limit=5)
+            
+            # 填充提示词
+            last_speaker_id = actor_response.get("character_id", "")
+            last_speaker_name = actor_response.get("character_name", "")
+            
+            filled_prompt = prompt_template.replace(
+                "{active_char_list}", active_char_list
+            ).replace(
+                "{recent_dialogue_log}", recent_dialogue
+            ).replace(
+                "{last_speaker_id}", last_speaker_id
+            ).replace(
+                "{last_speaker_name}", last_speaker_name
+            ).replace(
+                "{addressing_target}", addressing_target
+            )
+            
+            # 转义花括号
+            escaped_prompt = filled_prompt.replace("{", "{{").replace("}", "}}")
+            
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", escaped_prompt),
+                ("human", "请根据以上信息，决定下一位发言者。")
+            ])
+            
+            chain = prompt | self.llm | StrOutputParser()
+            response = chain.invoke({})
+            
+            # 解析响应
+            result = self._parse_routing_response(response, list(active_npcs.keys()))
+            
+            logger.info(f"✅ LLM 路由决策: {result.get('next_speaker_id')}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ LLM 路由失败: {e}", exc_info=True)
+            # 回退到简单路由
+            return self.route_dialogue(
+                actor_response,
+                list(active_npcs.keys()),
+                scene_memory
+            )
+    
+    def _parse_routing_response(
+        self,
+        response: str,
+        active_npcs: List[str]
+    ) -> Dict[str, Any]:
+        """解析 LLM 路由响应"""
+        result = response.strip()
+        if result.startswith("```json"):
+            result = result[7:]
+        if result.startswith("```"):
+            result = result[3:]
+        if result.endswith("```"):
+            result = result[:-3]
+        result = result.strip()
+        
+        try:
+            data = json.loads(result)
+            return {
+                "next_speaker_id": data.get("next_speaker_id", active_npcs[0] if active_npcs else "user"),
+                "should_pause_for_user": data.get("should_pause_for_user", False),
+                "is_scene_finished": data.get("is_scene_finished", False),
+                "routing_reason": data.get("analysis", "LLM 裁决")
+            }
+        except json.JSONDecodeError:
+            # 解析失败，使用默认
+            return {
+                "next_speaker_id": active_npcs[0] if active_npcs else "user",
+                "should_pause_for_user": False,
+                "is_scene_finished": False,
+                "routing_reason": "LLM 响应解析失败，使用默认"
+            }
