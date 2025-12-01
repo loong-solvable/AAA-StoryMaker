@@ -1,7 +1,10 @@
 """
 第二阶段Demo测试脚本
 演示信息中枢OS和逻辑审查官Logic的基本功能
+
+使用新的 data/worlds/ 格式，通过运行时目录加载数据
 """
+import json
 from pathlib import Path
 from config.settings import settings
 from utils.logger import default_logger as logger
@@ -21,17 +24,89 @@ def print_separator(title: str = ""):
     print()
 
 
+def find_or_create_genesis() -> Path:
+    """
+    查找或创建 genesis.json 文件
+    
+    优先级:
+    1. 现有运行时目录中的 genesis.json
+    2. 从 data/worlds/ 构建并保存到临时位置
+    """
+    # 查找现有运行时目录
+    runtime_dir = settings.DATA_DIR / "runtime"
+    if runtime_dir.exists():
+        for rt_dir in sorted(runtime_dir.iterdir(), reverse=True):
+            genesis_path = rt_dir / "genesis.json"
+            if genesis_path.exists():
+                print(f"✅ 找到现有 genesis.json: {genesis_path}")
+                return genesis_path
+    
+    # 从 worlds 目录构建
+    worlds_dir = settings.DATA_DIR / "worlds"
+    if not worlds_dir.exists():
+        raise FileNotFoundError("未找到 data/worlds/ 目录，请先运行 run_creator_god.py")
+    
+    # 使用第一个世界
+    for world_dir in worlds_dir.iterdir():
+        if world_dir.is_dir() and (world_dir / "world_setting.json").exists():
+            print(f"📦 从世界目录构建 genesis 数据: {world_dir.name}")
+            
+            # 加载世界数据
+            with open(world_dir / "world_setting.json", "r", encoding="utf-8") as f:
+                world_setting = json.load(f)
+            
+            with open(world_dir / "characters_list.json", "r", encoding="utf-8") as f:
+                characters_list = json.load(f)
+            
+            # 加载所有角色档案
+            characters = []
+            characters_dir = world_dir / "characters"
+            if characters_dir.exists():
+                for char_file in characters_dir.glob("character_*.json"):
+                    with open(char_file, "r", encoding="utf-8") as f:
+                        characters.append(json.load(f))
+            
+            # 构建 genesis 格式数据
+            meta = world_setting.get("meta", {})
+            genesis_data = {
+                "world": {
+                    "title": meta.get("world_name", world_dir.name),
+                    "genre": meta.get("genre_type", "REALISTIC"),
+                    "description": meta.get("description", "")
+                },
+                "characters": characters,
+                "locations": world_setting.get("geography", {}).get("locations", []),
+                "physics_logic": world_setting.get("physics_logic", {}),
+                "social_logic": world_setting.get("social_logic", []),
+                "plot_hints": [],
+                "world_start_context": {
+                    "suggested_time": "下午",
+                    "suggested_location": "loc_001",
+                    "key_characters": [c.get("id") for c in characters[:2] if c.get("id")]
+                }
+            }
+            
+            # 保存到临时位置
+            temp_genesis = settings.DATA_DIR / "temp_genesis.json"
+            with open(temp_genesis, "w", encoding="utf-8") as f:
+                json.dump(genesis_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"✅ 已构建 genesis 数据: {temp_genesis}")
+            return temp_genesis
+    
+    raise FileNotFoundError("未找到任何世界数据")
+
+
 def test_os_initialization():
     """测试1: OS初始化和Genesis加载"""
     print_separator("测试1: 信息中枢OS初始化")
     
-    # 检查Genesis文件
-    genesis_path = settings.GENESIS_DIR / "genesis.json"
-    
-    if not genesis_path.exists():
-        print("❌ 未找到Genesis.json文件")
+    # 查找或创建 genesis.json
+    try:
+        genesis_path = find_or_create_genesis()
+    except FileNotFoundError as e:
+        print(f"❌ {e}")
         print(f"   请先运行: python run_creator_god.py")
-        print(f"   生成Genesis数据包")
         return None
     
     # 初始化OS
@@ -263,4 +338,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

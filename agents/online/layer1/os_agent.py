@@ -920,11 +920,11 @@ class {class_name}:
         # 当前小剧本数据
         self.current_script: Optional[Dict[str, Any]] = None
         
+        # 场景记忆板
+        self.scene_memory = None
+        
         # 加载提示词模板
         self.prompt_template = self._load_prompt_template()
-        
-        # 对话历史
-        self.dialogue_history: List[Dict[str, str]] = []
         
         logger.info(f"✅ {{self.CHARACTER_NAME}} 初始化完成")
     
@@ -933,6 +933,11 @@ class {class_name}:
         prompt_file = settings.PROMPTS_DIR / "online" / self.PROMPT_FILE
         with open(prompt_file, "r", encoding="utf-8") as f:
             return f.read()
+    
+    def bind_scene_memory(self, scene_memory):
+        """绑定场景记忆板"""
+        self.scene_memory = scene_memory
+        logger.info(f"📋 绑定场景记忆板，当前 {{scene_memory.get_dialogue_count()}} 条记录")
     
     def load_script(self, script_path: Path) -> bool:
         """加载小剧本"""
@@ -954,15 +959,11 @@ class {class_name}:
         """构建完整的提示词"""
         mission = self.current_script.get("mission", {{}}) if self.current_script else {{}}
         
-        # 格式化对话历史
-        history_lines = []
-        for entry in self.dialogue_history[-10:]:
-            speaker = entry.get("speaker", "未知")
-            content = entry.get("content", "")
-            history_lines.append(f"【{{speaker}}】: {{content}}")
-        if current_input:
-            history_lines.append(f"【对方】: {{current_input}}")
-        dialogue_history = "\\n".join(history_lines) if history_lines else "（这是对话的开始）"
+        # 从场景记忆板获取对话历史
+        if self.scene_memory:
+            dialogue_history = self.scene_memory.get_dialogue_for_prompt(limit=10)
+        else:
+            dialogue_history = "（这是对话的开始）"
         
         # 格式化关键话题
         key_topics = mission.get("key_topics", [])
@@ -997,8 +998,11 @@ class {class_name}:
         """对输入做出反应"""
         logger.info(f"🎭 {{self.CHARACTER_NAME}} 正在演绎...")
         
-        if scene_context and "script" in scene_context:
-            self.load_script_from_dict(scene_context["script"])
+        if scene_context:
+            if "script" in scene_context:
+                self.load_script_from_dict(scene_context["script"])
+            if "scene_memory" in scene_context:
+                self.bind_scene_memory(scene_context["scene_memory"])
         
         filled_prompt = self._build_prompt(current_input)
         escaped_prompt = filled_prompt.replace("{{", "{{{{").replace("}}", "}}}}")
@@ -1014,14 +1018,25 @@ class {class_name}:
             response = chain.invoke({{}})
             result = self._parse_response(response)
             
-            if current_input:
-                self.dialogue_history.append({{"speaker": "对方", "content": current_input}})
-            if result.get("content"):
-                self.dialogue_history.append({{"speaker": self.CHARACTER_NAME, "content": result["content"]}})
+            # 写入场景记忆板
+            if self.scene_memory and result.get("content"):
+                self.scene_memory.add_dialogue(
+                    speaker_id=self.CHARACTER_ID,
+                    speaker_name=self.CHARACTER_NAME,
+                    content=result.get("content", ""),
+                    action=result.get("action", ""),
+                    emotion=result.get("emotion", ""),
+                    addressing_target=result.get("addressing_target", "everyone")
+                )
+            
             if result.get("emotion"):
                 self.current_mood = result["emotion"]
             
+            if result.get("is_scene_finished") and self.scene_memory:
+                self.scene_memory.set_scene_status("FINISHED")
+            
             logger.info(f"✅ {{self.CHARACTER_NAME}} 演绎完成")
+            logger.info(f"   对话对象: {{result.get('addressing_target', 'everyone')}}")
             return result
         except Exception as e:
             logger.error(f"❌ {{self.CHARACTER_NAME}} 演绎失败: {{e}}", exc_info=True)
@@ -1042,6 +1057,8 @@ class {class_name}:
             data = json.loads(result)
             data["character_id"] = self.CHARACTER_ID
             data["character_name"] = self.CHARACTER_NAME
+            data.setdefault("addressing_target", "everyone")
+            data.setdefault("is_scene_finished", False)
             return data
         except json.JSONDecodeError:
             return {{

@@ -1,6 +1,6 @@
 """
 林晨 (npc_001) - 角色专属Agent
-自动生成于 2025-12-01
+自动生成于 2025-12-01 11:43:00
 """
 import json
 from typing import Dict, Any, Optional, List
@@ -9,7 +9,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from utils.llm_factory import get_llm
 from utils.logger import setup_logger
-from utils.scene_memory import SceneMemory
 from config.settings import settings
 
 logger = setup_logger("npc_001", "npc_001.log")
@@ -34,17 +33,8 @@ class Npc001Agent:
         "traits": "AI算法工程师, 内向技术宅, 技术天才, 忠诚可靠, 渐露勇敢",
         "behavior_rules": "面对技术难题全力破解; 初始犹豫但卷入后主动出击; 优先保护伙伴和家人安全; 拒绝金钱诱惑坚持正义",
         "appearance": "二十多岁的年轻男子，身材瘦削，穿着简便休闲装，戴眼镜，眼神专注略带疲惫，散发内向技术宅气质。",
-        "relationships": """- 对 晴雨(npc_002): 信任伙伴，欣赏她的坚定，内心感激并依赖
-- 对 神秘人(npc_003): 神秘威胁者，内心恐惧警惕
-- 对 张瑞峰(npc_004): 心狠手辣的敌人，强烈敌视
-- 对 李婉(npc_005): 伪善威胁者，不信任并坚决拒绝
-- 对 老记者(npc_006): 正直可靠的盟友，寄予希望
-- 对 母亲(npc_007): 深爱家人，极度担心她的安危""",
-        "voice_samples": """「这个加密方式很特殊，不像是普通的商业加密。给我点时间，我试试看。」
-「你是谁？为什么监视我？」
-「晴雨，情况比我们想象的要严重。我们被盯上了。」
-「我有个想法，既然他们在追我们，那我们就主动出击。」
-「我们不会妥协的。」"""
+        "relationships": """- 对 晴雨(npc_002): 信任伙伴，欣赏她的坚定，内心感激并依赖\n- 对 你是谁(npc_003): 神秘威胁者，内心恐惧警惕\n- 对 张瑞峰(npc_004): 心狠手辣的敌人，强烈敌视\n- 对 李婉(npc_005): 伪善威胁者，不信任并坚决拒绝\n- 对 老记者(npc_006): 正直可靠的盟友，寄予希望\n- 对 母亲(npc_007): 深爱家人，极度担心她的安危""",
+        "voice_samples": """「这个加密方式很特殊，不像是普通的商业加密。给我点时间，我试试看。」\n「你是谁？为什么监视我？」\n「晴雨，情况比我们想象的要严重。我们被盯上了。」\n「我有个想法，既然他们在追我们，那我们就主动出击。我可以利用技术手段，反向追踪他们的服务器，找到更多证据。」\n「我们不会妥协的。」"""
     }
     
     def __init__(self):
@@ -62,8 +52,8 @@ class Npc001Agent:
         # 当前小剧本数据
         self.current_script: Optional[Dict[str, Any]] = None
         
-        # 场景记忆板（共享对话记录）
-        self.scene_memory: Optional[SceneMemory] = None
+        # 场景记忆板
+        self.scene_memory = None
         
         # 加载提示词模板
         self.prompt_template = self._load_prompt_template()
@@ -76,26 +66,13 @@ class Npc001Agent:
         with open(prompt_file, "r", encoding="utf-8") as f:
             return f.read()
     
-    def bind_scene_memory(self, scene_memory: SceneMemory):
-        """
-        绑定场景记忆板
-        
-        Args:
-            scene_memory: 场景记忆板实例
-        """
+    def bind_scene_memory(self, scene_memory):
+        """绑定场景记忆板"""
         self.scene_memory = scene_memory
         logger.info(f"📋 绑定场景记忆板，当前 {scene_memory.get_dialogue_count()} 条记录")
     
     def load_script(self, script_path: Path) -> bool:
-        """
-        加载小剧本
-        
-        Args:
-            script_path: 小剧本文件路径
-        
-        Returns:
-            是否加载成功
-        """
+        """加载小剧本"""
         try:
             with open(script_path, "r", encoding="utf-8") as f:
                 self.current_script = json.load(f)
@@ -106,71 +83,29 @@ class Npc001Agent:
             return False
     
     def load_script_from_dict(self, script_data: Dict[str, Any]) -> bool:
-        """
-        从字典加载小剧本
-        
-        Args:
-            script_data: 小剧本数据
-        
-        Returns:
-            是否加载成功
-        """
+        """从字典加载小剧本"""
         self.current_script = script_data
-        logger.info(f"📜 加载小剧本数据")
         return True
     
-    def _get_dialogue_history(self) -> str:
-        """
-        获取对话历史
-        
-        优先从场景记忆板读取，如果没有绑定则返回默认值
-        """
-        if self.scene_memory:
-            return self.scene_memory.get_dialogue_for_prompt(limit=10)
-        return "（这是对话的开始）"
-    
     def _build_prompt(self, current_input: str = "") -> str:
-        """
-        构建完整的提示词
+        """构建完整的提示词"""
+        mission = self.current_script.get("mission", {}) if self.current_script else {}
         
-        Args:
-            current_input: 当前输入（对方的发言，可选）
-        
-        Returns:
-            填充后的提示词
-        """
-        # 获取小剧本中的任务数据
-        mission = {}
-        if self.current_script:
-            mission = self.current_script.get("mission", {})
-        
-        # 获取对话历史（从场景记忆板）
-        dialogue_history = self._get_dialogue_history()
-        
-        # 如果有当前输入但还没写入记忆板，临时添加到历史末尾
-        if current_input and self.scene_memory:
-            # 检查最后一条是否已经是这个输入
-            last_entry = self.scene_memory.get_dialogue_log(1)
-            if not last_entry or last_entry[0].get("content") != current_input:
-                dialogue_history += f"\n【对方】: {current_input}"
-        elif current_input:
-            dialogue_history += f"\n【对方】: {current_input}"
+        # 从场景记忆板获取对话历史
+        if self.scene_memory:
+            dialogue_history = self.scene_memory.get_dialogue_for_prompt(limit=10)
+        else:
+            dialogue_history = "（这是对话的开始）"
         
         # 格式化关键话题
         key_topics = mission.get("key_topics", [])
-        if isinstance(key_topics, list):
-            key_topics_str = ", ".join(key_topics)
-        else:
-            key_topics_str = str(key_topics)
+        key_topics_str = ", ".join(key_topics) if isinstance(key_topics, list) else str(key_topics)
         
         # 填充模板
         filled_prompt = self.prompt_template
-        
-        # 填充角色静态数据
         for key, value in self.CHARACTER_DATA.items():
             filled_prompt = filled_prompt.replace("{" + key + "}", str(value))
         
-        # 填充小剧本数据
         script_vars = {
             "global_context": self.current_script.get("global_context", "未知场景") if self.current_script else "未知场景",
             "scene_summary": self.current_script.get("scene_summary", "未知剧情") if self.current_script else "未知剧情",
@@ -182,7 +117,6 @@ class Npc001Agent:
             "special_notes": mission.get("special_notes", "无特殊注意事项"),
             "dialogue_history": dialogue_history
         }
-        
         for key, value in script_vars.items():
             filled_prompt = filled_prompt.replace("{" + key + "}", str(value))
         
@@ -193,29 +127,16 @@ class Npc001Agent:
         current_input: str = "",
         scene_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """
-        对输入做出反应
-        
-        Args:
-            current_input: 当前输入（对方的发言或事件描述）
-            scene_context: 场景上下文（可选，可包含 script 和 scene_memory）
-        
-        Returns:
-            角色的反应
-        """
+        """对输入做出反应"""
         logger.info(f"🎭 {self.CHARACTER_NAME} 正在演绎...")
         
-        # 如果传入了场景上下文中的小剧本，加载它
         if scene_context:
             if "script" in scene_context:
                 self.load_script_from_dict(scene_context["script"])
             if "scene_memory" in scene_context:
                 self.bind_scene_memory(scene_context["scene_memory"])
         
-        # 构建提示词
         filled_prompt = self._build_prompt(current_input)
-        
-        # 转义花括号，避免 LangChain 将其识别为变量
         escaped_prompt = filled_prompt.replace("{", "{{").replace("}", "}}")
         
         prompt = ChatPromptTemplate.from_messages([
@@ -227,11 +148,9 @@ class Npc001Agent:
         
         try:
             response = chain.invoke({})
-            
-            # 解析响应
             result = self._parse_response(response)
             
-            # 写入场景记忆板（公屏）
+            # 写入场景记忆板
             if self.scene_memory and result.get("content"):
                 self.scene_memory.add_dialogue(
                     speaker_id=self.CHARACTER_ID,
@@ -242,28 +161,21 @@ class Npc001Agent:
                     addressing_target=result.get("addressing_target", "everyone")
                 )
             
-            # 更新情绪
             if result.get("emotion"):
                 self.current_mood = result["emotion"]
             
-            # 如果场景结束，更新场景状态
             if result.get("is_scene_finished") and self.scene_memory:
                 self.scene_memory.set_scene_status("FINISHED")
             
             logger.info(f"✅ {self.CHARACTER_NAME} 演绎完成")
-            logger.info(f"   情绪: {result.get('emotion', '未知')}")
             logger.info(f"   对话对象: {result.get('addressing_target', 'everyone')}")
-            logger.info(f"   场景结束: {result.get('is_scene_finished', False)}")
-            
             return result
-            
         except Exception as e:
             logger.error(f"❌ {self.CHARACTER_NAME} 演绎失败: {e}", exc_info=True)
             return self._create_fallback_response()
     
     def _parse_response(self, response: str) -> Dict[str, Any]:
         """解析LLM响应"""
-        # 清理 markdown 代码块标记
         result = response.strip()
         if result.startswith("```json"):
             result = result[7:]
@@ -275,14 +187,12 @@ class Npc001Agent:
         
         try:
             data = json.loads(result)
-            # 添加角色信息
             data["character_id"] = self.CHARACTER_ID
             data["character_name"] = self.CHARACTER_NAME
+            data.setdefault("addressing_target", "everyone")
+            data.setdefault("is_scene_finished", False)
             return data
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ JSON解析失败: {e}")
-            logger.error(f"原始响应: {result[:300]}...")
-            # 尝试提取关键内容
+        except json.JSONDecodeError:
             return {
                 "character_id": self.CHARACTER_ID,
                 "character_name": self.CHARACTER_NAME,
@@ -299,7 +209,7 @@ class Npc001Agent:
         return {
             "character_id": self.CHARACTER_ID,
             "character_name": self.CHARACTER_NAME,
-            "thought": "（系统异常，保持沉默）",
+            "thought": "（系统异常）",
             "emotion": self.current_mood,
             "action": "沉默了一会儿",
             "content": "嗯...",
@@ -324,8 +234,12 @@ class Npc001Agent:
             "location": self.current_location,
             "activity": self.current_activity,
             "mood": self.current_mood,
-            "scene_memory_bound": self.scene_memory is not None
+            "dialogue_count": len(self.dialogue_history)
         }
+    
+    def clear_dialogue_history(self):
+        """清空对话历史"""
+        self.dialogue_history = []
 
 
 # 便捷函数：创建Agent实例

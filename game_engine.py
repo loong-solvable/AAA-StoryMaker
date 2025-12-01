@@ -8,6 +8,7 @@ from uuid import uuid4
 from config.settings import settings
 from utils.logger import setup_logger
 from utils.database import StateManager
+from utils.world_state_sync import WorldStateSync
 from agents.online.layer1.os_agent import OperatingSystem
 from agents.online.layer1.logic_agent import LogicValidator
 from agents.online.layer2.ws_agent import WorldStateManager
@@ -69,6 +70,16 @@ class GameEngine:
         # 玩家状态
         self.player_location = self.os.world_context.current_location
         self.player_name = "玩家"  # 可以让用户自定义
+        
+        # 初始化世界状态同步器（用于同步 world_state.json）
+        self.runtime_dir = genesis_path.parent if genesis_path else None
+        self.world_state_sync: Optional[WorldStateSync] = None
+        if self.runtime_dir and (self.runtime_dir / "ws").exists():
+            try:
+                self.world_state_sync = WorldStateSync(self.runtime_dir)
+                logger.info("✅ 世界状态同步器已初始化")
+            except Exception as e:
+                logger.warning(f"⚠️ 世界状态同步器初始化失败: {e}")
         
         self._bootstrap_character_cards()
         self._record_agent_snapshots(turn_number=0)
@@ -391,8 +402,86 @@ class GameEngine:
                 turn_number=turn_number,
             )
             self._record_agent_snapshots(turn_number=turn_number)
+            
+            # 同步世界状态到 world_state.json
+            self._sync_world_state_file(turn_number, world_update)
+            
         except Exception as exc:
             logger.warning(f"⚠️ 记录回合数据失败: {exc}")
+    
+    def _sync_world_state_file(
+        self,
+        turn_number: int,
+        world_update: Optional[Dict[str, Any]]
+    ):
+        """同步世界状态到 ws/world_state.json 文件"""
+        if not self.world_state_sync:
+            return
+        
+        try:
+            # 获取当前世界状态快照
+            ws_snapshot = self.world_state.get_state_snapshot()
+            
+            # 构建完整的世界状态数据
+            world_state_data = {
+                "current_scene": {
+                    "location_id": self.player_location,
+                    "location_name": self._get_location_name(self.player_location),
+                    "time_of_day": self.world_state.current_time,
+                    "description": ws_snapshot.get("current_situation", "")
+                },
+                "weather": ws_snapshot.get("weather", {}),
+                "characters_present": [
+                    {
+                        "id": char_id,
+                        "name": self._get_character_name(char_id),
+                        "mood": self._get_character_mood(char_id),
+                        "activity": "在场"
+                    }
+                    for char_id in self.os.world_context.present_characters
+                ],
+                "characters_absent": [],
+                "relationship_matrix": ws_snapshot.get("relationship_changes", {}),
+                "world_situation": world_update or {},
+                "meta": {
+                    "game_turn": turn_number,
+                    "last_updated": self._get_current_timestamp(),
+                    "total_elapsed_time": ws_snapshot.get("elapsed_time", "0分钟")
+                }
+            }
+            
+            self.world_state_sync.update_world_state_file(world_state_data)
+            logger.debug(f"✅ world_state.json 已同步 (回合 {turn_number})")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ 同步 world_state.json 失败: {e}")
+    
+    def _get_location_name(self, location_id: str) -> str:
+        """获取地点名称"""
+        for loc in self.os.genesis_data.get("locations", []):
+            if loc.get("id") == location_id:
+                return loc.get("name", location_id)
+        return location_id
+    
+    def _get_character_name(self, char_id: str) -> str:
+        """获取角色名称"""
+        for char in self.os.genesis_data.get("characters", []):
+            if char.get("id") == char_id:
+                return char.get("name", char_id)
+        return char_id
+    
+    def _get_character_mood(self, char_id: str) -> str:
+        """获取角色心情"""
+        npc = self.npc_manager.get_npc(char_id)
+        if npc:
+            state = npc.get_state()
+            return state.get("mood", "平静")
+        return "平静"
+    
+    def _get_current_timestamp(self) -> str:
+        """获取当前时间戳"""
+        from datetime import datetime
+        return datetime.now().isoformat()
 
     def _serialize_reactions(self, reactions: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
         """将NPC反应转换为可序列化的结构"""
