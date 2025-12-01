@@ -597,7 +597,8 @@ class OperatingSystem:
         with open(scene_file, "r", encoding="utf-8") as f:
             scene_data = json.load(f)
         
-        present_characters = scene_data.get("present_characters", [])
+        # 支持 characters 和 present_characters 两种字段名
+        present_characters = scene_data.get("characters", scene_data.get("present_characters", []))
         
         # 2. 筛选 first_appearance=true 的角色
         first_appearance_chars = [
@@ -665,8 +666,11 @@ class OperatingSystem:
         Returns:
             初始化结果
         """
-        # 1. 读取角色卡文件
+        # 1. 读取角色卡文件（支持两种命名方式）
         character_file = world_dir / "characters" / f"character_{char_id}.json"
+        if not character_file.exists():
+            # 尝试另一种命名方式
+            character_file = world_dir / "characters" / f"{char_id}.json"
         if not character_file.exists():
             return {"success": False, "error": f"角色卡文件不存在: {character_file}"}
         
