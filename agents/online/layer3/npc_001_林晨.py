@@ -9,6 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from utils.llm_factory import get_llm
 from utils.logger import setup_logger
+from utils.scene_memory import SceneMemory
 from config.settings import settings
 
 logger = setup_logger("npc_001", "npc_001.log")
@@ -61,11 +62,11 @@ class Npc001Agent:
         # 当前小剧本数据
         self.current_script: Optional[Dict[str, Any]] = None
         
+        # 场景记忆板（共享对话记录）
+        self.scene_memory: Optional[SceneMemory] = None
+        
         # 加载提示词模板
         self.prompt_template = self._load_prompt_template()
-        
-        # 对话历史
-        self.dialogue_history: List[Dict[str, str]] = []
         
         logger.info(f"✅ {self.CHARACTER_NAME} 初始化完成")
     
@@ -74,6 +75,16 @@ class Npc001Agent:
         prompt_file = settings.PROMPTS_DIR / "online" / self.PROMPT_FILE
         with open(prompt_file, "r", encoding="utf-8") as f:
             return f.read()
+    
+    def bind_scene_memory(self, scene_memory: SceneMemory):
+        """
+        绑定场景记忆板
+        
+        Args:
+            scene_memory: 场景记忆板实例
+        """
+        self.scene_memory = scene_memory
+        logger.info(f"📋 绑定场景记忆板，当前 {scene_memory.get_dialogue_count()} 条记录")
     
     def load_script(self, script_path: Path) -> bool:
         """
@@ -108,12 +119,22 @@ class Npc001Agent:
         logger.info(f"📜 加载小剧本数据")
         return True
     
+    def _get_dialogue_history(self) -> str:
+        """
+        获取对话历史
+        
+        优先从场景记忆板读取，如果没有绑定则返回默认值
+        """
+        if self.scene_memory:
+            return self.scene_memory.get_dialogue_for_prompt(limit=10)
+        return "（这是对话的开始）"
+    
     def _build_prompt(self, current_input: str = "") -> str:
         """
         构建完整的提示词
         
         Args:
-            current_input: 当前输入（对方的发言）
+            current_input: 当前输入（对方的发言，可选）
         
         Returns:
             填充后的提示词
@@ -123,17 +144,17 @@ class Npc001Agent:
         if self.current_script:
             mission = self.current_script.get("mission", {})
         
-        # 格式化对话历史
-        history_lines = []
-        for entry in self.dialogue_history[-10:]:  # 只保留最近10条
-            speaker = entry.get("speaker", "未知")
-            content = entry.get("content", "")
-            history_lines.append(f"【{speaker}】: {content}")
+        # 获取对话历史（从场景记忆板）
+        dialogue_history = self._get_dialogue_history()
         
-        if current_input:
-            history_lines.append(f"【对方】: {current_input}")
-        
-        dialogue_history = "\n".join(history_lines) if history_lines else "（这是对话的开始）"
+        # 如果有当前输入但还没写入记忆板，临时添加到历史末尾
+        if current_input and self.scene_memory:
+            # 检查最后一条是否已经是这个输入
+            last_entry = self.scene_memory.get_dialogue_log(1)
+            if not last_entry or last_entry[0].get("content") != current_input:
+                dialogue_history += f"\n【对方】: {current_input}"
+        elif current_input:
+            dialogue_history += f"\n【对方】: {current_input}"
         
         # 格式化关键话题
         key_topics = mission.get("key_topics", [])
@@ -177,7 +198,7 @@ class Npc001Agent:
         
         Args:
             current_input: 当前输入（对方的发言或事件描述）
-            scene_context: 场景上下文（可选）
+            scene_context: 场景上下文（可选，可包含 script 和 scene_memory）
         
         Returns:
             角色的反应
@@ -185,8 +206,11 @@ class Npc001Agent:
         logger.info(f"🎭 {self.CHARACTER_NAME} 正在演绎...")
         
         # 如果传入了场景上下文中的小剧本，加载它
-        if scene_context and "script" in scene_context:
-            self.load_script_from_dict(scene_context["script"])
+        if scene_context:
+            if "script" in scene_context:
+                self.load_script_from_dict(scene_context["script"])
+            if "scene_memory" in scene_context:
+                self.bind_scene_memory(scene_context["scene_memory"])
         
         # 构建提示词
         filled_prompt = self._build_prompt(current_input)
@@ -207,22 +231,23 @@ class Npc001Agent:
             # 解析响应
             result = self._parse_response(response)
             
-            # 记录到对话历史
-            if current_input:
-                self.dialogue_history.append({
-                    "speaker": "对方",
-                    "content": current_input
-                })
-            
-            if result.get("content"):
-                self.dialogue_history.append({
-                    "speaker": self.CHARACTER_NAME,
-                    "content": result["content"]
-                })
+            # 写入场景记忆板（公屏）
+            if self.scene_memory and result.get("content"):
+                self.scene_memory.add_dialogue(
+                    speaker_id=self.CHARACTER_ID,
+                    speaker_name=self.CHARACTER_NAME,
+                    content=result.get("content", ""),
+                    action=result.get("action", ""),
+                    emotion=result.get("emotion", "")
+                )
             
             # 更新情绪
             if result.get("emotion"):
                 self.current_mood = result["emotion"]
+            
+            # 如果场景结束，更新场景状态
+            if result.get("is_scene_finished") and self.scene_memory:
+                self.scene_memory.set_scene_status("FINISHED")
             
             logger.info(f"✅ {self.CHARACTER_NAME} 演绎完成")
             logger.info(f"   情绪: {result.get('emotion', '未知')}")
@@ -295,13 +320,8 @@ class Npc001Agent:
             "location": self.current_location,
             "activity": self.current_activity,
             "mood": self.current_mood,
-            "dialogue_count": len(self.dialogue_history)
+            "scene_memory_bound": self.scene_memory is not None
         }
-    
-    def clear_dialogue_history(self):
-        """清空对话历史"""
-        self.dialogue_history = []
-        logger.info(f"🗑️ {self.CHARACTER_NAME} 对话历史已清空")
 
 
 # 便捷函数：创建Agent实例
