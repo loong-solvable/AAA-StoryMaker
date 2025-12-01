@@ -92,6 +92,8 @@ def main():
         ("test_character_data_model.py", "3️⃣  角色数据模型测试"),
         ("test_illuminati_init.py", "4️⃣  光明会初始化测试"),
         ("test_character_prompt_generation.py", "5️⃣  角色提示词动态生成测试（重点）"),
+        ("test_file_paths_and_placeholders.py", "6️⃣  文件路径和占位符测试"),
+        ("test_world_state_dynamic_update.py", "7️⃣  世界状态动态更新测试"),
     ]
     
     results = []
