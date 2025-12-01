@@ -6,6 +6,7 @@
 2. 智能分发：将剧本拆解为每个演员（NPC Agent）的专属小剧本
 3. 消息路由：将小剧本分发给对应的演员 Agent
 4. 状态管理：维护游戏全局状态和世界上下文
+5. 角色初始化：动态初始化首次出场的角色Agent
 
 数据流：
     Plot (完整剧本)
@@ -20,6 +21,7 @@
 """
 import json
 import re
+import importlib.util
 from typing import Dict, Any, Optional, List, Callable
 from pathlib import Path
 from datetime import datetime
@@ -543,3 +545,488 @@ class OperatingSystem:
             self.save_game_state()
         
         logger.info("✅ 信息中枢OS已关闭")
+    
+    # ==========================================
+    # 角色动态初始化功能
+    # ==========================================
+    
+    def initialize_first_appearance_characters(
+        self,
+        runtime_dir: Path,
+        world_dir: Path
+    ) -> Dict[str, Any]:
+        """
+        初始化首次出场的角色
+        
+        读取 current_scene.json 中 first_appearance=true 的角色，
+        为每个角色生成专属提示词文件和 agent.py 文件，并初始化 Agent 实例。
+        
+        Args:
+            runtime_dir: 运行时目录路径，如 data/runtime/江城市_20251128_183246
+            world_dir: 世界数据目录路径，如 data/worlds/江城市
+        
+        Returns:
+            Dict: 初始化结果
+            {
+                "initialized": [{"id": "npc_001", "name": "林晨", "agent_file": "...", "prompt_file": "..."}],
+                "failed": [{"id": "npc_003", "error": "..."}],
+                "skipped": [{"id": "npc_002", "reason": "already initialized"}]
+            }
+        """
+        logger.info("🎭 开始初始化首次出场角色...")
+        
+        results = {
+            "initialized": [],
+            "failed": [],
+            "skipped": []
+        }
+        
+        # 1. 读取 current_scene.json
+        scene_file = runtime_dir / "plot" / "current_scene.json"
+        if not scene_file.exists():
+            logger.error(f"❌ 场景文件不存在: {scene_file}")
+            return {"error": f"场景文件不存在: {scene_file}"}
+        
+        with open(scene_file, "r", encoding="utf-8") as f:
+            scene_data = json.load(f)
+        
+        present_characters = scene_data.get("present_characters", [])
+        
+        # 2. 筛选 first_appearance=true 的角色
+        first_appearance_chars = [
+            char for char in present_characters 
+            if char.get("first_appearance", False)
+        ]
+        
+        logger.info(f"📋 发现 {len(first_appearance_chars)} 个首次出场角色")
+        
+        # 3. 为每个角色进行初始化
+        for char_info in first_appearance_chars:
+            char_id = char_info.get("id")
+            char_name = char_info.get("name", char_id)
+            
+            logger.info(f"   🎭 初始化角色: {char_name} ({char_id})")
+            
+            try:
+                result = self._initialize_single_character(
+                    char_id=char_id,
+                    char_name=char_name,
+                    world_dir=world_dir
+                )
+                
+                if result.get("success"):
+                    results["initialized"].append({
+                        "id": char_id,
+                        "name": char_name,
+                        "agent_file": result.get("agent_file"),
+                        "prompt_file": result.get("prompt_file")
+                    })
+                    logger.info(f"   ✅ {char_name} 初始化成功")
+                else:
+                    results["failed"].append({
+                        "id": char_id,
+                        "name": char_name,
+                        "error": result.get("error")
+                    })
+                    logger.error(f"   ❌ {char_name} 初始化失败: {result.get('error')}")
+                    
+            except Exception as e:
+                results["failed"].append({
+                    "id": char_id,
+                    "name": char_name,
+                    "error": str(e)
+                })
+                logger.error(f"   ❌ {char_name} 初始化异常: {e}", exc_info=True)
+        
+        logger.info(f"✅ 角色初始化完成: 成功 {len(results['initialized'])}, 失败 {len(results['failed'])}")
+        return results
+    
+    def _initialize_single_character(
+        self,
+        char_id: str,
+        char_name: str,
+        world_dir: Path
+    ) -> Dict[str, Any]:
+        """
+        初始化单个角色
+        
+        Args:
+            char_id: 角色ID，如 "npc_001"
+            char_name: 角色名称，如 "林晨"
+            world_dir: 世界数据目录
+        
+        Returns:
+            初始化结果
+        """
+        # 1. 读取角色卡文件
+        character_file = world_dir / "characters" / f"character_{char_id}.json"
+        if not character_file.exists():
+            return {"success": False, "error": f"角色卡文件不存在: {character_file}"}
+        
+        with open(character_file, "r", encoding="utf-8") as f:
+            character_data = json.load(f)
+        
+        # 2. 读取提示词模板
+        template_file = settings.PROMPTS_DIR / "online" / "npc_system.txt"
+        if not template_file.exists():
+            return {"success": False, "error": f"提示词模板不存在: {template_file}"}
+        
+        with open(template_file, "r", encoding="utf-8") as f:
+            prompt_template = f.read()
+        
+        # 3. 生成专属提示词文件
+        prompt_file = self._generate_character_prompt(
+            char_id=char_id,
+            char_name=char_name,
+            character_data=character_data,
+            prompt_template=prompt_template
+        )
+        
+        # 4. 生成专属 agent.py 文件
+        agent_file = self._generate_character_agent(
+            char_id=char_id,
+            char_name=char_name,
+            prompt_file=prompt_file
+        )
+        
+        # 5. 动态加载并注册 Agent
+        agent_instance = self._load_and_register_agent(
+            char_id=char_id,
+            char_name=char_name,
+            agent_file=agent_file,
+            character_data=character_data
+        )
+        
+        return {
+            "success": True,
+            "agent_file": str(agent_file),
+            "prompt_file": str(prompt_file),
+            "agent_instance": agent_instance
+        }
+    
+    def _generate_character_prompt(
+        self,
+        char_id: str,
+        char_name: str,
+        character_data: Dict[str, Any],
+        prompt_template: str
+    ) -> Path:
+        """
+        生成角色专属提示词文件
+        
+        Args:
+            char_id: 角色ID
+            char_name: 角色名称
+            character_data: 角色卡数据
+            prompt_template: 提示词模板
+        
+        Returns:
+            生成的提示词文件路径
+        """
+        # 格式化角色卡为可读文本
+        character_card = self._format_character_card(character_data)
+        
+        # 填充模板中的占位符
+        # 模板使用 {id}, {id_character}, {id_script} 等占位符
+        filled_prompt = prompt_template.replace("{id}", char_id)
+        filled_prompt = filled_prompt.replace("{id_character}", character_card)
+        # {id_script} 会在运行时动态填充，这里保留占位符
+        
+        # 保存到 prompts/online/ 目录
+        prompt_file = settings.PROMPTS_DIR / "online" / f"{char_id}_{char_name}.txt"
+        
+        with open(prompt_file, "w", encoding="utf-8") as f:
+            f.write(filled_prompt)
+        
+        logger.info(f"   📝 生成提示词文件: {prompt_file.name}")
+        return prompt_file
+    
+    def _format_character_card(self, character_data: Dict[str, Any]) -> str:
+        """
+        将角色卡数据格式化为可读文本
+        
+        Args:
+            character_data: 角色卡 JSON 数据
+        
+        Returns:
+            格式化后的角色卡文本
+        """
+        lines = []
+        
+        # 基本信息
+        lines.append(f"【角色ID】{character_data.get('id', '未知')}")
+        lines.append(f"【姓名】{character_data.get('name', '未知')}")
+        lines.append(f"【性别】{character_data.get('gender', '未知')}")
+        lines.append(f"【年龄】{character_data.get('age', '未知')}")
+        lines.append(f"【剧情重要性】{character_data.get('importance', 0.5)}")
+        
+        # 特质
+        traits = character_data.get('traits', [])
+        if traits:
+            lines.append(f"【人物特质】{', '.join(traits)}")
+        
+        # 行为准则
+        behavior_rules = character_data.get('behavior_rules', [])
+        if behavior_rules:
+            lines.append("【行为准则】")
+            for rule in behavior_rules:
+                lines.append(f"  - {rule}")
+        
+        # 人际关系
+        relationships = character_data.get('relationship_matrix', {})
+        if relationships:
+            lines.append("【人际关系】")
+            for other_id, rel_info in relationships.items():
+                address = rel_info.get('address_as', other_id)
+                attitude = rel_info.get('attitude', '未知')
+                lines.append(f"  - 对 {address}: {attitude}")
+        
+        # 持有物品
+        possessions = character_data.get('possessions', [])
+        if possessions:
+            lines.append(f"【持有物品】{', '.join(possessions)}")
+        
+        # 外貌描述
+        appearance = character_data.get('current_appearance', '')
+        if appearance:
+            lines.append(f"【外貌特征】{appearance}")
+        
+        # 语音样本
+        voice_samples = character_data.get('voice_samples', [])
+        if voice_samples:
+            lines.append("【典型台词】")
+            for sample in voice_samples[:3]:  # 只取前3个样本
+                lines.append(f"  「{sample}」")
+        
+        return "\n".join(lines)
+    
+    def _generate_character_agent(
+        self,
+        char_id: str,
+        char_name: str,
+        prompt_file: Path
+    ) -> Path:
+        """
+        生成角色专属 agent.py 文件
+        
+        Args:
+            char_id: 角色ID
+            char_name: 角色名称
+            prompt_file: 提示词文件路径
+        
+        Returns:
+            生成的 agent.py 文件路径
+        """
+        # 生成 agent.py 文件内容
+        agent_code = self._generate_agent_code(char_id, char_name, prompt_file)
+        
+        # 保存到 agents/online/layer3/ 目录
+        layer3_dir = Path(__file__).parent.parent / "layer3"
+        agent_file = layer3_dir / f"{char_id}_{char_name}.py"
+        
+        with open(agent_file, "w", encoding="utf-8") as f:
+            f.write(agent_code)
+        
+        logger.info(f"   🐍 生成Agent文件: {agent_file.name}")
+        return agent_file
+    
+    def _generate_agent_code(
+        self,
+        char_id: str,
+        char_name: str,
+        prompt_file: Path
+    ) -> str:
+        """
+        生成角色 Agent 的 Python 代码
+        
+        Args:
+            char_id: 角色ID
+            char_name: 角色名称
+            prompt_file: 提示词文件路径
+        
+        Returns:
+            生成的 Python 代码字符串
+        """
+        # 类名使用驼峰命名（移除下划线，首字母大写）
+        class_name = "".join(word.capitalize() for word in char_id.split("_")) + "Agent"
+        
+        code = f'''"""
+{char_name} ({char_id}) - 角色专属Agent
+自动生成于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+import json
+from typing import Dict, Any, Optional, List
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from utils.llm_factory import get_llm
+from utils.logger import setup_logger
+from config.settings import settings
+
+logger = setup_logger("{char_id}", "{char_id}.log")
+
+
+class {class_name}:
+    """
+    {char_name} 角色专属Agent
+    
+    角色ID: {char_id}
+    角色名称: {char_name}
+    """
+    
+    CHARACTER_ID = "{char_id}"
+    CHARACTER_NAME = "{char_name}"
+    PROMPT_FILE = "{prompt_file.name}"
+    
+    def __init__(self):
+        """初始化角色Agent"""
+        logger.info(f"🎭 初始化角色Agent: {{self.CHARACTER_NAME}} ({{self.CHARACTER_ID}})")
+        
+        # LLM实例
+        self.llm = get_llm(temperature=0.8)
+        
+        # 当前动态状态
+        self.current_mood = "平静"
+        self.current_location = ""
+        self.current_activity = ""
+        
+        # 加载专属提示词
+        self.system_prompt = self._load_prompt()
+        
+        # 对话历史
+        self.dialogue_history: List[str] = []
+        
+        logger.info(f"✅ {{self.CHARACTER_NAME}} 初始化完成")
+    
+    def _load_prompt(self) -> str:
+        """加载角色专属提示词"""
+        prompt_file = settings.PROMPTS_DIR / "online" / self.PROMPT_FILE
+        with open(prompt_file, "r", encoding="utf-8") as f:
+            return f.read()
+    
+    def react(
+        self,
+        script: str,
+        scene_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        对剧本做出反应
+        
+        Args:
+            script: 角色的小剧本
+            scene_context: 场景上下文（可选）
+        
+        Returns:
+            角色的反应
+        """
+        logger.info(f"🎭 {{self.CHARACTER_NAME}} 正在演绎...")
+        
+        # 填充提示词中的 {{id_script}} 占位符
+        filled_prompt = self.system_prompt.replace("{{id_script}}", script)
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", filled_prompt),
+            ("human", "请根据剧本演绎你的角色。")
+        ])
+        
+        chain = prompt | self.llm | StrOutputParser()
+        
+        try:
+            response = chain.invoke({{}})
+            
+            # 解析响应
+            result = self._parse_response(response)
+            
+            logger.info(f"✅ {{self.CHARACTER_NAME}} 演绎完成")
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ {{self.CHARACTER_NAME}} 演绎失败: {{e}}", exc_info=True)
+            return self._create_fallback_response()
+    
+    def _parse_response(self, response: str) -> Dict[str, Any]:
+        """解析LLM响应"""
+        return {{
+            "character_id": self.CHARACTER_ID,
+            "character_name": self.CHARACTER_NAME,
+            "performance": response,
+            "mood": self.current_mood
+        }}
+    
+    def _create_fallback_response(self) -> Dict[str, Any]:
+        """创建后备响应"""
+        return {{
+            "character_id": self.CHARACTER_ID,
+            "character_name": self.CHARACTER_NAME,
+            "performance": f"{{self.CHARACTER_ID}}发送\\n（{{self.CHARACTER_NAME}}沉默了一会儿）\\n{{self.CHARACTER_ID}}演绎完毕",
+            "mood": self.current_mood
+        }}
+    
+    def update_state(self, location: str = None, activity: str = None, mood: str = None):
+        """更新角色状态"""
+        if location:
+            self.current_location = location
+        if activity:
+            self.current_activity = activity
+        if mood:
+            self.current_mood = mood
+    
+    def get_state(self) -> Dict[str, Any]:
+        """获取角色当前状态"""
+        return {{
+            "id": self.CHARACTER_ID,
+            "name": self.CHARACTER_NAME,
+            "location": self.current_location,
+            "activity": self.current_activity,
+            "mood": self.current_mood
+        }}
+
+
+# 便捷函数：创建Agent实例
+def create_agent() -> {class_name}:
+    """创建 {char_name} Agent实例"""
+    return {class_name}()
+'''
+        return code
+    
+    def _load_and_register_agent(
+        self,
+        char_id: str,
+        char_name: str,
+        agent_file: Path,
+        character_data: Dict[str, Any]
+    ) -> Any:
+        """
+        动态加载并注册 Agent
+        
+        Args:
+            char_id: 角色ID
+            char_name: 角色名称
+            agent_file: agent.py 文件路径
+            character_data: 角色卡数据
+        
+        Returns:
+            Agent 实例
+        """
+        # 动态导入模块
+        spec = importlib.util.spec_from_file_location(
+            f"{char_id}_{char_name}",
+            agent_file
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        
+        # 调用 create_agent 函数创建实例
+        agent_instance = module.create_agent()
+        
+        # 注册到 OS
+        self.register_npc_agent(char_id, agent_instance)
+        
+        # 注册处理器
+        self.register_npc_handler(char_id, agent_instance.react)
+        
+        logger.info(f"   ✅ 注册Agent: {char_id} -> {char_name}")
+        return agent_instance
+    
+    def get_initialized_characters(self) -> List[str]:
+        """获取已初始化的角色ID列表"""
+        return list(self.npc_agents.keys())
