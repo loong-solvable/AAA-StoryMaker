@@ -673,28 +673,20 @@ class OperatingSystem:
         with open(character_file, "r", encoding="utf-8") as f:
             character_data = json.load(f)
         
-        # 2. 读取提示词模板
+        # 2. 检查提示词模板是否存在
         template_file = settings.PROMPTS_DIR / "online" / "npc_system.txt"
         if not template_file.exists():
             return {"success": False, "error": f"提示词模板不存在: {template_file}"}
         
-        with open(template_file, "r", encoding="utf-8") as f:
-            prompt_template = f.read()
-        
-        # 3. 生成专属提示词文件
-        prompt_file = self._generate_character_prompt(
-            char_id=char_id,
-            char_name=char_name,
-            character_data=character_data,
-            prompt_template=prompt_template
-        )
-        
-        # 4. 生成专属 agent.py 文件
+        # 3. 生成专属 agent.py 文件（包含角色数据）
         agent_file = self._generate_character_agent(
             char_id=char_id,
             char_name=char_name,
-            prompt_file=prompt_file
+            character_data=character_data
         )
+        
+        # prompt_file 现在使用通用模板
+        prompt_file = template_file
         
         # 5. 动态加载并注册 Agent
         agent_instance = self._load_and_register_agent(
@@ -811,7 +803,7 @@ class OperatingSystem:
         self,
         char_id: str,
         char_name: str,
-        prompt_file: Path
+        character_data: Dict[str, Any]
     ) -> Path:
         """
         生成角色专属 agent.py 文件
@@ -819,13 +811,13 @@ class OperatingSystem:
         Args:
             char_id: 角色ID
             char_name: 角色名称
-            prompt_file: 提示词文件路径
+            character_data: 角色卡数据
         
         Returns:
             生成的 agent.py 文件路径
         """
         # 生成 agent.py 文件内容
-        agent_code = self._generate_agent_code(char_id, char_name, prompt_file)
+        agent_code = self._generate_agent_code(char_id, char_name, character_data)
         
         # 保存到 agents/online/layer3/ 目录
         layer3_dir = Path(__file__).parent.parent / "layer3"
@@ -841,7 +833,7 @@ class OperatingSystem:
         self,
         char_id: str,
         char_name: str,
-        prompt_file: Path
+        character_data: Dict[str, Any]
     ) -> str:
         """
         生成角色 Agent 的 Python 代码
@@ -849,7 +841,7 @@ class OperatingSystem:
         Args:
             char_id: 角色ID
             char_name: 角色名称
-            prompt_file: 提示词文件路径
+            character_data: 角色卡数据
         
         Returns:
             生成的 Python 代码字符串
@@ -857,12 +849,30 @@ class OperatingSystem:
         # 类名使用驼峰命名（移除下划线，首字母大写）
         class_name = "".join(word.capitalize() for word in char_id.split("_")) + "Agent"
         
+        # 格式化角色数据
+        traits = ", ".join(character_data.get("traits", []))
+        behavior_rules = "; ".join(character_data.get("behavior_rules", []))
+        appearance = character_data.get("current_appearance", "未知外貌")
+        
+        # 格式化人际关系
+        relationships_lines = []
+        for other_id, rel_info in character_data.get("relationship_matrix", {}).items():
+            address = rel_info.get("address_as", other_id)
+            attitude = rel_info.get("attitude", "未知")
+            relationships_lines.append(f"- 对 {address}({other_id}): {attitude}")
+        relationships = "\\n".join(relationships_lines) if relationships_lines else "无已知关系"
+        
+        # 格式化语音样本
+        voice_samples = character_data.get("voice_samples", [])
+        voice_samples_str = "\\n".join([f"「{s}」" for s in voice_samples[:5]])
+        
         code = f'''"""
 {char_name} ({char_id}) - 角色专属Agent
 自动生成于 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
 import json
 from typing import Dict, Any, Optional, List
+from pathlib import Path
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from utils.llm_factory import get_llm
@@ -882,7 +892,18 @@ class {class_name}:
     
     CHARACTER_ID = "{char_id}"
     CHARACTER_NAME = "{char_name}"
-    PROMPT_FILE = "{prompt_file.name}"
+    PROMPT_FILE = "npc_system.txt"  # 使用通用模板
+    
+    # 角色静态数据（从角色卡提取）
+    CHARACTER_DATA = {{
+        "npc_id": "{char_id}",
+        "npc_name": "{char_name}",
+        "traits": "{traits}",
+        "behavior_rules": "{behavior_rules}",
+        "appearance": "{appearance}",
+        "relationships": """{relationships}""",
+        "voice_samples": """{voice_samples_str}"""
+    }}
     
     def __init__(self):
         """初始化角色Agent"""
@@ -896,76 +917,153 @@ class {class_name}:
         self.current_location = ""
         self.current_activity = ""
         
-        # 加载专属提示词
-        self.system_prompt = self._load_prompt()
+        # 当前小剧本数据
+        self.current_script: Optional[Dict[str, Any]] = None
+        
+        # 加载提示词模板
+        self.prompt_template = self._load_prompt_template()
         
         # 对话历史
-        self.dialogue_history: List[str] = []
+        self.dialogue_history: List[Dict[str, str]] = []
         
         logger.info(f"✅ {{self.CHARACTER_NAME}} 初始化完成")
     
-    def _load_prompt(self) -> str:
-        """加载角色专属提示词"""
+    def _load_prompt_template(self) -> str:
+        """加载提示词模板"""
         prompt_file = settings.PROMPTS_DIR / "online" / self.PROMPT_FILE
         with open(prompt_file, "r", encoding="utf-8") as f:
             return f.read()
     
+    def load_script(self, script_path: Path) -> bool:
+        """加载小剧本"""
+        try:
+            with open(script_path, "r", encoding="utf-8") as f:
+                self.current_script = json.load(f)
+            logger.info(f"📜 加载小剧本: {{script_path.name}}")
+            return True
+        except Exception as e:
+            logger.error(f"❌ 加载小剧本失败: {{e}}")
+            return False
+    
+    def load_script_from_dict(self, script_data: Dict[str, Any]) -> bool:
+        """从字典加载小剧本"""
+        self.current_script = script_data
+        return True
+    
+    def _build_prompt(self, current_input: str = "") -> str:
+        """构建完整的提示词"""
+        mission = self.current_script.get("mission", {{}}) if self.current_script else {{}}
+        
+        # 格式化对话历史
+        history_lines = []
+        for entry in self.dialogue_history[-10:]:
+            speaker = entry.get("speaker", "未知")
+            content = entry.get("content", "")
+            history_lines.append(f"【{{speaker}}】: {{content}}")
+        if current_input:
+            history_lines.append(f"【对方】: {{current_input}}")
+        dialogue_history = "\\n".join(history_lines) if history_lines else "（这是对话的开始）"
+        
+        # 格式化关键话题
+        key_topics = mission.get("key_topics", [])
+        key_topics_str = ", ".join(key_topics) if isinstance(key_topics, list) else str(key_topics)
+        
+        # 填充模板
+        filled_prompt = self.prompt_template
+        for key, value in self.CHARACTER_DATA.items():
+            filled_prompt = filled_prompt.replace("{{" + key + "}}", str(value))
+        
+        script_vars = {{
+            "global_context": self.current_script.get("global_context", "未知场景") if self.current_script else "未知场景",
+            "scene_summary": self.current_script.get("scene_summary", "未知剧情") if self.current_script else "未知剧情",
+            "role_in_scene": mission.get("role_in_scene", "普通参与者"),
+            "objective": mission.get("objective", "自然交流"),
+            "emotional_arc": mission.get("emotional_arc", "保持平静"),
+            "key_topics": key_topics_str,
+            "outcome_direction": mission.get("outcome_direction", "自然结束"),
+            "special_notes": mission.get("special_notes", "无特殊注意事项"),
+            "dialogue_history": dialogue_history
+        }}
+        for key, value in script_vars.items():
+            filled_prompt = filled_prompt.replace("{{" + key + "}}", str(value))
+        
+        return filled_prompt
+    
     def react(
         self,
-        script: str,
+        current_input: str = "",
         scene_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """
-        对剧本做出反应
-        
-        Args:
-            script: 角色的小剧本
-            scene_context: 场景上下文（可选）
-        
-        Returns:
-            角色的反应
-        """
+        """对输入做出反应"""
         logger.info(f"🎭 {{self.CHARACTER_NAME}} 正在演绎...")
         
-        # 填充提示词中的 {{id_script}} 占位符
-        filled_prompt = self.system_prompt.replace("{{id_script}}", script)
+        if scene_context and "script" in scene_context:
+            self.load_script_from_dict(scene_context["script"])
+        
+        filled_prompt = self._build_prompt(current_input)
+        escaped_prompt = filled_prompt.replace("{{", "{{{{").replace("}}", "}}}}")
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", filled_prompt),
-            ("human", "请根据剧本演绎你的角色。")
+            ("system", escaped_prompt),
+            ("human", "请根据以上信息，以角色身份做出反应。输出JSON格式。")
         ])
         
         chain = prompt | self.llm | StrOutputParser()
         
         try:
             response = chain.invoke({{}})
-            
-            # 解析响应
             result = self._parse_response(response)
+            
+            if current_input:
+                self.dialogue_history.append({{"speaker": "对方", "content": current_input}})
+            if result.get("content"):
+                self.dialogue_history.append({{"speaker": self.CHARACTER_NAME, "content": result["content"]}})
+            if result.get("emotion"):
+                self.current_mood = result["emotion"]
             
             logger.info(f"✅ {{self.CHARACTER_NAME}} 演绎完成")
             return result
-            
         except Exception as e:
             logger.error(f"❌ {{self.CHARACTER_NAME}} 演绎失败: {{e}}", exc_info=True)
             return self._create_fallback_response()
     
     def _parse_response(self, response: str) -> Dict[str, Any]:
         """解析LLM响应"""
-        return {{
-            "character_id": self.CHARACTER_ID,
-            "character_name": self.CHARACTER_NAME,
-            "performance": response,
-            "mood": self.current_mood
-        }}
+        result = response.strip()
+        if result.startswith("```json"):
+            result = result[7:]
+        if result.startswith("```"):
+            result = result[3:]
+        if result.endswith("```"):
+            result = result[:-3]
+        result = result.strip()
+        
+        try:
+            data = json.loads(result)
+            data["character_id"] = self.CHARACTER_ID
+            data["character_name"] = self.CHARACTER_NAME
+            return data
+        except json.JSONDecodeError:
+            return {{
+                "character_id": self.CHARACTER_ID,
+                "character_name": self.CHARACTER_NAME,
+                "thought": "（解析失败）",
+                "emotion": self.current_mood,
+                "action": "",
+                "content": result[:200] if result else "...",
+                "is_scene_finished": False
+            }}
     
     def _create_fallback_response(self) -> Dict[str, Any]:
         """创建后备响应"""
         return {{
             "character_id": self.CHARACTER_ID,
             "character_name": self.CHARACTER_NAME,
-            "performance": f"{{self.CHARACTER_ID}}发送\\n（{{self.CHARACTER_NAME}}沉默了一会儿）\\n{{self.CHARACTER_ID}}演绎完毕",
-            "mood": self.current_mood
+            "thought": "（系统异常）",
+            "emotion": self.current_mood,
+            "action": "沉默了一会儿",
+            "content": "嗯...",
+            "is_scene_finished": False
         }}
     
     def update_state(self, location: str = None, activity: str = None, mood: str = None):
@@ -984,8 +1082,13 @@ class {class_name}:
             "name": self.CHARACTER_NAME,
             "location": self.current_location,
             "activity": self.current_activity,
-            "mood": self.current_mood
+            "mood": self.current_mood,
+            "dialogue_count": len(self.dialogue_history)
         }}
+    
+    def clear_dialogue_history(self):
+        """清空对话历史"""
+        self.dialogue_history = []
 
 
 # 便捷函数：创建Agent实例
