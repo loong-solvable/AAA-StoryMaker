@@ -1,6 +1,6 @@
 """
 林晨 (npc_001) - 角色专属Agent
-自动生成于 2025-12-01 11:56:52
+自动生成于 2025-12-01 12:07:24
 """
 import json
 from typing import Dict, Any, Optional, List

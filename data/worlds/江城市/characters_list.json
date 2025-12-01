@@ -1,0 +1,22 @@
+{
+  "characters": [
+    {
+      "id": "npc_001",
+      "name": "林晨",
+      "role": "主要角色",
+      "importance": 85
+    },
+    {
+      "id": "npc_002",
+      "name": "苏晴雨",
+      "role": "主要角色",
+      "importance": 85
+    }
+  ],
+  "user_character": {
+    "id": "user",
+    "name": "玩家",
+    "description": "故事的参与者"
+  }
+}
+

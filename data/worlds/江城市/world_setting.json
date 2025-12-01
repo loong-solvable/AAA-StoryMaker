@@ -1,0 +1,40 @@
+{
+  "world_name": "江城市",
+  "world_type": "都市悬疑",
+  "time_period": "现代 (2024年)",
+  "description": "江城市是一座繁华的现代化大都市，表面繁荣背后暗流涌动。科技公司林立，但其中隐藏着数据交易的黑幕。",
+  "themes": [
+    "数据隐私",
+    "科技伦理",
+    "正义与勇气",
+    "信任与合作"
+  ],
+  "key_locations": [
+    {
+      "id": "loc_cafe",
+      "name": "市中心咖啡馆",
+      "description": "一家位于市中心的精品咖啡馆，白领们常来这里工作或会友"
+    },
+    {
+      "id": "loc_apartment",
+      "name": "林晨的公寓",
+      "description": "江城郊区的一栋老旧公寓，房间里堆满了电脑设备"
+    },
+    {
+      "id": "loc_hongtu",
+      "name": "鸿图科技总部",
+      "description": "江城最大的AI科技公司，表面光鲜的现代化大楼"
+    }
+  ],
+  "factions": [
+    {
+      "name": "鸿图科技",
+      "description": "表面是AI服务公司，暗地里进行用户数据交易",
+      "leader": "张瑞峰"
+    }
+  ],
+  "starting_location": "loc_cafe",
+  "starting_time": "上午10:30",
+  "starting_weather": "晴朗"
+}
+

@@ -1,0 +1,40 @@
+{
+  "current_scene": {
+    "location_id": "cafe_001",
+    "location_name": "江城市中心咖啡馆",
+    "time_of_day": "上午",
+    "description": "阳光洒进宽敞的咖啡馆，空气中弥漫着浓郁的咖啡香气，几张木桌旁散坐着顾客。"
+  },
+  "weather": {
+    "condition": "晴朗",
+    "temperature": "22°C"
+  },
+  "characters_present": [
+    {
+      "id": "npc_001",
+      "name": "林晨",
+      "mood": "专注",
+      "activity": "敲击笔记本电脑",
+      "appearance_note": "瘦削身材，戴黑框眼镜，格子衬衫牛仔裤"
+    },
+    {
+      "id": "npc_002",
+      "name": "苏晴雨",
+      "mood": "冷静",
+      "activity": "翻阅笔记",
+      "appearance_note": "长发微乱，休闲外套牛仔裤，眼神锐利"
+    }
+  ],
+  "characters_absent": [],
+  "relationship_matrix": {},
+  "world_situation": {
+    "summary": "江城市是一座宁静的现代都市，居民们过着平凡的日常生活。科技与新闻行业从业者众多，潜在的故事线索悄然酝酿。",
+    "tension_level": "平静",
+    "key_developments": []
+  },
+  "meta": {
+    "game_turn": 0,
+    "last_updated": "2025-12-01T12:03:35.016146",
+    "total_elapsed_time": "0分钟"
+  }
+}
