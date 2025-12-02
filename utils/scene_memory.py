@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, List
 from pathlib import Path
 from datetime import datetime
 from utils.logger import setup_logger
+from utils.file_naming import format_scene_memory_archive_name
 
 logger = setup_logger("SceneMemory", "scene_memory.log")
 
@@ -25,14 +26,14 @@ class SceneMemory:
         初始化场景记忆板
         
         Args:
-            memory_dir: 记忆目录路径，如 data/runtime/xxx/npc/memory
+            memory_dir: 记忆目录路径，如 data/runtime/xxx/scenes
             turn_id: 当前幕次ID
         """
         self.memory_dir = Path(memory_dir)
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         
         self.turn_id = turn_id
-        self.memory_file = self.memory_dir / "scene_memory.json"
+        self.memory_file = self.memory_dir / "current.json"  # 新命名：current.json
         
         # 初始化或加载记忆
         self._data = self._load_or_create()
@@ -72,12 +73,19 @@ class SceneMemory:
     def _archive_memory(self, old_data: Dict[str, Any]):
         """归档旧的记忆"""
         old_turn = old_data.get("meta", {}).get("turn_id", 0)
-        archive_file = self.memory_dir / f"scene_memory_turn_{old_turn}.json"
+        
+        # 使用新目录结构：scenes/archive/
+        archive_dir = self.memory_dir / "archive"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 使用新命名规则：scene_XXX.json
+        archive_filename = format_scene_memory_archive_name(old_turn)
+        archive_file = archive_dir / archive_filename
         
         with open(archive_file, "w", encoding="utf-8") as f:
             json.dump(old_data, f, ensure_ascii=False, indent=2)
         
-        logger.info(f"📦 归档旧记忆: {archive_file.name}")
+        logger.info(f"📦 归档旧记忆: archive/{archive_filename}")
     
     def _save(self):
         """保存记忆到文件"""
@@ -263,7 +271,10 @@ class AllSceneMemory:
             runtime_dir: 运行时目录，如 data/runtime/江城市_xxx
         """
         self.runtime_dir = Path(runtime_dir)
-        self.memory_file = self.runtime_dir / "all_scene_memory.json"
+        # 使用新目录结构：story/all_scenes.json
+        story_dir = self.runtime_dir / "story"
+        story_dir.mkdir(parents=True, exist_ok=True)
+        self.memory_file = story_dir / "all_scenes.json"
         
         # 初始化或加载
         self._data = self._load_or_create()
@@ -426,7 +437,8 @@ def create_scene_memory(runtime_dir: Path, turn_id: int = 1) -> SceneMemory:
     Returns:
         SceneMemory 实例
     """
-    memory_dir = runtime_dir / "npc" / "memory"
+    # 使用新目录结构：scenes/ 而不是 npc/memory/
+    memory_dir = runtime_dir / "scenes"
     return SceneMemory(memory_dir, turn_id)
 
 
