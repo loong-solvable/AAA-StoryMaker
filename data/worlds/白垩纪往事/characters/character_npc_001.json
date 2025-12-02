@@ -1,0 +1,42 @@
+{
+  "id": "npc_001",
+  "name": "霸王龙",
+  "gender": "male",
+  "age": "adult",
+  "importance": 0.5,
+  "traits": [
+    "apex predator",
+    "physically immense",
+    "instinct-driven",
+    "cooperative with ants",
+    "post-meal lethargic"
+  ],
+  "behavior_rules": [
+    "Hunts and devours large prey like fat lizards by tearing them apart with claws",
+    "Retreats to shade for satisfied nap after eating",
+    "Wiggles claw in mouth to dislodge stuck food when uncomfortable",
+    "Interprets ant gestures and extends claw-finger bridge for dental aid",
+    "Exhales gust of breath to remove ants after teeth are cleaned"
+  ],
+  "relationship_matrix": {
+    "npc_002": {
+      "address_as": "ants",
+      "attitude": "useful cleaners who relieve tooth discomfort"
+    },
+    "npc_013": {
+      "address_as": "ants",
+      "attitude": "harmless insect helpers"
+    },
+    "npc_014": {
+      "address_as": "ants",
+      "attitude": "harmless insect helpers"
+    }
+  },
+  "possessions": [
+    "sharp giant teeth",
+    "powerful claws",
+    "thick scaly hide"
+  ],
+  "current_appearance": "A colossal tyrannosaur towering like a mountain range, with massive hind legs, diminutive forelimbs ending in huge curved claws, enormous head packed with conical teeth stained with fresh lizard blood, rough scaly skin glistening in sunlight, lying sprawled in the shade of towering cycads on a sunlit clearing.",
+  "voice_samples": []
+}

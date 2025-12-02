@@ -31,14 +31,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from utils.logger import setup_logger
 from utils.llm_factory import get_llm
-from utils.file_naming import (
-    format_scene_id,
-    format_plot_archive_name,
-    format_actor_script_archive_name,
-    format_actor_current_script_name,
-    format_actor_history_name,
-    format_scene_memory_archive_name
-)
 from config.settings import settings
 from agents.message_protocol import (
     Message, AgentRole, MessageType, WorldContext
@@ -1291,30 +1283,31 @@ def create_agent() -> {class_name}:
             # 5. 获取当前场景ID（用于归档命名）
             scene_id = current_script.get("scene_id", 1) if current_script else 1
             
-            # 6. 确保 actors 目录存在（新结构）
-            actors_dir = runtime_dir / "actors"
-            scripts_dir = actors_dir / "scripts"
-            archive_dir = actors_dir / "archive"
-            scripts_dir.mkdir(parents=True, exist_ok=True)
-            archive_dir.mkdir(parents=True, exist_ok=True)
+            # 6. 确保 npc 目录存在
+            npc_dir = runtime_dir / "npc"
+            npc_dir.mkdir(parents=True, exist_ok=True)
             
             # 7. 为每个角色保存小剧本
             actor_missions = parsed_result.get("actor_missions", {})
             
             for npc_id, mission_data in actor_missions.items():
-                logger.info(f"   📝 处理 {npc_id} 的小剧本...")
+                char_name = mission_data.get("character_name", npc_id)
+                logger.info(f"   📝 处理 {char_name} ({npc_id}) 的小剧本...")
+                
+                # 创建角色专属目录
+                actor_dir = npc_dir / f"{npc_id}_{char_name}"
+                actor_dir.mkdir(parents=True, exist_ok=True)
                 
                 # 归档旧的小剧本（如果存在）
-                archived_path = self._archive_old_script(scripts_dir, archive_dir, npc_id, scene_id)
+                archived_path = self._archive_old_script(actor_dir, npc_id, char_name, scene_id)
                 if archived_path:
                     results["archived"].append(str(archived_path))
                 
-                # 保存新的小剧本（使用新命名规则）
-                script_filename = format_actor_current_script_name(npc_id)
-                script_file = scripts_dir / script_filename
+                # 保存新的小剧本
+                script_file = actor_dir / "script.json"
                 script_data = {
                     "npc_id": npc_id,
-                    "character_name": mission_data.get("character_name", npc_id),
+                    "character_name": char_name,
                     "global_context": results["global_context"],
                     "scene_summary": parsed_result.get("scene_summary", ""),
                     "mission": mission_data,
@@ -1325,7 +1318,7 @@ def create_agent() -> {class_name}:
                     json.dump(script_data, f, ensure_ascii=False, indent=2)
                 
                 results["actor_scripts"][npc_id] = str(script_file)
-                logger.info(f"   ✅ 保存: {script_file.name}")
+                logger.info(f"   ✅ 保存: {actor_dir.name}/script.json")
             
             results["success"] = True
             logger.info(f"✅ 剧本拆分完成: 为 {len(actor_missions)} 个角色生成小剧本")
@@ -1484,55 +1477,73 @@ def create_agent() -> {class_name}:
     
     def _archive_old_script(
         self,
-        scripts_dir: Path,
-        archive_dir: Path,
+        actor_dir: Path,
         npc_id: str,
+        char_name: str,
         scene_id: int
     ) -> Optional[Path]:
         """
         归档旧的小剧本
         
         Args:
-            scripts_dir: 当前小剧本目录（actors/scripts/）
-            archive_dir: 归档目录（actors/archive/）
+            actor_dir: 角色专属目录
             npc_id: 角色 ID
+            char_name: 角色名称
             scene_id: 当前场景ID（用于归档命名）
         
         Returns:
             归档后的文件路径（如果有归档）
         """
-        # 使用新命名规则：npc_XXX.json
-        current_script_filename = format_actor_current_script_name(npc_id)
-        current_script = scripts_dir / current_script_filename
+        current_script = actor_dir / "script.json"
         
         if not current_script.exists():
             return None
         
-        # 使用新命名规则：npc_XXX_scene_XXX.json
-        archive_filename = format_actor_script_archive_name(npc_id, scene_id)
-        archive_path = archive_dir / archive_filename
+        # 创建历史目录
+        history_dir = actor_dir / "history"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 归档命名：script_scene_001.json
+        archive_filename = f"script_scene_{scene_id:03d}.json"
+        archive_path = history_dir / archive_filename
         
         # 移动文件
         shutil.move(str(current_script), str(archive_path))
         
-        logger.info(f"   📦 归档: {current_script_filename} -> archive/{archive_filename}")
+        logger.info(f"   📦 归档: script.json -> history/{archive_filename}")
         return archive_path
     
-    def get_actor_script(self, runtime_dir: Path, npc_id: str) -> Optional[Dict[str, Any]]:
+    def get_actor_script(self, runtime_dir: Path, npc_id: str, char_name: str = None) -> Optional[Dict[str, Any]]:
         """
         获取指定角色的当前小剧本
         
         Args:
             runtime_dir: 运行时目录
             npc_id: 角色 ID
+            char_name: 角色名称（可选，用于定位目录）
         
         Returns:
             小剧本数据
         """
-        # 使用新目录结构：actors/scripts/
-        script_filename = format_actor_current_script_name(npc_id)
-        script_file = runtime_dir / "actors" / "scripts" / script_filename
-        return self._read_json_file(script_file)
+        # 使用目录结构：npc/{npc_id}_{name}/script.json
+        npc_dir = runtime_dir / "npc"
+        
+        # 尝试匹配目录
+        if char_name:
+            actor_dir = npc_dir / f"{npc_id}_{char_name}"
+            script_file = actor_dir / "script.json"
+            if script_file.exists():
+                return self._read_json_file(script_file)
+        
+        # 遍历查找
+        if npc_dir.exists():
+            for subdir in npc_dir.iterdir():
+                if subdir.is_dir() and subdir.name.startswith(f"{npc_id}_"):
+                    script_file = subdir / "script.json"
+                    if script_file.exists():
+                        return self._read_json_file(script_file)
+        
+        return None
     
     def get_all_actor_scripts(self, runtime_dir: Path) -> Dict[str, Dict[str, Any]]:
         """
@@ -1544,16 +1555,22 @@ def create_agent() -> {class_name}:
         Returns:
             {npc_id: script_data} 字典
         """
-        scripts_dir = runtime_dir / "actors" / "scripts"
-        if not scripts_dir.exists():
+        npc_dir = runtime_dir / "npc"
+        if not npc_dir.exists():
             return {}
         
         scripts = {}
-        for script_file in scripts_dir.glob("npc_*.json"):
-            npc_id = script_file.stem  # 文件名就是 npc_id
-            script_data = self._read_json_file(script_file)
-            if script_data:
-                scripts[npc_id] = script_data
+        for subdir in npc_dir.iterdir():
+            if subdir.is_dir() and subdir.name.startswith("npc_"):
+                # 提取 npc_id（目录名格式：npc_XXX_角色名）
+                parts = subdir.name.split("_", 2)
+                if len(parts) >= 2:
+                    npc_id = f"{parts[0]}_{parts[1]}"  # npc_001
+                    script_file = subdir / "script.json"
+                    if script_file.exists():
+                        script_data = self._read_json_file(script_file)
+                        if script_data:
+                            scripts[npc_id] = script_data
         
         return scripts
     
@@ -1842,8 +1859,21 @@ def create_agent() -> {class_name}:
         logger.info("🎬 开始场景对话循环")
         logger.info("=" * 60)
         
-        # 创建场景记忆板
-        scene_memory = create_scene_memory(runtime_dir, turn_id=1)
+        # 获取当前场景ID（第几幕）
+        current_scene_id = 1
+        try:
+            script_file = runtime_dir / "plot" / "current_script.json"
+            if script_file.exists():
+                with open(script_file, "r", encoding="utf-8") as f:
+                    script_data = json.load(f)
+                    current_scene_id = script_data.get("scene_id", 1)
+        except Exception as e:
+            logger.warning(f"⚠️ 读取场景ID失败: {e}")
+        
+        logger.info(f"🎬 当前幕次: 第 {current_scene_id} 幕")
+        
+        # 创建场景记忆板（使用 scene_id）
+        scene_memory = create_scene_memory(runtime_dir, scene_id=current_scene_id)
         
         # === 清理不在场的NPC Agent ===
         scene_file = runtime_dir / "plot" / "current_scene.json"
@@ -1887,28 +1917,13 @@ def create_agent() -> {class_name}:
             logger.warning("⚠️ 没有在场的 NPC，场景无法进行")
             return {"success": False, "error": "没有在场的 NPC"}
         
-        # 获取当前场景ID（用于历史记录）
-        current_scene_id = 1
-        try:
-            scene_file = runtime_dir / "plot" / "current_scene.json"
-            if scene_file.exists():
-                with open(scene_file, "r", encoding="utf-8") as f:
-                    scene_data = json.load(f)
-                    # 尝试从 current_script.json 获取 scene_id
-                    script_file = runtime_dir / "plot" / "current_script.json"
-                    if script_file.exists():
-                        with open(script_file, "r", encoding="utf-8") as f2:
-                            script_data = json.load(f2)
-                            current_scene_id = script_data.get("scene_id", 1)
-        except Exception as e:
-            logger.warning(f"⚠️ 读取场景ID失败: {e}")
-        
         # 为所有 NPC 绑定场景记忆板和加载小剧本
         for npc_id, agent in self.npc_agents.items():
             agent.bind_scene_memory(scene_memory)
-            # 使用新目录结构：actors/scripts/
-            script_filename = format_actor_current_script_name(npc_id)
-            script_file = runtime_dir / "actors" / "scripts" / script_filename
+            # 使用目录结构：npc/{npc_id}_{name}/script.json
+            char_name = agent.CHARACTER_NAME
+            actor_dir = runtime_dir / "npc" / f"{npc_id}_{char_name}"
+            script_file = actor_dir / "script.json"
             if script_file.exists():
                 agent.load_script(script_file)
         
@@ -2131,9 +2146,9 @@ def create_agent() -> {class_name}:
         turn_in_scene: int = 1
     ) -> None:
         """
-        保存角色的演绎历史到扁平化目录
+        保存角色的演绎历史
         
-        存储位置: data/runtime/{world}/actors_history/{actor_id}.json
+        存储位置: data/runtime/{world}/npc/{actor_id}_{name}/history.json
         
         Args:
             runtime_dir: 运行时目录
@@ -2146,13 +2161,11 @@ def create_agent() -> {class_name}:
         """
         from datetime import datetime
         
-        # 使用新目录结构：actors_history/
-        actors_history_dir = runtime_dir / "actors_history"
-        actors_history_dir.mkdir(parents=True, exist_ok=True)
+        # 使用目录结构：npc/{actor_id}_{name}/
+        actor_dir = runtime_dir / "npc" / f"{actor_id}_{actor_name}"
+        actor_dir.mkdir(parents=True, exist_ok=True)
         
-        # 使用新命名规则：npc_XXX.json
-        history_filename = format_actor_history_name(actor_id)
-        history_file = actors_history_dir / history_filename
+        history_file = actor_dir / "history.json"
         
         # 读取现有历史或创建新的
         if history_file.exists():
@@ -2188,7 +2201,7 @@ def create_agent() -> {class_name}:
         with open(history_file, "w", encoding="utf-8") as f:
             json.dump(history_data, f, ensure_ascii=False, indent=2)
         
-        logger.info(f"   📜 保存 {actor_name} 历史: {history_filename} (第{scene_id}幕, 第{turn_in_scene}次发言)")
+        logger.info(f"   📜 保存 {actor_name} 历史: history.json (第{scene_id}幕, 第{turn_in_scene}次发言)")
     
     # ==========================================
     # 幕间处理 (Scene Transition)
@@ -2429,16 +2442,16 @@ def create_agent() -> {class_name}:
             logger.warning(f"   ⚠️ 读取场景ID失败: {e}")
         
         try:
-            # 归档 current_scene.json（使用新命名规则）
+            # 归档 current_scene.json
             if scene_file.exists():
-                archive_scene_name = format_plot_archive_name("scene", scene_num)
+                archive_scene_name = f"scene_{scene_num:03d}.json"
                 archive_scene_path = archive_dir / archive_scene_name
                 shutil.copy2(scene_file, archive_scene_path)
                 logger.info(f"   📁 归档场景: {archive_scene_name}")
             
-            # 归档 current_script.json（使用新命名规则）
+            # 归档 current_script.json
             if script_file.exists():
-                archive_script_name = format_plot_archive_name("script", scene_num)
+                archive_script_name = f"script_{scene_num:03d}.json"
                 archive_script_path = archive_dir / archive_script_name
                 shutil.copy2(script_file, archive_script_path)
                 logger.info(f"   📁 归档剧本: {archive_script_name}")

@@ -9,7 +9,6 @@ from typing import Dict, Any, Optional, List
 from pathlib import Path
 from datetime import datetime
 from utils.logger import setup_logger
-from utils.file_naming import format_scene_memory_archive_name
 
 logger = setup_logger("SceneMemory", "scene_memory.log")
 
@@ -21,24 +20,24 @@ class SceneMemory:
     管理一幕戏中所有演员共享的对话记录。
     """
     
-    def __init__(self, memory_dir: Path, turn_id: int = 1):
+    def __init__(self, memory_dir: Path, scene_id: int = 1):
         """
         初始化场景记忆板
         
         Args:
-            memory_dir: 记忆目录路径，如 data/runtime/xxx/scenes
-            turn_id: 当前幕次ID
+            memory_dir: 记忆目录路径，如 data/runtime/xxx/npc/memory
+            scene_id: 当前幕次ID（第几幕）
         """
         self.memory_dir = Path(memory_dir)
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         
-        self.turn_id = turn_id
-        self.memory_file = self.memory_dir / "current.json"  # 新命名：current.json
+        self.scene_id = scene_id
+        self.memory_file = self.memory_dir / "scene_memory.json"
         
         # 初始化或加载记忆
         self._data = self._load_or_create()
         
-        logger.info(f"📋 场景记忆板初始化: turn_id={turn_id}, 已有 {len(self._data.get('dialogue_log', []))} 条记录")
+        logger.info(f"📋 场景记忆板初始化: scene_id={scene_id}, 已有 {len(self._data.get('dialogue_log', []))} 条记录")
     
     def _load_or_create(self) -> Dict[str, Any]:
         """加载或创建记忆文件"""
@@ -47,7 +46,7 @@ class SceneMemory:
                 with open(self.memory_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     # 检查是否是同一幕
-                    if data.get("meta", {}).get("turn_id") == self.turn_id:
+                    if data.get("meta", {}).get("scene_id") == self.scene_id:
                         return data
                     else:
                         # 新的一幕，归档旧记忆
@@ -62,7 +61,7 @@ class SceneMemory:
         """创建新的记忆结构"""
         return {
             "meta": {
-                "turn_id": self.turn_id,
+                "scene_id": self.scene_id,
                 "scene_status": "ACTIVE",
                 "created_at": datetime.now().isoformat(),
                 "last_updated": datetime.now().isoformat()
@@ -72,20 +71,13 @@ class SceneMemory:
     
     def _archive_memory(self, old_data: Dict[str, Any]):
         """归档旧的记忆"""
-        old_turn = old_data.get("meta", {}).get("turn_id", 0)
-        
-        # 使用新目录结构：scenes/archive/
-        archive_dir = self.memory_dir / "archive"
-        archive_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 使用新命名规则：scene_XXX.json
-        archive_filename = format_scene_memory_archive_name(old_turn)
-        archive_file = archive_dir / archive_filename
+        old_scene_id = old_data.get("meta", {}).get("scene_id", 0)
+        archive_file = self.memory_dir / f"scene_memory_scene_{old_scene_id}.json"
         
         with open(archive_file, "w", encoding="utf-8") as f:
             json.dump(old_data, f, ensure_ascii=False, indent=2)
         
-        logger.info(f"📦 归档旧记忆: archive/{archive_filename}")
+        logger.info(f"📦 归档旧记忆: {archive_file.name}")
     
     def _save(self):
         """保存记忆到文件"""
@@ -271,10 +263,7 @@ class AllSceneMemory:
             runtime_dir: 运行时目录，如 data/runtime/江城市_xxx
         """
         self.runtime_dir = Path(runtime_dir)
-        # 使用新目录结构：story/all_scenes.json
-        story_dir = self.runtime_dir / "story"
-        story_dir.mkdir(parents=True, exist_ok=True)
-        self.memory_file = story_dir / "all_scenes.json"
+        self.memory_file = self.runtime_dir / "all_scene_memory.json"
         
         # 初始化或加载
         self._data = self._load_or_create()
@@ -320,10 +309,12 @@ class AllSceneMemory:
         """
         scene_data = scene_memory.to_dict()
         
+        # 从 SceneMemory 读取 scene_id
+        scene_id_from_memory = scene_data.get("meta", {}).get("scene_id", 0)
+        
         # 构建场景记录
         scene_record = {
-            "scene_id": len(self._data["scenes"]) + 1,
-            "turn_id": scene_data.get("meta", {}).get("turn_id", 0),
+            "scene_id": scene_id_from_memory if scene_id_from_memory > 0 else len(self._data["scenes"]) + 1,
             "status": scene_data.get("meta", {}).get("scene_status", "FINISHED"),
             "started_at": scene_data.get("meta", {}).get("created_at", ""),
             "finished_at": datetime.now().isoformat(),
@@ -426,20 +417,19 @@ class AllSceneMemory:
 
 
 # 便捷函数
-def create_scene_memory(runtime_dir: Path, turn_id: int = 1) -> SceneMemory:
+def create_scene_memory(runtime_dir: Path, scene_id: int = 1) -> SceneMemory:
     """
     创建场景记忆板实例
     
     Args:
         runtime_dir: 运行时目录，如 data/runtime/江城市_20251128_183246
-        turn_id: 当前幕次ID
+        scene_id: 当前幕次ID（第几幕）
     
     Returns:
         SceneMemory 实例
     """
-    # 使用新目录结构：scenes/ 而不是 npc/memory/
-    memory_dir = runtime_dir / "scenes"
-    return SceneMemory(memory_dir, turn_id)
+    memory_dir = runtime_dir / "npc" / "memory"
+    return SceneMemory(memory_dir, scene_id)
 
 
 def create_all_scene_memory(runtime_dir: Path) -> AllSceneMemory:
@@ -453,4 +443,3 @@ def create_all_scene_memory(runtime_dir: Path) -> AllSceneMemory:
         AllSceneMemory 实例
     """
     return AllSceneMemory(runtime_dir)
-

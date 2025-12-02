@@ -63,7 +63,7 @@ def run_three_scenes_test():
     from utils.scene_memory import create_scene_memory, create_all_scene_memory
     import importlib.util
     
-    world_name = "白垩纪文明"
+    world_name = "白垩纪往事"
     world_dir = settings.DATA_DIR / "worlds" / world_name
     
     # ==========================================
@@ -168,7 +168,7 @@ def run_three_scenes_test():
         print(f"   - 对话数: {scene_result['dialogue_count']}")
         
         # 显示本幕对话概要
-        scene_memory = create_scene_memory(runtime_dir, turn_id=scene_num)
+        scene_memory = create_scene_memory(runtime_dir, scene_id=scene_num)
         dialogue_log = scene_memory.get_dialogue_log()
         if dialogue_log:
             print(f"\n📝 本幕对话概要:")

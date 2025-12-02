@@ -1,0 +1,129 @@
+{
+  "meta": {
+    "world_name": "白垩纪往事",
+    "genre_type": "REALISTIC",
+    "description": "白垩纪晚期地球上，恐龙与蚂蚁形成共生文明，从原始生存演变为信息时代高度科技社会，依赖核威慑与反物质武器维持平衡，最终因罢工与内战走向毁灭。"
+  },
+  "physics_logic": {
+    "mode": "STANDARD_REALITY",
+    "hard_constraints": [
+      "恐龙体型巨大，无法进行精细操作（如接细电线、微小维修）",
+      "蚂蚁体型微小，无法独立产生好奇心与创造性思想，只能工程执行",
+      "反物质与正物质接触即发生湮灭，能量远超核弹，无法安全大规模储存",
+      "核武器与反物质装置需精细维护，破坏导线即瘫痪",
+      "无飞行或超自然能力，一切依现实物理与工程科技"
+    ],
+    "supernatural_system": null
+  },
+  "social_logic": [
+    {
+      "rule_name": "龙蚁共生联盟",
+      "trigger_condition": "恐龙从事精细制造/医疗/维修",
+      "consequence": "依赖蚂蚁执行，否则工厂/医院瘫痪",
+      "is_rigid": true
+    },
+    {
+      "rule_name": "核威慑和平",
+      "trigger_condition": "两大恐龙国开战",
+      "consequence": "共同毁灭恐惧维持和平，直至系统瘫痪",
+      "is_rigid": true
+    },
+    {
+      "rule_name": "蚂蚁罢工连锁效应",
+      "trigger_condition": "蚂蚁集体罢工",
+      "consequence": "恐龙工业/医疗崩溃，社会恐慌，城市断电停工",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "终极威慑负计时",
+      "trigger_condition": "遥控站信号中断",
+      "consequence": "反物质容器倒计时引爆，毁灭大陆甚至地球",
+      "is_rigid": true
+    }
+  ],
+  "geography": {
+    "locations": [
+      {
+        "id": "sute_forest_clearing",
+        "name": "苏铁林空地",
+        "region_type": "野外",
+        "sensory_profile": {
+          "visual": "阳光明媚空地，高大苏铁植物投下树阴，影子拉长",
+          "auditory": "隆隆胃声如雷，蝴蝶小飞虫嗡嗡，林间宁静",
+          "olfactory": "血腥味、潮湿大风、蜥蜴肉味",
+          "atmosphere": "原始生存、平静蒙昧"
+        },
+        "connected_to": []
+      },
+      {
+        "id": "ant_town",
+        "name": "蚂蚁小镇",
+        "region_type": "地下",
+        "sensory_profile": {
+          "visual": "地下通道，涌地表面见霸王龙如山脉",
+          "auditory": "地震般恐龙动作，巨爪抠牙声",
+          "olfactory": "气味语言传播",
+          "atmosphere": "饥饿旱季、蚁群兴奋"
+        },
+        "connected_to": [
+          "sute_forest_clearing"
+        ]
+      },
+      {
+        "id": "giant_stone_city",
+        "name": "巨石城（冈瓦纳首都）",
+        "region_type": "都市",
+        "sensory_profile": {
+          "visual": "上万米高楼，云海贴地，巨大汽车飞机影子，火光烟柱",
+          "auditory": "地面颤动，飞机如惊雷，警报爆炸声渐灭",
+          "olfactory": "工业污染",
+          "atmosphere": "拥挤膨胀、瘫痪混乱"
+        },
+        "connected_to": [
+          "imperial_palace",
+          "remote_station"
+        ]
+      },
+      {
+        "id": "imperial_palace",
+        "name": "皇宫",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "宽阔蓝色大厅，高耸入云，会议桌如平原",
+          "auditory": "恐龙呻吟、电话信号、雷粒咔哒爆炸、恐龙倒下巨响",
+          "olfactory": "未知",
+          "atmosphere": "紧急会议、紧张阴谋"
+        },
+        "connected_to": [
+          "giant_stone_city"
+        ]
+      },
+      {
+        "id": "remote_station",
+        "name": "冈瓦纳遥控站",
+        "region_type": "野外荒漠",
+        "sensory_profile": {
+          "visual": "不起眼小建筑，复杂天线，倒计时屏幕，蚁群黑海",
+          "auditory": "冷却扇嗡嗡、硬盘哒哒、火沟燃烧、蚁群涌入",
+          "olfactory": "焦味、汽油、滚烫热水蒸汽",
+          "atmosphere": "孤立紧张、末日战役"
+        },
+        "connected_to": [
+          "giant_stone_city"
+        ]
+      },
+      {
+        "id": "post_apocalypse_wasteland",
+        "name": "冰雪荒原（三千年后）",
+        "region_type": "野外",
+        "sensory_profile": {
+          "visual": "灰蒙蒙天空太阳光晕，厚冰雪覆盖，恐龙骨架白雪中醒目",
+          "auditory": "寒风呼啸",
+          "olfactory": "未知",
+          "atmosphere": "漫长寒冬、退化原始"
+        },
+        "connected_to": []
+      }
+    ]
+  }
+}

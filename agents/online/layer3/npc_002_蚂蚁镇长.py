@@ -1,8 +1,8 @@
 """
-达达斯皇帝 (npc_003) - 角色专属Agent
-自动生成于 2025-12-02 14:19:07
+蚂蚁镇长 (npc_002) - 角色专属Agent
+自动生成于 2025-12-02 13:15:42
 
-提示词文件: prompts/online/npc_prompt/npc_003_达达斯皇帝_prompt.txt
+提示词文件: prompts/online/npc_prompt/npc_002_蚂蚁镇长_prompt.txt
 """
 import json
 from typing import Dict, Any, Optional, List
@@ -13,23 +13,23 @@ from utils.llm_factory import get_llm
 from utils.logger import setup_logger
 from config.settings import settings
 
-logger = setup_logger("npc_003", "npc_003.log")
+logger = setup_logger("npc_002", "npc_002.log")
 
 
-class Npc003Agent:
+class Npc002Agent:
     """
-    达达斯皇帝 角色专属Agent
+    蚂蚁镇长 角色专属Agent
     
-    角色ID: npc_003
-    角色名称: 达达斯皇帝
+    角色ID: npc_002
+    角色名称: 蚂蚁镇长
     
-    提示词: 从 prompts/online/npc_prompt/npc_003_达达斯皇帝_prompt.txt 读取
+    提示词: 从 prompts/online/npc_prompt/npc_002_蚂蚁镇长_prompt.txt 读取
     角色数据已预填充到提示词文件中，运行时只需填充剧本相关变量
     """
     
-    CHARACTER_ID = "npc_003"
-    CHARACTER_NAME = "达达斯皇帝"
-    PROMPT_FILE = "npc_prompt/npc_003_达达斯皇帝_prompt.txt"  # 专属提示词文件
+    CHARACTER_ID = "npc_002"
+    CHARACTER_NAME = "蚂蚁镇长"
+    PROMPT_FILE = "npc_prompt/npc_002_蚂蚁镇长_prompt.txt"  # 专属提示词文件
     
     def __init__(self):
         """初始化角色Agent"""
@@ -242,6 +242,6 @@ class Npc003Agent:
 
 
 # 便捷函数：创建Agent实例
-def create_agent() -> Npc003Agent:
-    """创建 达达斯皇帝 Agent实例"""
-    return Npc003Agent()
+def create_agent() -> Npc002Agent:
+    """创建 蚂蚁镇长 Agent实例"""
+    return Npc002Agent()

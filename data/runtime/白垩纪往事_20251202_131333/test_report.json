@@ -1,0 +1,50 @@
+{
+  "test_time": "2025-12-02T13:27:43.835558",
+  "results": {
+    "scenes": [
+      {
+        "scene_id": 1,
+        "success": true,
+        "total_turns": 8,
+        "dialogue_count": 8,
+        "transition_result": {
+          "scene_archived": true,
+          "world_state_updated": true,
+          "next_script_generated": true,
+          "next_scene_id": 2
+        }
+      },
+      {
+        "scene_id": 2,
+        "success": true,
+        "total_turns": 3,
+        "dialogue_count": 3,
+        "transition_result": {
+          "scene_archived": true,
+          "world_state_updated": true,
+          "next_script_generated": true,
+          "next_scene_id": 3
+        }
+      },
+      {
+        "scene_id": 3,
+        "success": true,
+        "total_turns": 5,
+        "dialogue_count": 5,
+        "transition_result": null
+      }
+    ],
+    "history_files": [],
+    "issues": [
+      "第1幕后未产生新归档文件",
+      "第2幕后未产生新归档文件"
+    ]
+  },
+  "summary": {
+    "total_scenes": 3,
+    "successful_scenes": 3,
+    "total_dialogues": 16,
+    "history_files": 0,
+    "issues_count": 2
+  }
+}
