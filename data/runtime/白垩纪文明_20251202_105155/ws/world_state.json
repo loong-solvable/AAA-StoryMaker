@@ -1,0 +1,55 @@
+{
+  "current_scene": {
+    "location_id": "giant_stone_city_palace",
+    "location_name": "巨石城皇宫蓝色大厅",
+    "time_of_day": "上午",
+    "description": "皇宫蓝色大厅争论激烈，皇帝眼疾痛苦痉挛咆哮，大臣环绕争执军事镇压蚁巢、恐龙培训取代蚂蚁与谈判对策"
+  },
+  "weather": {
+    "condition": "晴朗",
+    "temperature": "25°C",
+    "effects": "阳光充足，大厅内光线明亮但闷热加剧皇帝不适"
+  },
+  "characters_present": [
+    {
+      "id": "npc_003",
+      "name": "达达斯皇帝",
+      "mood": "痛苦愤怒",
+      "activity": "在沙发上痉挛扭曲捂眼咆哮，要求对策"
+    },
+    {
+      "id": "npc_004",
+      "name": "维维克医生",
+      "mood": "忧虑坚持",
+      "activity": "诊断眼疾并准备注射抗生素，建议谈判"
+    },
+    {
+      "id": "npc_005",
+      "name": "巴巴特",
+      "mood": "务实锐利",
+      "activity": "高举电线强调精密维修危机，建议联合谈判"
+    },
+    {
+      "id": "npc_006",
+      "name": "洛洛加元帅",
+      "mood": "威严果断",
+      "activity": "挺立待命，准备执行摧毁蚁巢与押解命令"
+    }
+  ],
+  "world_situation": {
+    "major_events": [
+      "蚂蚁罢工瘫痪军工厂、发电站、医院",
+      "皇帝左眼严重发炎，24小时失明风险",
+      "授权总参谋部制定摧毁蚁巢方案",
+      "下令全国恐龙工人紧急培训取代蚂蚁精密操作",
+      "终极威慑负计时持续"
+    ],
+    "tension_level": "危急",
+    "plot_progress": "皇宫高层分歧加剧：军事强硬派主导，拒绝谈判，坚持自力更生，但医疗经济危机迫在眉睫，皇帝健康成关键变数"
+  },
+  "next_scene_suggestion": {
+    "location_id": "giant_stone_city_palace",
+    "location_name": "巨石城皇宫蓝色大厅",
+    "reason": "讨论未决，皇帝持续咆哮要求更多大臣对策（如尼尼坎博士），军事经济医疗方案需进一步展开"
+  }
+}

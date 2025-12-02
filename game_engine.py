@@ -66,10 +66,12 @@ class GameEngine:
         self.os.register_handler(AgentRole.WORLD_STATE, self.world_state.handle_message)
         self.os.register_handler(AgentRole.PLOT, self.plot.handle_message)
         self.os.register_handler(AgentRole.VIBE, self.vibe.handle_message)
-        
+
         # 玩家状态
         self.player_location = self.os.world_context.current_location
-        self.player_name = "玩家"  # 可以让用户自定义
+        if "user" not in self.os.world_context.present_characters:
+            self.os.world_context.present_characters.append("user")
+        self.player_name = self._get_player_name()
         
         # 初始化世界状态同步器（用于同步 world_state.json）
         self.runtime_dir = genesis_path.parent if genesis_path else None
@@ -200,6 +202,8 @@ class GameEngine:
             # NPC反应
             npc_reactions = []
             for char_id in self.os.world_context.present_characters:
+                if char_id == "user":
+                    continue
                 npc = self.npc_manager.get_npc(char_id)
                 if npc:
                     npc_instruction = self._find_instruction(script, f"npc_{char_id}")
@@ -469,6 +473,13 @@ class GameEngine:
             if char.get("id") == char_id:
                 return char.get("name", char_id)
         return char_id
+
+    def _get_player_name(self) -> str:
+        """获取玩家名称（来自 genesis）"""
+        for char in self.os.genesis_data.get("characters", []):
+            if char.get("id") == "user":
+                return char.get("name", "玩家")
+        return "玩家"
     
     def _get_character_mood(self, char_id: str) -> str:
         """获取角色心情"""

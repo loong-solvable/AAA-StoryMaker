@@ -250,7 +250,7 @@ def run_verbose_flow():
     active_npcs = list(npc_agents.keys())
     print(f"\n   👥 在场角色: {active_npcs}")
     
-    MAX_TURNS = 6
+    MAX_TURNS = 12  # 每幕最多12轮对话
     current_turn = 0
     scene_finished = False
     current_speaker_id = active_npcs[0] if active_npcs else None

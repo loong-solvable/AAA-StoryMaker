@@ -125,6 +125,7 @@ class OperatingSystem:
     # ==========================================
     
     def parse_script(self, plot_script: Dict[str, Any]) -> ParsedScript:
+        # 已废弃！！！这个是不调用llm拆分剧本的逻辑
         """
         解析 Plot 产出的完整剧本
         
@@ -1798,7 +1799,7 @@ def create_agent() -> {class_name}:
         self,
         runtime_dir: Path,
         world_dir: Path,
-        max_turns: int = 20,
+        max_turns: int = 12,
         user_input_callback = None
     ) -> Dict[str, Any]:
         """
@@ -1828,6 +1829,34 @@ def create_agent() -> {class_name}:
         
         # 创建场景记忆板
         scene_memory = create_scene_memory(runtime_dir, turn_id=1)
+        
+        # === 清理不在场的NPC Agent ===
+        scene_file = runtime_dir / "plot" / "current_scene.json"
+        if scene_file.exists():
+            try:
+                with open(scene_file, "r", encoding="utf-8") as f:
+                    scene_data = json.load(f)
+                
+                # 获取应该在场的角色ID列表
+                present_chars = scene_data.get("characters", scene_data.get("present_characters", []))
+                should_present_ids = {
+                    char.get("id") if isinstance(char, dict) else char 
+                    for char in present_chars
+                }
+                
+                # 清理不在场的NPC Agent
+                if should_present_ids:
+                    npcs_to_remove = [
+                        npc_id for npc_id in list(self.npc_agents.keys()) 
+                        if npc_id not in should_present_ids
+                    ]
+                    
+                    for npc_id in npcs_to_remove:
+                        npc_name = self.npc_agents[npc_id].CHARACTER_NAME
+                        logger.info(f"🚪 {npc_name} ({npc_id}) 不在本幕场景，移除Agent")
+                        del self.npc_agents[npc_id]
+            except Exception as e:
+                logger.warning(f"⚠️ 读取场景文件失败: {e}")
         
         # 获取在场角色信息
         active_npc_info = {}

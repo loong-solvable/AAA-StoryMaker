@@ -63,7 +63,7 @@ def run_three_scenes_test():
     from utils.scene_memory import create_scene_memory, create_all_scene_memory
     import importlib.util
     
-    world_name = "江城市"
+    world_name = "白垩纪文明"
     world_dir = settings.DATA_DIR / "worlds" / world_name
     
     # ==========================================
@@ -71,7 +71,7 @@ def run_three_scenes_test():
     # ==========================================
     print_separator("阶段 0: 光明会初始化")
     
-    initializer = IlluminatiInitializer(world_name)
+    initializer = IlluminatiInitializer(world_name, skip_player=True)  # 不添加玩家
     runtime_dir = initializer.run()
     
     print(f"✅ 光明会初始化完成")
@@ -101,24 +101,7 @@ def run_three_scenes_test():
         "issues": []
     }
     
-    # 模拟玩家输入
-    user_responses = [
-        "这件事情很复杂，我们需要小心行事。",
-        "好的，我同意你的计划。",
-        "继续调查吧。",
-        "我们必须揭露真相。",
-        "有什么发现吗？",
-        "让我们采取行动。",
-    ]
-    response_index = [0]
-    
-    def mock_user_input(prompt: str) -> str:
-        if response_index[0] < len(user_responses):
-            response = user_responses[response_index[0]]
-            response_index[0] += 1
-            print(f"      👤 [模拟玩家输入]: {response}")
-            return response
-        return "..."
+    # 本次测试不包含玩家参与，user_input_callback 设为 None
     
     # ==========================================
     # 运行三幕
@@ -165,14 +148,14 @@ def run_three_scenes_test():
             print(f"   ℹ️ 无新角色需要初始化")
         
         # === 2.3 场景演绎 ===
-        print(f"\n🎬 开始第 {scene_num} 幕对话循环（最多 4 轮）...")
+        print(f"\n🎬 开始第 {scene_num} 幕对话循环（最多 12 轮）...")
         print("-" * 50)
         
         loop_result = os_agent.run_scene_loop(
             runtime_dir=runtime_dir,
             world_dir=world_dir,
-            max_turns=4,  # 每幕限制4轮以加快测试
-            user_input_callback=mock_user_input
+            max_turns=12,  # 每幕最多12轮对话
+            user_input_callback=None  # 不包含玩家参与
         )
         
         scene_result["success"] = loop_result.get("success", False)

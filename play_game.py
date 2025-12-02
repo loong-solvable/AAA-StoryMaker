@@ -146,6 +146,24 @@ def select_or_create_runtime(world_name: str) -> Optional[Path]:
             return None
 
 
+def prompt_player_profile() -> dict:
+    """收集玩家的最小角色信息"""
+    profile = {}
+    try:
+        name = input("请输入你的角色名字（回车默认“玩家”） > ").strip()
+        if name:
+            profile["name"] = name
+        gender = input("请输入性别（可留空） > ").strip()
+        if gender:
+            profile["gender"] = gender
+        appearance = input("一句话外观/风格描述（可留空） > ").strip()
+        if appearance:
+            profile["appearance"] = appearance
+    except (KeyboardInterrupt, EOFError):
+        print("\n使用默认玩家设定")
+    return profile
+
+
 def create_new_runtime(world_name: str) -> Optional[Path]:
     """创建新的运行时（调用 IlluminatiInitializer）"""
     print()
@@ -155,8 +173,10 @@ def create_new_runtime(world_name: str) -> Optional[Path]:
     
     try:
         from initial_Illuminati import IlluminatiInitializer
-        
-        initializer = IlluminatiInitializer(world_name)
+
+        player_profile = prompt_player_profile()
+
+        initializer = IlluminatiInitializer(world_name, player_profile=player_profile)
         
         # 执行完整初始化流程
         print("   📍 步骤 1/3: 初始化世界状态...")

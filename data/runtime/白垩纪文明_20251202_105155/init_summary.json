@@ -1,0 +1,42 @@
+{
+  "world_name": "白垩纪文明",
+  "initialized_at": "2025-12-02T10:53:15.335780",
+  "runtime_dir": "D:\\code\\AAA-StoryMaker\\data\\runtime\\白垩纪文明_20251202_105155",
+  "llm_config": {
+    "provider": "openrouter",
+    "model": "x-ai/grok-4.1-fast:free",
+    "temperature": 0.7,
+    "api_base": "https://openrouter.ai/api/v1"
+  },
+  "directory_structure": {
+    "ws": "ws/world_state.json",
+    "plot": {
+      "scene": "plot/current_scene.json",
+      "script": "plot/current_script.json",
+      "history": "plot/history/"
+    },
+    "vibe": "vibe/initial_atmosphere.json"
+  },
+  "components": {
+    "WS": {
+      "status": "initialized",
+      "directory": "ws/",
+      "state_file": "ws/world_state.json"
+    },
+    "Plot": {
+      "status": "initialized",
+      "directory": "plot/",
+      "scene_file": "plot/current_scene.json",
+      "current_script": "plot/current_script.json",
+      "history_directory": "plot/history/",
+      "opening_location": "巨石城皇宫蓝色大厅"
+    },
+    "Vibe": {
+      "status": "initialized",
+      "directory": "vibe/",
+      "atmosphere_file": "vibe/initial_atmosphere.json",
+      "emotional_tone": "压抑；危机；恐慌；凝滞"
+    }
+  },
+  "ready_for_game": true
+}

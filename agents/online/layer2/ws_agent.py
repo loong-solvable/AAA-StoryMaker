@@ -119,6 +119,10 @@ class WorldStateManager:
         # 智能初始化：关键角色在建议位置，其他角色根据特征合理分配
         for char in self.characters:
             char_id = char.get("id")
+
+            # 玩家由真人控制，不纳入仿真 NPC 状态
+            if char_id == "user":
+                continue
             
             # 确定初始位置和活动
             if char_id in key_chars:
@@ -371,4 +375,3 @@ class WorldStateManager:
             )
         
         return None
-

@@ -1,0 +1,72 @@
+[
+  {
+    "id": "npc_001",
+    "name": "霸王龙",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_002",
+    "name": "蚂蚁镇长",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_003",
+    "name": "达达斯皇帝",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_004",
+    "name": "维维克医生",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_005",
+    "name": "巴巴特",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_006",
+    "name": "洛洛加元帅",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_007",
+    "name": "尼尼坎博士",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_008",
+    "name": "卡奇卡",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_009",
+    "name": "比卢比参议员",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_010",
+    "name": "乔耶博士",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_011",
+    "name": "若列元帅",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_012",
+    "name": "多多米",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_013",
+    "name": "蚂蚁A",
+    "importance": 0.1
+  },
+  {
+    "id": "npc_014",
+    "name": "蚂蚁B",
+    "importance": 0.1
+  }
+]

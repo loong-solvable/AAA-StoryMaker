@@ -122,7 +122,7 @@ def run_full_scene():
     print(f"在场角色: {active_npcs}")
     
     # 设置对话参数
-    MAX_TURNS = 6  # 最大对话轮数
+    MAX_TURNS = 12  # 每幕最多12轮对话
     current_turn = 0
     scene_finished = False
     

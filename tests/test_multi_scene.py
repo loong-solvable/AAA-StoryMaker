@@ -102,13 +102,13 @@ def run_multi_scene_test():
             return response
         return "..."
     
-    print("\n🎬 开始第一幕对话循环（最多 6 轮）...")
+    print("\n🎬 开始第一幕对话循环（最多 12 轮）...")
     print("-" * 50)
     
     result1 = os_agent.run_scene_loop(
         runtime_dir=runtime_dir,
         world_dir=world_dir,
-        max_turns=6,
+        max_turns=12,  # 每幕最多12轮对话
         user_input_callback=mock_user_input
     )
     

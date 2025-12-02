@@ -14,6 +14,8 @@
 """
 import json
 import argparse
+import sys
+import shutil
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional
@@ -65,29 +67,51 @@ class IlluminatiInitializer:
     - Vibe（氛围感受者）
     """
     
-    def __init__(self, world_name: str):
+    def __init__(
+        self,
+        world_name: str,
+        player_profile: Optional[Dict[str, Any]] = None,
+        runtime_name: Optional[str] = None,
+        overwrite_runtime: bool = False,
+        skip_player: bool = False,
+    ):
         """
         初始化光明会
-        
+
         Args:
             world_name: 世界名称（对应 data/worlds/<world_name>/ 目录）
+            player_profile: 玩家设定（可选），不提供则使用默认占位
+            runtime_name: 运行时目录名（不含世界前缀），为空则使用时间戳
+            overwrite_runtime: 若目录存在是否强制覆盖
+            skip_player: 是否跳过玩家角色（True时不添加玩家）
         """
         logger.info("=" * 60)
         logger.info("🏛️  启动光明会初始化流程")
         logger.info("=" * 60)
-        
+
         self.world_name = world_name
+        self.skip_player = skip_player
+        self.player_profile = self._normalize_player_profile(player_profile) if not skip_player else None
+        self.player_card: Optional[Dict[str, Any]] = None
         self.world_dir = settings.DATA_DIR / "worlds" / world_name
-        
+
         # 验证世界数据存在
         if not self.world_dir.exists():
             raise FileNotFoundError(f"世界数据目录不存在: {self.world_dir}")
-        
-        # 创建运行时数据目录
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.runtime_dir = settings.DATA_DIR / "runtime" / f"{world_name}_{timestamp}"
+
+        # 创建运行时数据目录（支持自定义/复用目录名）
+        suffix = runtime_name or datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.runtime_dir = settings.DATA_DIR / "runtime" / f"{world_name}_{suffix}"
+        if self.runtime_dir.exists():
+            if overwrite_runtime:
+                shutil.rmtree(self.runtime_dir)
+            else:
+                raise FileExistsError(
+                    f"运行时目录已存在: {self.runtime_dir}，使用 --overwrite-runtime 以覆盖，"
+                    f"或使用 --runtime-name 指定新的目录名。"
+                )
         self.runtime_dir.mkdir(parents=True, exist_ok=True)
-        
+
         logger.info(f"📁 世界数据目录: {self.world_dir}")
         logger.info(f"📁 运行时数据目录: {self.runtime_dir}")
         
@@ -96,6 +120,12 @@ class IlluminatiInitializer:
         self.characters_list = self._load_characters_list()
         self.characters_details = self._load_all_characters()
         
+        # 只有在不跳过玩家时才注入玩家
+        if not self.skip_player:
+            self._inject_player_into_cast()
+        else:
+            logger.info("⏭️  跳过玩家角色注入")
+
         # 构建 Genesis 格式数据（兼容现有 Agent）
         self.genesis_data = self._build_genesis_data()
         
@@ -145,14 +175,98 @@ class IlluminatiInitializer:
                 char_data = json.load(f)
                 char_id = char_data.get("id", char_file.stem.replace("character_", ""))
                 characters[char_id] = char_data
-        
+
         logger.info(f"✅ 加载角色详情: {len(characters)} 个角色档案")
         return characters
+
+    # ==========================================
+    # 玩家植入
+    # ==========================================
+
+    def _normalize_player_profile(self, profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """标准化玩家资料，确保最小字段存在"""
+        base = {
+            "id": "user",
+            "name": "玩家",
+            "gender": "未知",
+            "age": "未知",
+            "appearance": "",
+            "importance": 0.8
+        }
+        if not profile:
+            return base
+        normalized = dict(base)
+        for key, value in profile.items():
+            if value not in (None, ""):
+                normalized[key] = value
+        return normalized
+
+    def _inject_player_into_cast(self):
+        """将玩家作为正式角色加入角色花名册与角色卡"""
+        player_id = self.player_profile.get("id", "user")
+
+        # 生成最小玩家卡
+        self.player_card = {
+            "id": player_id,
+            "name": self.player_profile.get("name", "玩家"),
+            "gender": self.player_profile.get("gender", "未知"),
+            "age": self.player_profile.get("age", "未知"),
+            "importance": self.player_profile.get("importance", 0.8),
+            "traits": ["由玩家实时展现"],
+            "behavior_rules": ["遵从玩家实时选择"],
+            "relationship_matrix": {},
+            "possessions": [],
+            "current_appearance": self.player_profile.get("appearance", ""),
+            "voice_samples": []
+        }
+
+        # 加入角色列表（如未存在）
+        if not any(c.get("id") == player_id for c in self.characters_list):
+            self.characters_list.append({
+                "id": player_id,
+                "name": self.player_card["name"],
+                "importance": self.player_card["importance"]
+            })
+
+        # 加入角色详情（如未存在）
+        if player_id not in self.characters_details:
+            self.characters_details[player_id] = self.player_card
+
+    def _build_world_start_context(self) -> Dict[str, Any]:
+        """为 genesis 构建世界开场提示，确保玩家在场"""
+        locations = self.world_setting.get("geography", {}).get("locations", [])
+        suggested_loc = locations[0].get("id", "loc_001") if locations else "loc_001"
+        suggested_time = self.world_setting.get("meta", {}).get("suggested_time", "下午")
+
+        # 选择重要角色 + 玩家
+        key_chars = [
+            c.get("id")
+            for c in sorted(
+                self.characters_list,
+                key=lambda x: x.get("importance", 0),
+                reverse=True
+            )
+            if c.get("id")
+        ][:2]
+
+        if self.player_card:
+            if self.player_card["id"] not in key_chars:
+                key_chars.insert(0, self.player_card["id"])
+        else:
+            if "user" not in key_chars:
+                key_chars.insert(0, "user")
+
+        return {
+            "suggested_time": suggested_time,
+            "suggested_location": suggested_loc,
+            "key_characters": key_chars,
+            "opening_hint": "玩家是真实参与者，保持自由表达，NPC 需留出回应空间。"
+        }
     
     def _build_genesis_data(self) -> Dict[str, Any]:
         """构建 Genesis 格式数据（兼容现有 Agent）"""
         meta = self.world_setting.get("meta", {})
-        
+
         return {
             "world": {
                 "title": meta.get("world_name", self.world_name),
@@ -163,7 +277,8 @@ class IlluminatiInitializer:
             "locations": self.world_setting.get("geography", {}).get("locations", []),
             "physics_logic": self.world_setting.get("physics_logic", {}),
             "social_logic": self.world_setting.get("social_logic", []),
-            "plot_hints": []  # 由 Plot 动态生成
+            "plot_hints": [],  # 由 Plot 动态生成
+            "world_start_context": self._build_world_start_context()
         }
     
     # ==========================================
@@ -211,10 +326,11 @@ class IlluminatiInitializer:
             ]
             response = self.llm.invoke(messages)
             content = response.content if hasattr(response, 'content') else str(response)
-            
+
             # 解析 JSON 响应
             world_state = self._parse_ws_response(content)
-            
+            world_state = self._ensure_player_in_world_state(world_state)
+
             # 补充 meta 信息（确保时间戳正确）
             if "meta" not in world_state:
                 world_state["meta"] = {}
@@ -302,13 +418,36 @@ class IlluminatiInitializer:
     def _parse_ws_response(self, content: str) -> Dict[str, Any]:
         """解析 WS 的 JSON 响应"""
         import re
-        
+
         # 尝试提取 JSON
         json_match = re.search(r'\{[\s\S]*\}', content)
         if not json_match:
             raise ValueError("无法从响应中提取JSON")
-        
+
         return json.loads(json_match.group())
+
+    def _ensure_player_in_world_state(self, world_state: Dict[str, Any]) -> Dict[str, Any]:
+        """确保玩家出现在初始世界状态中"""
+        if not self.player_card:
+            return world_state
+
+        present = world_state.setdefault("characters_present", [])
+        if not any(c.get("id") == self.player_card["id"] for c in present):
+            present.append({
+                "id": self.player_card["id"],
+                "name": self.player_card.get("name", "玩家"),
+                "mood": "期待",
+                "activity": "观察局势",
+                "appearance_note": self.player_card.get("current_appearance", "")
+            })
+
+        # 保证 current_scene 存在基础字段
+        world_state.setdefault("current_scene", {})
+        world_state["current_scene"].setdefault("location_id", self._build_world_start_context().get("suggested_location", "loc_001"))
+        world_state["current_scene"].setdefault("location_name", "未知地点")
+        world_state["current_scene"].setdefault("time_of_day", self._build_world_start_context().get("suggested_time", "下午"))
+
+        return world_state
     
     def _create_default_world_state(self, ws_dir: Path) -> Dict[str, Any]:
         """创建默认世界状态（LLM 调用失败时使用）"""
@@ -333,7 +472,17 @@ class IlluminatiInitializer:
                 "activity": "在场",
                 "appearance_note": char_detail.get("current_appearance", "")
             })
-        
+
+        # 确保玩家在场
+        if self.player_card and not any(c.get("id") == self.player_card["id"] for c in characters_present):
+            characters_present.insert(0, {
+                "id": self.player_card["id"],
+                "name": self.player_card.get("name", "玩家"),
+                "mood": "期待",
+                "activity": "观察局势",
+                "appearance_note": self.player_card.get("current_appearance", "")
+            })
+
         meta = self.world_setting.get("meta", {})
         world_state = {
             "current_scene": {
@@ -449,6 +598,7 @@ class IlluminatiInitializer:
             # 保存当前剧本到 plot 目录（初始化只生成当前剧本）
             script_file = plot_dir / "current_script.json"
             script_data = asdict(script)
+            script_data["scene_id"] = 1  # 初始剧本为第1幕
             script_data["is_initial"] = True  # 标记为初始剧本
             script_data["created_at"] = datetime.now().isoformat()  # 记录创建时间
             with open(script_file, "w", encoding="utf-8") as f:
@@ -1009,6 +1159,40 @@ def select_world(available_worlds: List[str]) -> Optional[str]:
             return None
 
 
+def collect_player_profile(args) -> Dict[str, Any]:
+    """
+    收集玩家角色的最小设定。
+    优先使用命令行参数；缺失时在可交互环境下提示输入。
+    """
+    profile: Dict[str, Any] = {
+        "name": args.player_name,
+        "gender": args.player_gender,
+        "appearance": args.player_appearance
+    }
+
+    # 非交互环境直接返回已有参数
+    if not sys.stdin.isatty():
+        return {k: v for k, v in profile.items() if v}
+
+    try:
+        if not profile["name"]:
+            name = input("请输入玩家在世界中的名字（回车默认“玩家”） > ").strip()
+            if name:
+                profile["name"] = name
+        if not profile["gender"]:
+            gender = input("请输入玩家性别（可留空） > ").strip()
+            if gender:
+                profile["gender"] = gender
+        if not profile["appearance"]:
+            appearance = input("一句话描述玩家外观/风格（可留空） > ").strip()
+            if appearance:
+                profile["appearance"] = appearance
+    except (KeyboardInterrupt, EOFError):
+        print("\n使用默认玩家设定")
+
+    return {k: v for k, v in profile.items() if v}
+
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(
@@ -1021,6 +1205,39 @@ def main():
         required=False,
         default=None,
         help="世界名称（对应 data/worlds/<world>/ 目录），不指定则自动检测"
+    )
+    parser.add_argument(
+        "--player-name",
+        type=str,
+        required=False,
+        default=None,
+        help="玩家在世界中的名字（可选）"
+    )
+    parser.add_argument(
+        "--player-gender",
+        type=str,
+        required=False,
+        default=None,
+        help="玩家性别（可选）"
+    )
+    parser.add_argument(
+        "--player-appearance",
+        type=str,
+        required=False,
+        default=None,
+        help="一句话外观/风格描述（可选）"
+    )
+    parser.add_argument(
+        "--runtime-name",
+        type=str,
+        required=False,
+        default=None,
+        help="自定义运行时目录后缀（默认使用时间戳）"
+    )
+    parser.add_argument(
+        "--overwrite-runtime",
+        action="store_true",
+        help="当指定的运行时目录已存在时强制覆盖"
     )
     
     args = parser.parse_args()
@@ -1071,10 +1288,17 @@ def main():
                 print("已取消初始化")
                 return
             print()
-    
+
     print(f"🌍 选定世界: {world_name}")
     print()
-    
+
+    # 收集玩家设定（最小信息）
+    player_profile = collect_player_profile(args)
+
+    # 运行时目录配置
+    runtime_name = args.runtime_name
+    overwrite_runtime = args.overwrite_runtime
+
     # 显示当前 LLM 配置
     print("🤖 LLM 配置:")
     if settings.LLM_PROVIDER == "openrouter":
@@ -1092,10 +1316,15 @@ def main():
         print(f"   Model: {settings.MODEL_NAME}")
     print(f"   Temperature: {settings.TEMPERATURE}")
     print()
-    
+
     try:
         # 初始化光明会
-        initializer = IlluminatiInitializer(world_name)
+        initializer = IlluminatiInitializer(
+            world_name,
+            player_profile=player_profile,
+            runtime_name=runtime_name,
+            overwrite_runtime=overwrite_runtime,
+        )
         runtime_dir = initializer.run()
         
         print()
@@ -1147,4 +1376,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
