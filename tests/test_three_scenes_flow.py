@@ -89,6 +89,53 @@ def select_world_interactive(available_worlds):
         return None
 
 
+def create_mock_user_input_callback(scene_num: int):
+    """创建模拟玩家输入的回调函数
+    
+    Args:
+        scene_num: 当前场景编号（1-3）
+    
+    Returns:
+        玩家输入回调函数
+    """
+    turn_count = [0]  # 使用列表以便在闭包中修改
+    
+    def mock_user_input(prompt: str) -> str:
+        """模拟玩家输入"""
+        turn_count[0] += 1
+        current_turn = turn_count[0]
+        
+        # 根据场景和轮次提供不同的输入
+        if scene_num == 1:
+            # 第1幕：玩家初次参与，比较好奇和谨慎
+            if current_turn == 1:
+                return "你们好，我注意到这里的气氛有些紧张。发生了什么事？"
+            elif current_turn == 2:
+                return "原来如此，那我们应该一起合作解决这个问题。"
+            else:
+                return "我明白了，让我们继续吧。"
+        
+        elif scene_num == 2:
+            # 第2幕：玩家已经熟悉情况，更加主动
+            if current_turn == 1:
+                return "看来情况比我们想象的更复杂。我们需要制定一个计划。"
+            elif current_turn == 2:
+                return "好的，我同意这个方案。让我们开始行动吧。"
+            else:
+                return "继续，我在听。"
+        
+        else:  # scene_num == 3
+            # 第3幕：玩家已经深入剧情，更加投入
+            if current_turn == 1:
+                return "我们已经走到这一步了，不能放弃。让我们完成这个任务。"
+            elif current_turn == 2:
+                return "我完全理解，让我们一起面对最后的挑战。"
+            else:
+                return "好的，我准备好了。"
+    
+    return mock_user_input
+
+
 def run_three_scenes_test(world_name: str = None):
     """运行三幕完整测试
     
@@ -168,7 +215,8 @@ def run_three_scenes_test(world_name: str = None):
         "issues": []
     }
     
-    # 本次测试不包含玩家参与，user_input_callback 设为 None
+    # 注意：虽然初始化时 skip_player=True，但路由系统可能会将玩家加入对话
+    # 因此我们提供模拟的玩家输入回调函数
     
     # ==========================================
     # 运行三幕
@@ -218,11 +266,14 @@ def run_three_scenes_test(world_name: str = None):
         print(f"\n🎬 开始第 {scene_num} 幕对话循环（最多 12 轮）...")
         print("-" * 50)
         
+        # 创建模拟玩家输入回调函数（根据场景提供不同的输入）
+        mock_user_input = create_mock_user_input_callback(scene_num)
+        
         loop_result = os_agent.run_scene_loop(
             runtime_dir=runtime_dir,
             world_dir=world_dir,
             max_turns=12,  # 每幕最多12轮对话
-            user_input_callback=None  # 不包含玩家参与
+            user_input_callback=mock_user_input  # 使用模拟玩家输入
         )
         
         scene_result["success"] = loop_result.get("success", False)
