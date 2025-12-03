@@ -147,7 +147,7 @@ def prompt_player_profile() -> dict:
     
     profile = {}
     try:
-        name = input("   角色名字 (回车默认"玩家") > ").strip()
+        name = input("   角色名字 (回车默认\"玩家\") > ").strip()
         if name:
             profile["name"] = name
         
@@ -200,82 +200,154 @@ def initialize_new_game(world_name: str) -> Optional[Path]:
         return None
 
 
-def run_game_engine(runtime_dir: Path):
-    """运行游戏引擎"""
-    from game_engine import GameEngine
+def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
+    """
+    使用 OS Agent 的完整流程运行游戏
     
-    genesis_path = runtime_dir / "genesis.json"
+    流程（照搬 test_three_scenes_flow.py）：
+    1. 初始化 OS Agent
+    2. 剧本拆分 (dispatch_script_to_actors)
+    3. 初始化首次出场角色 (initialize_first_appearance_characters)
+    4. 场景演绎循环 (run_scene_loop)
+    5. 幕间处理 (process_scene_transition)
+    """
+    import importlib.util
+    from utils.scene_memory import create_scene_memory
     
-    if not genesis_path.exists():
-        print("❌ 运行时目录缺少 genesis.json 文件")
-        print("   请重新初始化游戏")
-        return
+    PROJECT_ROOT = Path(__file__).parent
     
     try:
         print()
-        print("⏳ 正在加载游戏引擎...")
+        print("⏳ 正在加载游戏...")
         
-        game = GameEngine(genesis_path)
+        # 初始化 OS Agent
+        os_file = PROJECT_ROOT / "agents" / "online" / "layer1" / "os_agent.py"
+        spec = importlib.util.spec_from_file_location("os_agent", os_file)
+        os_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(os_module)
         
-        print("✅ 游戏引擎加载完成!")
-        print()
-        
-        # 开始游戏
-        opening = game.start_game()
-        print(opening)
+        os_agent = os_module.OperatingSystem()
+        print("✅ OS Agent 初始化完成")
         
         print_help()
         
-        # 游戏主循环
-        while True:
+        scene_num = 1
+        max_scenes = 10  # 最多运行10幕
+        
+        # 游戏主循环（按幕进行）
+        while scene_num <= max_scenes:
+            print()
+            print("=" * 70)
+            print(f"  🎬 第 {scene_num} 幕")
+            print("=" * 70)
+            
+            # === 1. 剧本拆分 ===
+            print(f"\n📜 拆分剧本...")
+            dispatch_result = os_agent.dispatch_script_to_actors(runtime_dir)
+            
+            if dispatch_result.get("success"):
+                actor_scripts = dispatch_result.get("actor_scripts", {})
+                print(f"   ✅ 剧本拆分完成: {len(actor_scripts)} 个任务卡")
+            else:
+                print(f"   ⚠️ 剧本拆分失败: {dispatch_result.get('error')}")
+                print("   继续使用默认剧本...")
+            
+            # === 2. 初始化首次出场角色 ===
+            print(f"\n🎭 初始化出场角色...")
+            init_result = os_agent.initialize_first_appearance_characters(
+                runtime_dir=runtime_dir,
+                world_dir=world_dir
+            )
+            
+            initialized = init_result.get("initialized", [])
+            if initialized:
+                print(f"   ✅ 初始化了 {len(initialized)} 个角色:")
+                for char in initialized:
+                    print(f"      - {char['name']} ({char['id']})")
+            else:
+                print(f"   ℹ️ 无新角色需要初始化")
+            
+            # === 3. 场景演绎（使用真实玩家输入） ===
+            print(f"\n🎬 开始第 {scene_num} 幕演绎...")
+            print("-" * 50)
+            
+            # 创建玩家输入回调函数
+            def real_user_input(prompt: str) -> str:
+                """真实玩家输入"""
+                try:
+                    user_input = input(f"\n👤 你的行动 > ").strip()
+                    
+                    # 处理命令
+                    if user_input.startswith("/"):
+                        command = user_input.lower()
+                        if command == "/help":
+                            print_help()
+                            return real_user_input(prompt)  # 递归重新获取输入
+                        elif command == "/quit":
+                            raise KeyboardInterrupt("用户退出")
+                        elif command == "/skip":
+                            return "__SKIP_SCENE__"  # 跳过当前幕
+                        else:
+                            print(f"❌ 未知命令: {command}")
+                            return real_user_input(prompt)
+                    
+                    return user_input if user_input else "观察周围环境"
+                    
+                except EOFError:
+                    raise KeyboardInterrupt("EOF")
+            
             try:
-                user_input = input("\n👤 你的行动 > ").strip()
+                loop_result = os_agent.run_scene_loop(
+                    runtime_dir=runtime_dir,
+                    world_dir=world_dir,
+                    max_turns=15,  # 每幕最多15轮对话
+                    user_input_callback=real_user_input
+                )
                 
-                if not user_input:
-                    continue
-                
-                # 处理命令
-                if user_input.startswith("/"):
-                    command = user_input.lower()
-                    
-                    if command == "/help":
-                        print_help()
-                    elif command == "/status":
-                        print_game_status(game)
-                    elif command == "/save":
-                        game.save_game("manual_save")
-                        print("✅ 游戏已保存")
-                    elif command == "/quit":
-                        print("\n👋 感谢游玩！游戏已自动保存。")
-                        game.save_game("autosave")
-                        break
-                    else:
-                        print(f"❌ 未知命令: {command}")
-                        print("   输入 /help 查看可用命令")
-                    
-                    continue
-                
-                # 处理游戏回合
-                print("\n⏳ 处理中...")
-                result = game.process_turn(user_input)
-                
-                if result["success"]:
-                    print(result["text"])
-                else:
-                    print(f"\n❌ {result.get('error', '未知错误')}")
-                    print("请重新输入\n")
+                print(f"\n📊 第 {scene_num} 幕演绎结果:")
+                print(f"   - 成功: {loop_result.get('success', False)}")
+                print(f"   - 总轮数: {loop_result.get('total_turns', 0)}")
+                print(f"   - 对话数: {loop_result.get('dialogue_count', 0)}")
                 
             except KeyboardInterrupt:
-                print("\n\n⚠️  检测到Ctrl+C")
+                print("\n\n⚠️ 检测到退出请求")
                 confirm = input("确定要退出吗? (y/n) > ").lower()
                 if confirm == 'y':
-                    print("\n👋 游戏已自动保存，再见!")
-                    game.save_game("autosave")
-                    break
-            except EOFError:
-                print("\n\n👋 游戏已自动保存，再见!")
-                game.save_game("autosave")
+                    print("\n👋 感谢游玩，再见!")
+                    return
+                else:
+                    continue
+            
+            # === 4. 幕间处理 ===
+            print()
+            print("-" * 70)
+            print(f"  🔄 幕间处理: 第{scene_num}幕 → 第{scene_num+1}幕")
+            print("-" * 70)
+            
+            scene_memory = create_scene_memory(runtime_dir, scene_id=scene_num)
+            
+            transition_result = os_agent.process_scene_transition(
+                runtime_dir=runtime_dir,
+                world_dir=world_dir,
+                scene_memory=scene_memory,
+                scene_summary=f"第{scene_num}幕剧情演绎完成。"
+            )
+            
+            print(f"\n📊 幕间处理结果:")
+            print(f"   - 场景归档: {transition_result.get('scene_archived')}")
+            print(f"   - WS更新: {transition_result.get('world_state_updated')}")
+            print(f"   - 剧本生成: {transition_result.get('next_script_generated')}")
+            
+            scene_num += 1
+            
+            # 询问是否继续
+            print()
+            continue_choice = input("继续下一幕? (y/n，默认y) > ").strip().lower()
+            if continue_choice == 'n':
+                print("\n👋 感谢游玩，再见!")
                 break
+        
+        print("\n🎬 游戏结束！感谢游玩！")
         
     except FileNotFoundError as e:
         logger.error(f"❌ 文件未找到: {e}")
@@ -283,29 +355,42 @@ def run_game_engine(runtime_dir: Path):
     except Exception as e:
         logger.error(f"❌ 游戏运行出错: {e}", exc_info=True)
         print(f"\n❌ 游戏出错: {e}")
-        print(f"\n请查看日志: {settings.LOGS_DIR}/game_engine.log")
+        import traceback
+        traceback.print_exc()
+        print(f"\n请查看日志: {settings.LOGS_DIR}/os.log")
 
 
-def print_game_status(game):
-    """打印游戏状态"""
-    status = game.get_game_status()
+def print_game_status_from_runtime(runtime_dir: Path):
+    """从运行时目录打印游戏状态"""
+    import json
     
     print("\n" + "=" * 70)
     print("  📊 游戏状态")
     print("=" * 70)
-    print(f"  回合数: {status['turn']}")
-    print(f"  时间: {status['time']}")
-    print(f"  位置: {status['location']}")
-    print(f"\n  剧情进度: {status['plot_progress']['current_stage']}")
-    print(f"  场景数: {status['plot_progress']['scene_count']}")
-    print(f"  已完成节点: {len(status['plot_progress']['completed_nodes'])}/{status['plot_progress']['total_nodes']}")
     
-    print(f"\n  在场角色:")
-    present_chars = game.os.world_context.present_characters
-    for char_id in present_chars:
-        if char_id in status['npcs']:
-            npc_state = status['npcs'][char_id]
-            print(f"    - {npc_state['name']} (心情: {npc_state['mood']})")
+    # 读取世界状态
+    ws_file = runtime_dir / "ws" / "world_state.json"
+    if ws_file.exists():
+        with open(ws_file, "r", encoding="utf-8") as f:
+            ws_data = json.load(f)
+        print(f"  时间: {ws_data.get('time', '未知')}")
+        print(f"  位置: {ws_data.get('location', '未知')}")
+    
+    # 读取当前场景
+    scene_file = runtime_dir / "plot" / "current_scene.json"
+    if scene_file.exists():
+        with open(scene_file, "r", encoding="utf-8") as f:
+            scene_data = json.load(f)
+        print(f"\n  场景ID: {scene_data.get('scene_id', '未知')}")
+        
+        characters = scene_data.get("characters", scene_data.get("present_characters", []))
+        if characters:
+            print(f"\n  在场角色:")
+            for char in characters:
+                if isinstance(char, dict):
+                    print(f"    - {char.get('name', char.get('id', '未知'))}")
+                else:
+                    print(f"    - {char}")
     
     print("=" * 70 + "\n")
 
@@ -425,8 +510,11 @@ def main():
     if not runtime_dir:
         return
     
-    # 运行游戏引擎
-    run_game_engine(runtime_dir)
+    # 获取世界目录
+    world_dir = settings.DATA_DIR / "worlds" / world_name
+    
+    # 使用 OS Agent 流程运行游戏（照搬 test_three_scenes_flow.py）
+    run_game_with_os_agent(runtime_dir, world_dir)
 
 
 if __name__ == "__main__":

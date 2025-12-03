@@ -1,0 +1,123 @@
+{
+  "meta": {
+    "world_name": "江城市",
+    "genre_type": "REALISTIC",
+    "description": "2024年现代都市江城，科技公司数据泄露阴谋与正义调查的现实商业惊悚世界。"
+  },
+  "physics_logic": {
+    "mode": "STANDARD_REALITY",
+    "hard_constraints": [
+      "人类无法飞行",
+      "无法凭空造物",
+      "技术操作需设备和时间",
+      "远程黑客需网络接入和技能"
+    ],
+    "supernatural_system": null
+  },
+  "social_logic": [
+    {
+      "rule_name": "商业阴谋保密",
+      "trigger_condition": "发现公司数据交易证据",
+      "consequence": "公司派人监视、威胁或追杀涉事者",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "证据不足报警无效",
+      "trigger_condition": "报警无实质证据",
+      "consequence": "警方不介入，涉事者需自行收集更多证据",
+      "is_rigid": true
+    },
+    {
+      "rule_name": "媒体公开引发风暴",
+      "trigger_condition": "将证据交给可靠媒体",
+      "consequence": "报道刷屏，警方介入，高管被捕",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "公司金钱威胁",
+      "trigger_condition": "谈判时拒绝合作",
+      "consequence": "发出律师函或威胁家人安全",
+      "is_rigid": false
+    }
+  ],
+  "geography": {
+    "locations": [
+      {
+        "id": "coffee_shop_center",
+        "name": "市中心咖啡馆",
+        "region_type": "室内/商业区",
+        "sensory_profile": {
+          "visual": "繁华车水马龙，温暖灯光",
+          "auditory": "人声喧闹，咖啡机嗡鸣",
+          "olfactory": "咖啡香气",
+          "atmosphere": "热闹随意"
+        },
+        "connected_to": []
+      },
+      {
+        "id": "rental_apartment",
+        "name": "江城郊区老旧公寓出租屋",
+        "region_type": "室内/住宅",
+        "sensory_profile": {
+          "visual": "堆满电脑和技术书籍，昏暗灯光",
+          "auditory": "安静，偶尔键盘敲击",
+          "olfactory": "电子设备味",
+          "atmosphere": "孤寂技术宅"
+        },
+        "connected_to": []
+      },
+      {
+        "id": "hidden_teahouse",
+        "name": "隐蔽茶馆",
+        "region_type": "室内/商业区",
+        "sensory_profile": {
+          "visual": "低调昏暗，木质装饰",
+          "auditory": "低声交谈，茶水声",
+          "olfactory": "茶叶清香",
+          "atmosphere": "紧张隐秘"
+        },
+        "connected_to": [
+          "old_netbar"
+        ]
+      },
+      {
+        "id": "old_netbar",
+        "name": "老旧网吧",
+        "region_type": "室内/娱乐区",
+        "sensory_profile": {
+          "visual": "烟雾缭绕，旧电脑屏幕闪烁",
+          "auditory": "键盘敲击，风扇嗡鸣",
+          "olfactory": "烟味汗臭",
+          "atmosphere": "压抑躲藏"
+        },
+        "connected_to": [
+          "hidden_teahouse"
+        ]
+      },
+      {
+        "id": "cheap_motel",
+        "name": "便宜小旅馆",
+        "region_type": "室内/住宅",
+        "sensory_profile": {
+          "visual": "简陋陈旧，荧光灯",
+          "auditory": "远处车声，空调嗡鸣",
+          "olfactory": "潮湿霉味",
+          "atmosphere": "暂住不安"
+        },
+        "connected_to": []
+      },
+      {
+        "id": "luxury_hotel",
+        "name": "市中心高档酒店",
+        "region_type": "室内/商业区",
+        "sensory_profile": {
+          "visual": "奢华大堂，水晶灯璀璨",
+          "auditory": "轻柔背景音乐",
+          "olfactory": "高级香氛",
+          "atmosphere": "优雅锐利"
+        },
+        "connected_to": []
+      }
+    ]
+  }
+}

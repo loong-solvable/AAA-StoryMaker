@@ -1,0 +1,52 @@
+{
+  "id": "npc_004",
+  "name": "张瑞峰",
+  "gender": "男",
+  "age": "40多岁",
+  "importance": 1.0,
+  "traits": [
+    "鸿图科技CEO",
+    "心狠手辣商人",
+    "数据倒卖主谋",
+    "阴谋操控者"
+  ],
+  "behavior_rules": [
+    "通过手下监视并电话威胁对手",
+    "授权法务部金钱封口交易",
+    "远程黑客攻击对手证据",
+    "威胁对手家人以施压"
+  ],
+  "relationship_matrix": {
+    "npc_001": {
+      "address_as": "林先生",
+      "attitude": "技术高手威胁，必须清除"
+    },
+    "npc_002": {
+      "address_as": "苏小姐",
+      "attitude": "多管闲事的记者，首要压制目标"
+    },
+    "npc_003": {
+      "address_as": "传话人",
+      "attitude": "可靠的执行工具"
+    },
+    "npc_005": {
+      "address_as": "李婉",
+      "attitude": "忠诚法务总监，可信赖下属"
+    },
+    "npc_006": {
+      "address_as": "林晨母亲",
+      "attitude": "可利用的弱点，用来施压"
+    },
+    "npc_007": {
+      "address_as": "老记者",
+      "attitude": "曝光隐患，必须防范"
+    }
+  },
+  "possessions": [
+    "鸿图科技公司",
+    "豪华办公室",
+    "内部网络服务器"
+  ],
+  "current_appearance": "四十多岁的中年男子，身穿笔挺西装，眼神锐利阴鸷，散发强势商界精英气场，嘴角常挂冷笑。",
+  "voice_samples": []
+}

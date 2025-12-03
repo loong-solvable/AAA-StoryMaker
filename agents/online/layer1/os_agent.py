@@ -2569,49 +2569,82 @@ def create_agent() -> {class_name}:
         """
         从 Plot 输出解析角色登场信息，更新 current_scene.json
         
-        解析三种角色状态：
-        - 入场：新进入场景的角色
-        - 在场：持续在场的角色
-        - 离场：本幕有戏份但最终离开的角色（仍需初始化）
+        采用双重策略：
+        1. 优先解析明确格式的角色标记（入场/在场/离场）
+        2. 兜底：从全文提取所有 npc_xxx ID，确保不遗漏
+        
+        通过查询已初始化的角色来判断是否首次登场
         """
         import re
         
         present_characters = []
         
-        # 解析入场角色
+        # 获取已初始化的角色列表（用于判断首次登场）
+        initialized_chars = set(self.get_initialized_characters())
+        
+        # 从 genesis.json 获取角色名称映射
+        genesis_file = runtime_dir / "genesis.json"
+        char_name_map = {}  # {npc_id: name}
+        if genesis_file.exists():
+            try:
+                with open(genesis_file, "r", encoding="utf-8") as f:
+                    genesis_data = json.load(f)
+                for char in genesis_data.get("characters", []):
+                    char_name_map[char.get("id")] = char.get("name", char.get("id"))
+            except Exception as e:
+                logger.warning(f"⚠️ 读取genesis.json失败: {e}")
+        
+        # ========== 策略1：解析明确格式的角色标记 ==========
+        
+        # 解析入场角色（带 First Appearance 标记）
         entry_pattern = r'\*\*入场\*\*:\s*(\S+)\s*\((\w+)\)\s*\[First Appearance:\s*(True|False)\]'
         for match in re.finditer(entry_pattern, plot_content, re.IGNORECASE):
             name, char_id, first_app = match.groups()
-            present_characters.append({
-                "id": char_id,
-                "name": name,
-                "first_appearance": first_app.lower() == "true"
-            })
-            logger.info(f"      📥 入场: {name} ({char_id})")
-        
-        # 解析在场角色
-        present_pattern = r'\*\*在场\*\*:\s*(\S+)\s*\((\w+)\)'
-        for match in re.finditer(present_pattern, plot_content, re.IGNORECASE):
-            name, char_id = match.groups()
-            if not any(c["id"] == char_id for c in present_characters):
+            if char_id != "user":  # 跳过玩家
                 present_characters.append({
                     "id": char_id,
                     "name": name,
-                    "first_appearance": False
+                    "first_appearance": first_app.lower() == "true"
                 })
-                logger.info(f"      📍 在场: {name} ({char_id})")
+                logger.info(f"      📥 入场: {name} ({char_id}) [首次: {first_app}]")
         
-        # 解析离场角色（离场的角色在本幕中也有戏份，需要参与演绎）
+        # 解析离场角色（本幕有戏份，需要参与演绎）
         exit_pattern = r'\*\*离场\*\*:\s*(\S+)\s*\((\w+)\)'
         for match in re.finditer(exit_pattern, plot_content, re.IGNORECASE):
             name, char_id = match.groups()
-            if not any(c["id"] == char_id for c in present_characters):
+            if char_id != "user" and not any(c["id"] == char_id for c in present_characters):
+                # 判断是否首次登场：不在已初始化列表中就是首次
+                is_first = char_id not in initialized_chars
                 present_characters.append({
                     "id": char_id,
                     "name": name,
-                    "first_appearance": True  # 离场角色如果之前没出现过，标记为首次登场
+                    "first_appearance": is_first
                 })
-                logger.info(f"      📤 离场(本幕有戏份): {name} ({char_id})")
+                logger.info(f"      📤 离场(本幕有戏份): {name} ({char_id}) [首次: {is_first}]")
+        
+        # ========== 策略2：从全文提取所有 npc_xxx ID（兜底） ==========
+        # 这能捕获 LLM 以任意格式提及的角色
+        
+        all_npc_ids = set(re.findall(r'\b(npc_\d+)\b', plot_content))
+        existing_ids = {c["id"] for c in present_characters}
+        
+        for char_id in all_npc_ids:
+            if char_id not in existing_ids:
+                # 从名称映射或剧本内容中提取角色名
+                char_name = char_name_map.get(char_id)
+                if not char_name:
+                    # 尝试从剧本中提取：角色名 (npc_xxx)
+                    name_match = re.search(rf'(\S+)\s*\({char_id}\)', plot_content)
+                    char_name = name_match.group(1) if name_match else char_id
+                
+                # 判断是否首次登场
+                is_first = char_id not in initialized_chars
+                present_characters.append({
+                    "id": char_id,
+                    "name": char_name,
+                    "first_appearance": is_first
+                })
+                logger.info(f"      🔍 发现角色: {char_name} ({char_id}) [首次: {is_first}]")
         
         # 更新 current_scene.json
         current_scene = world_state.get("current_scene", {})

@@ -196,18 +196,26 @@ class RuntimeCleaner:
         """
         cleaned_count = 0
         
-        # 清理所有提示词文件
+        # 清理所有提示词文件（格式：npc_XXX_名字_prompt.txt）
         if self.npc_prompt_dir.exists():
             for prompt_file in self.npc_prompt_dir.glob("npc_*_prompt.txt"):
                 prompt_file.unlink()
                 cleaned_count += 1
         
-        # 清理所有agent文件（排除基础文件）
+        # 清理所有动态生成的agent文件（格式：npc_XXX_名字.py）
+        # 排除基础文件：npc_agent.py, __init__.py
         if self.npc_agent_dir.exists():
+            excluded_files = {"npc_agent.py", "__init__.py"}
             for agent_file in self.npc_agent_dir.glob("npc_*.py"):
-                # 排除基础模板文件（如果有的话）
-                agent_file.unlink()
-                cleaned_count += 1
+                # 只删除动态生成的文件（格式：npc_XXX_名字.py，包含至少两个下划线）
+                # 排除基础文件 npc_agent.py
+                if agent_file.name not in excluded_files:
+                    # 检查是否是动态生成的文件格式（npc_XXX_名字.py）
+                    # 基础文件 npc_agent.py 只有一个下划线，动态文件至少有两个下划线
+                    parts = agent_file.stem.split("_")
+                    if len(parts) >= 3:  # npc_XXX_名字 至少3部分
+                        agent_file.unlink()
+                        cleaned_count += 1
         
         return cleaned_count
     

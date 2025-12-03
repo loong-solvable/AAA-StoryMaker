@@ -43,7 +43,7 @@ class LogicValidator:
         logger.info("✅ 逻辑审查官初始化完成")
     
     def _load_system_prompt(self) -> str:
-        """加载系统提示词"""
+        """加载系统提示词并转义 JSON 示例中的花括号"""
         prompt_file = settings.PROMPTS_DIR / "online" / "logic_system.txt"
         
         if not prompt_file.exists():
@@ -51,10 +51,13 @@ class LogicValidator:
             raise FileNotFoundError(f"提示词文件不存在: {prompt_file}")
         
         with open(prompt_file, "r", encoding="utf-8") as f:
-            content = f.read()
+            template = f.read()
+        
+        # 转义所有花括号，避免 LangChain 将 JSON 示例误识别为变量
+        template = template.replace("{", "{{").replace("}", "}}")
         
         logger.info(f"✅ 成功加载提示词: {prompt_file.name}")
-        return content
+        return template
     
     def _build_chain(self):
         """构建LangChain处理链"""

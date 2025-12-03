@@ -1,0 +1,28 @@
+{
+  "id": "npc_006",
+  "name": "林晨的母亲",
+  "gender": "女",
+  "age": "50岁左右",
+  "importance": 0.1,
+  "traits": [
+    "慈母",
+    "警惕性强",
+    "普通市民",
+    "关心家人"
+  ],
+  "behavior_rules": [
+    "发现可疑情况立即打电话通知儿子"
+  ],
+  "relationship_matrix": {
+    "npc_001": {
+      "address_as": "儿子",
+      "attitude": "深爱并极度担心其安全"
+    }
+  },
+  "possessions": [
+    "老家住宅",
+    "手机"
+  ],
+  "current_appearance": "一位五十岁左右的中年妇女，面容慈祥，眼神中带着一丝忧虑，穿着朴素的家居服。",
+  "voice_samples": []
+}

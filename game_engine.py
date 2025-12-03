@@ -454,7 +454,7 @@ class GameEngine:
                 }
             }
             
-            self.world_state_sync.update_world_state_file(world_state_data)
+            self.world_state_sync.update_from_dict(world_state_data)
             logger.debug(f"✅ world_state.json 已同步 (回合 {turn_number})")
             
         except Exception as e:

@@ -54,11 +54,47 @@ class PlotDirector:
         logger.info(f"   - 剧情线索总数: {len(self.plot_hints)}")
     
     def _load_system_prompt(self) -> str:
-        """加载系统提示词"""
+        """加载系统提示词并填充变量、转义花括号"""
         prompt_file = settings.PROMPTS_DIR / "online" / "plot_system.txt"
         
         with open(prompt_file, "r", encoding="utf-8") as f:
-            return f.read()
+            template = f.read()
+        
+        # 填充初始化时可用的变量
+        if "{characters_list}" in template:
+            characters_list = [
+                {"id": char.get("id"), "name": char.get("name"), "importance": char.get("importance", 0.2)}
+                for char in self.characters
+            ]
+            template = template.replace(
+                "{characters_list}", json.dumps(characters_list, ensure_ascii=False, indent=2)
+            )
+        
+        if "{world_setting}" in template:
+            world_setting_summary = {
+                "world_name": self.world_info.get("title", "未知世界"),
+                "genre": self.world_info.get("genre", "未知类型"),
+                "locations": self.genesis_data.get("locations", [])
+            }
+            template = template.replace(
+                "{world_setting}", json.dumps(world_setting_summary, ensure_ascii=False, indent=2)
+            )
+        
+        # 填充运行时变量（使用占位符，因为这些数据在 plot_agent.py 中无法获取）
+        for var, placeholder in [
+            ("{world_state}", "（世界状态将在运行时提供）"),
+            ("{story_history}", "（暂无历史剧情摘要）"),
+            ("{last_scene_dialogues}", "（暂无上一幕对话）"),
+            ("{characters_details}", "（角色详情已在 characters_list 中）"),
+            ("{user_action}", "（玩家行动将在运行时提供）")
+        ]:
+            if var in template:
+                template = template.replace(var, placeholder)
+        
+        # 转义所有剩余的花括号，避免 LangChain 解析错误
+        template = template.replace("{", "{{").replace("}", "}}")
+        
+        return template
     
     def _build_chain(self):
         """构建处理链"""
@@ -86,7 +122,7 @@ class PlotDirector:
 【世界状态摘要】
 {world_context}
 
-请生成场景剧本指令，返回JSON格式。""")
+请按照系统提示词中的格式要求生成场景剧本。""")
         ])
         
         return prompt | self.llm | StrOutputParser()
@@ -167,13 +203,20 @@ class PlotDirector:
             if hint.get("id") not in self.completed_nodes:
                 lines.append(
                     f"{i}. [{hint.get('id')}] {hint.get('title', '未知')}"
-                    f" - 重要性: {node.get('importance', 'minor')}"
+                    f" - 重要性: {hint.get('importance', 'minor')}"
                 )
         return "\n".join(lines) if lines else "无可用剧情节点"
     
     def _parse_script(self, response: str) -> Dict[str, Any]:
-        """解析剧本"""
+        """
+        解析剧本（支持 JSON 和文本格式）
+        
+        plot_system.txt 要求输出文本格式（使用【】作为板块标题），
+        因此需要解析文本格式的剧本。
+        """
         response = response.strip()
+        
+        # 尝试解析 JSON 格式
         if response.startswith("```json"):
             response = response[7:]
         if response.startswith("```"):
@@ -182,13 +225,115 @@ class PlotDirector:
             response = response[:-3]
         response = response.strip()
         
-        try:
-            data = json.loads(response)
-            return data
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ 解析剧本失败: {e}")
-            logger.error(f"原始响应: {response[:200]}...")
-            return self._create_minimal_script()
+        # 如果是 JSON 格式，直接解析
+        if response.startswith("{"):
+            try:
+                data = json.loads(response)
+                return data
+            except json.JSONDecodeError:
+                pass  # 继续尝试文本格式解析
+        
+        # 解析文本格式（【剧情】【世界与物理事件】【角色登场与调度】）
+        return self._parse_text_script(response)
+    
+    def _parse_text_script(self, response: str) -> Dict[str, Any]:
+        """
+        解析文本格式的剧本
+        
+        文本格式示例：
+        【剧情】
+        - **剧情推演**: ...
+        
+        【世界与物理事件】
+        - **时间流逝**: ...
+        - **环境变动**: ...
+        - **位置变动**: ...
+        
+        【角色登场与调度】
+        - **入场**: 角色名 (ID) [First Appearance: True/False] - *描述*
+        - **离场**: 角色名 (ID) - *原因*
+        - **在场**: 角色名 (ID) - *状态*
+        """
+        import re
+        
+        result = {
+            "scene_analysis": {
+                "current_stage": self.current_stage,
+                "tension_level": 5,
+                "plot_significance": "常规场景",
+                "narrative_goal": "推进剧情"
+            },
+            "scene_theme": {
+                "mood": "平静",
+                "tone": "日常",
+                "pacing": "稳定"
+            },
+            "instructions": [],
+            "plot_progression": {
+                "completed_nodes": self.completed_nodes,
+                "activated_nodes": self.active_nodes,
+                "next_suggested_nodes": [],
+                "branching_opportunities": []
+            },
+            "director_notes": "",
+            "raw_content": response  # 保存原始文本
+        }
+        
+        # 提取【剧情】部分
+        plot_match = re.search(r'【剧情】(.*?)(?=【|$)', response, re.DOTALL)
+        if plot_match:
+            plot_content = plot_match.group(1).strip()
+            result["director_notes"] = plot_content
+            
+            # 从剧情内容推断情绪
+            if any(word in plot_content for word in ["紧张", "危险", "冲突", "争吵"]):
+                result["scene_theme"]["mood"] = "紧张"
+            elif any(word in plot_content for word in ["温馨", "友好", "轻松", "愉快"]):
+                result["scene_theme"]["mood"] = "温馨"
+            elif any(word in plot_content for word in ["悲伤", "难过", "失落"]):
+                result["scene_theme"]["mood"] = "忧郁"
+        
+        # 提取【角色登场与调度】部分
+        cast_match = re.search(r'【角色登场与调度】(.*?)(?=【|$)', response, re.DOTALL)
+        if cast_match:
+            cast_content = cast_match.group(1).strip()
+            
+            # 解析入场角色
+            entry_matches = re.findall(r'\*\*入场\*\*:\s*(\S+)\s*\((\w+)\)\s*\[First Appearance:\s*(True|False)\]', cast_content)
+            for name, char_id, first_appearance in entry_matches:
+                result["instructions"].append({
+                    "type": "character_entry",
+                    "character_id": char_id,
+                    "character_name": name,
+                    "first_appearance": first_appearance.lower() == "true"
+                })
+            
+            # 解析离场角色
+            exit_matches = re.findall(r'\*\*离场\*\*:\s*(\S+)\s*\((\w+)\)', cast_content)
+            for name, char_id in exit_matches:
+                result["instructions"].append({
+                    "type": "character_exit",
+                    "character_id": char_id,
+                    "character_name": name
+                })
+        
+        # 提取【世界与物理事件】部分
+        world_match = re.search(r'【世界与物理事件】(.*?)(?=【|$)', response, re.DOTALL)
+        if world_match:
+            world_content = world_match.group(1).strip()
+            
+            # 解析时间流逝
+            time_match = re.search(r'\*\*时间流逝\*\*:\s*(.+?)(?=\n|$)', world_content)
+            if time_match:
+                result["time_passed"] = time_match.group(1).strip()
+            
+            # 解析位置变动
+            location_match = re.search(r'\*\*位置变动\*\*:\s*(.+?)(?=\n|$)', world_content)
+            if location_match:
+                result["location_change"] = location_match.group(1).strip()
+        
+        logger.info(f"📝 解析文本格式剧本: {len(result['instructions'])} 条指令")
+        return result
     
     def _update_plot_state(self, script: Dict[str, Any]):
         """更新剧情状态"""

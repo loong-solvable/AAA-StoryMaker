@@ -60,11 +60,16 @@ class WorldStateManager:
         logger.info(f"   - 初始时间: {self.current_time}")
     
     def _load_system_prompt(self) -> str:
-        """加载系统提示词"""
+        """加载系统提示词并转义 JSON 示例中的花括号"""
         prompt_file = settings.PROMPTS_DIR / "online" / "ws_system.txt"
         
         with open(prompt_file, "r", encoding="utf-8") as f:
-            return f.read()
+            template = f.read()
+        
+        # 转义所有花括号，避免 LangChain 将 JSON 示例误识别为变量
+        template = template.replace("{", "{{").replace("}", "}}")
+        
+        return template
     
     def _build_chain(self):
         """构建处理链"""
