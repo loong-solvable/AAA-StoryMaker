@@ -15,6 +15,7 @@
 import sys
 import json
 import time
+import argparse
 from pathlib import Path
 from datetime import datetime
 
@@ -50,8 +51,50 @@ def print_dialogue(dialogue_log: list):
         print(f"      台词: {content}...")
 
 
-def run_three_scenes_test():
-    """运行三幕完整测试"""
+def find_available_worlds():
+    """查找所有可用的世界目录"""
+    from config.settings import settings
+    worlds_dir = settings.DATA_DIR / "worlds"
+    
+    if not worlds_dir.exists():
+        return []
+    
+    available_worlds = []
+    for world_folder in worlds_dir.iterdir():
+        if world_folder.is_dir() and (world_folder / "world_setting.json").exists():
+            available_worlds.append(world_folder.name)
+    
+    return sorted(available_worlds)
+
+
+def select_world_interactive(available_worlds):
+    """交互式选择世界"""
+    if len(available_worlds) == 1:
+        return available_worlds[0]
+    
+    print("\n📋 可用的世界:")
+    for i, w in enumerate(available_worlds, 1):
+        print(f"   {i}. {w}")
+    
+    try:
+        choice = input(f"\n请选择世界 (1-{len(available_worlds)}): ").strip()
+        idx = int(choice) - 1
+        if 0 <= idx < len(available_worlds):
+            return available_worlds[idx]
+        else:
+            print("❌ 无效选择")
+            return None
+    except (ValueError, KeyboardInterrupt):
+        print("\n❌ 取消选择")
+        return None
+
+
+def run_three_scenes_test(world_name: str = None):
+    """运行三幕完整测试
+    
+    Args:
+        world_name: 世界名称，如果为None则自动检测或提示选择
+    """
     
     print("=" * 70)
     print("🎬 三幕完整流程测试")
@@ -63,8 +106,32 @@ def run_three_scenes_test():
     from utils.scene_memory import create_scene_memory, create_all_scene_memory
     import importlib.util
     
-    world_name = "白垩纪往事"
+    # 1. 确定世界名称
+    if world_name is None:
+        available_worlds = find_available_worlds()
+        if not available_worlds:
+            print("❌ 未找到可用的世界目录")
+            print(f"   请确保 {settings.DATA_DIR / 'worlds'} 目录下有世界数据")
+            print(f"   或者先运行: python run_creator_god.py")
+            return None
+        
+        if len(available_worlds) == 1:
+            world_name = available_worlds[0]
+            print(f"📁 自动选择世界: {world_name}")
+        else:
+            world_name = select_world_interactive(available_worlds)
+            if world_name is None:
+                return None
+    
     world_dir = settings.DATA_DIR / "worlds" / world_name
+    if not world_dir.exists():
+        print(f"❌ 世界目录不存在: {world_dir}")
+        print(f"   请先运行: python run_creator_god.py 创建世界数据")
+        return None
+    
+    print(f"📁 使用世界: {world_name}")
+    print(f"📁 世界目录: {world_dir}")
+    print()
     
     # ==========================================
     # 阶段 0: 光明会初始化
@@ -301,8 +368,36 @@ def run_three_scenes_test():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="三幕完整流程测试",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  # 自动检测并选择世界
+  python tests/test_three_scenes_flow.py
+  
+  # 指定世界名称
+  python tests/test_three_scenes_flow.py --world "江城市"
+  
+  # 指定世界名称（白垩纪往事）
+  python tests/test_three_scenes_flow.py --world "白垩纪往事"
+        """
+    )
+    
+    parser.add_argument(
+        "--world",
+        type=str,
+        help="世界名称（如果不指定，将自动检测或提示选择）"
+    )
+    
+    args = parser.parse_args()
+    
     try:
-        result = run_three_scenes_test()
+        result = run_three_scenes_test(world_name=args.world)
+        
+        if result is None:
+            print("\n❌ 测试未执行")
+            sys.exit(1)
         
         overall_success = (
             len(result["scenes"]) >= 3 and
