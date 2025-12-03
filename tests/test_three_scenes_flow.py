@@ -109,7 +109,7 @@ def create_mock_user_input_callback(scene_num: int):
         if scene_num == 1:
             # 第1幕：玩家初次参与，比较好奇和谨慎
             if current_turn == 1:
-                return "你们好，我注意到这里的气氛有些紧张。发生了什么事？"
+                return "发生了什么事？"
             elif current_turn == 2:
                 return "原来如此，那我们应该一起合作解决这个问题。"
             else:
@@ -118,18 +118,18 @@ def create_mock_user_input_callback(scene_num: int):
         elif scene_num == 2:
             # 第2幕：玩家已经熟悉情况，更加主动
             if current_turn == 1:
-                return "看来情况比我们想象的更复杂。我们需要制定一个计划。"
+                return "好"
             elif current_turn == 2:
-                return "好的，我同意这个方案。让我们开始行动吧。"
+                return "好的，让我们开始行动吧。"
             else:
                 return "继续，我在听。"
         
         else:  # scene_num == 3
             # 第3幕：玩家已经深入剧情，更加投入
             if current_turn == 1:
-                return "我们已经走到这一步了，不能放弃。让我们完成这个任务。"
+                return "没问题"
             elif current_turn == 2:
-                return "我完全理解，让我们一起面对最后的挑战。"
+                return "我完全理解"
             else:
                 return "好的，我准备好了。"
     
