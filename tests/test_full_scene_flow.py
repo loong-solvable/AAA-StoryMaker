@@ -7,6 +7,7 @@
 import sys
 import json
 import time
+import argparse
 from pathlib import Path
 
 # 添加项目根目录到路径
@@ -14,8 +15,72 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
-def run_full_scene():
-    """运行完整场景流程"""
+def find_available_worlds():
+    """查找所有可用的世界目录"""
+    from config.settings import settings
+    worlds_dir = settings.DATA_DIR / "worlds"
+    
+    if not worlds_dir.exists():
+        return []
+    
+    available_worlds = []
+    for world_folder in worlds_dir.iterdir():
+        if world_folder.is_dir() and (world_folder / "world_setting.json").exists():
+            available_worlds.append(world_folder.name)
+    
+    return sorted(available_worlds)
+
+
+def find_runtime_dir_for_world(world_name: str):
+    """查找指定世界的最新运行时目录"""
+    from config.settings import settings
+    runtime_dir = settings.DATA_DIR / "runtime"
+    
+    if not runtime_dir.exists():
+        return None
+    
+    # 查找匹配的运行时目录
+    matching_dirs = []
+    for runtime_folder in runtime_dir.iterdir():
+        if runtime_folder.is_dir() and runtime_folder.name.startswith(f"{world_name}_"):
+            matching_dirs.append(runtime_folder)
+    
+    if not matching_dirs:
+        return None
+    
+    # 返回最新的（按修改时间）
+    return max(matching_dirs, key=lambda p: p.stat().st_mtime)
+
+
+def select_world_interactive(available_worlds):
+    """交互式选择世界"""
+    if len(available_worlds) == 1:
+        return available_worlds[0]
+    
+    print("\n📋 可用的世界:")
+    for i, w in enumerate(available_worlds, 1):
+        print(f"   {i}. {w}")
+    
+    try:
+        choice = input(f"\n请选择世界 (1-{len(available_worlds)}): ").strip()
+        idx = int(choice) - 1
+        if 0 <= idx < len(available_worlds):
+            return available_worlds[idx]
+        else:
+            print("❌ 无效选择")
+            return None
+    except (ValueError, KeyboardInterrupt):
+        print("\n❌ 取消选择")
+        return None
+
+
+def run_full_scene(world_name: str = None, runtime_dir_path: str = None):
+    """运行完整场景流程
+    
+    Args:
+        world_name: 世界名称，如果为None则自动检测或提示选择
+        runtime_dir_path: 运行时目录路径，如果为None则自动查找
+    """
     print("=" * 70)
     print("🎬 完整场景流程测试")
     print("=" * 70)
@@ -23,8 +88,45 @@ def run_full_scene():
     from config.settings import settings
     from utils.scene_memory import create_scene_memory
     
-    runtime_dir = settings.DATA_DIR / "runtime" / "江城市_20251128_183246"
-    world_dir = settings.DATA_DIR / "worlds" / "江城市"
+    # 1. 确定世界名称
+    if world_name is None:
+        available_worlds = find_available_worlds()
+        if not available_worlds:
+            print("❌ 未找到可用的世界目录")
+            print(f"   请确保 {settings.DATA_DIR / 'worlds'} 目录下有世界数据")
+            return False
+        
+        if len(available_worlds) == 1:
+            world_name = available_worlds[0]
+            print(f"📁 自动选择世界: {world_name}")
+        else:
+            world_name = select_world_interactive(available_worlds)
+            if world_name is None:
+                return False
+    
+    world_dir = settings.DATA_DIR / "worlds" / world_name
+    if not world_dir.exists():
+        print(f"❌ 世界目录不存在: {world_dir}")
+        return False
+    
+    # 2. 确定运行时目录
+    if runtime_dir_path:
+        runtime_dir = Path(runtime_dir_path)
+    else:
+        runtime_dir = find_runtime_dir_for_world(world_name)
+        if runtime_dir is None:
+            print(f"⚠️  未找到世界 '{world_name}' 的运行时目录")
+            print(f"   请先运行初始化流程创建运行时数据")
+            print(f"   或者使用 --runtime-dir 参数指定运行时目录")
+            return False
+    
+    if not runtime_dir.exists():
+        print(f"❌ 运行时目录不存在: {runtime_dir}")
+        return False
+    
+    print(f"📁 世界目录: {world_dir}")
+    print(f"📁 运行时目录: {runtime_dir}")
+    print()
     
     # ==========================================
     # 阶段 1: 初始化 OS Agent
@@ -246,9 +348,43 @@ def run_full_scene():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="完整场景流程测试",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+  # 自动检测并选择世界
+  python tests/test_full_scene_flow.py
+  
+  # 指定世界名称
+  python tests/test_full_scene_flow.py --world "江城市"
+  
+  # 指定世界和运行时目录
+  python tests/test_full_scene_flow.py --world "江城市" --runtime-dir "data/runtime/江城市_20251128_183246"
+        """
+    )
+    
+    parser.add_argument(
+        "--world",
+        type=str,
+        help="世界名称（如果不指定，将自动检测或提示选择）"
+    )
+    parser.add_argument(
+        "--runtime-dir",
+        type=str,
+        help="运行时目录路径（如果不指定，将自动查找最新的）"
+    )
+    
+    args = parser.parse_args()
+    
     try:
-        success = run_full_scene()
+        success = run_full_scene(
+            world_name=args.world,
+            runtime_dir_path=args.runtime_dir
+        )
         print(f"\n最终结果: {'成功 ✅' if success else '失败 ❌'}")
+    except KeyboardInterrupt:
+        print("\n\n⚠️ 测试被用户中断")
     except Exception as e:
         print(f"\n测试异常: {e}")
         import traceback
