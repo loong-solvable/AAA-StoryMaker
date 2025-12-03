@@ -4,13 +4,21 @@ LLM工厂模块
 支持: zhipu(智谱清言), openai, openrouter
 """
 from typing import Optional
-from langchain_community.chat_models import ChatOpenAI
 from langchain_core.language_models import BaseLanguageModel
 from config.settings import settings
 from utils.logger import setup_logger
 from utils.custom_zhipuai import CustomChatZhipuAI
 
 logger = setup_logger("LLMFactory")
+
+# 优先使用新版 langchain_openai，如果不可用则回退到旧版
+try:
+    from langchain_openai import ChatOpenAI
+    logger.info("✅ 使用 langchain_openai.ChatOpenAI（推荐）")
+except ImportError:
+    from langchain_community.chat_models import ChatOpenAI
+    logger.warning("⚠️ langchain_openai 未安装，使用旧版 langchain_community.ChatOpenAI")
+    logger.warning("   建议运行: pip install langchain-openai")
 
 
 class LLMFactory:

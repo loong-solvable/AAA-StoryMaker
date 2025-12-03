@@ -617,8 +617,31 @@ class IlluminatiInitializer:
             
         except Exception as e:
             logger.error(f"❌ Plot 生成失败: {e}", exc_info=True)
-            # 返回默认值
-            return self._create_default_scene(), self._create_default_script()
+            # 设置并返回默认值，确保后续流程可以继续
+            default_scene = self._create_default_scene()
+            default_script = self._create_default_script()
+            self.initial_scene = default_scene
+            self.initial_script = default_script
+            
+            # 仍然保存默认文件
+            try:
+                scene_file = plot_dir / "current_scene.json"
+                with open(scene_file, "w", encoding="utf-8") as f:
+                    json.dump(asdict(default_scene), f, ensure_ascii=False, indent=2)
+                
+                script_file = plot_dir / "current_script.json"
+                script_data = asdict(default_script)
+                script_data["scene_id"] = 1
+                script_data["is_initial"] = True
+                script_data["is_fallback"] = True  # 标记为回退默认值
+                with open(script_file, "w", encoding="utf-8") as f:
+                    json.dump(script_data, f, ensure_ascii=False, indent=2)
+                    
+                logger.warning(f"⚠️ 使用默认场景和剧本继续初始化")
+            except Exception as save_err:
+                logger.error(f"❌ 保存默认文件失败: {save_err}")
+            
+            return default_scene, default_script
     
     def _build_plot_messages(self, world_state: Dict[str, Any]) -> list:
         """

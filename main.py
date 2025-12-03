@@ -220,14 +220,19 @@ def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
         print()
         print("⏳ 正在加载游戏...")
         
-        # 初始化 OS Agent
+        # 初始化 OS Agent（传入 genesis.json 路径以加载玩家角色数据）
         os_file = PROJECT_ROOT / "agents" / "online" / "layer1" / "os_agent.py"
         spec = importlib.util.spec_from_file_location("os_agent", os_file)
         os_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(os_module)
         
-        os_agent = os_module.OperatingSystem()
-        print("✅ OS Agent 初始化完成")
+        genesis_path = runtime_dir / "genesis.json"
+        if genesis_path.exists():
+            os_agent = os_module.OperatingSystem(genesis_path)
+            print("✅ OS Agent 初始化完成（已加载玩家角色数据）")
+        else:
+            os_agent = os_module.OperatingSystem()
+            print("⚠️ OS Agent 初始化完成（未找到 genesis.json）")
         
         print_help()
         
