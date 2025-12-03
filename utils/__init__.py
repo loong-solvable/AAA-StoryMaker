@@ -8,6 +8,7 @@ from .character_data import (
     validate_character_data,
     get_high_importance_characters
 )
+from .cleanup_runtime import RuntimeCleaner
 
 __all__ = [
     "get_llm",
@@ -15,5 +16,6 @@ __all__ = [
     "CharacterData",
     "CharacterDataFormatter",
     "validate_character_data",
-    "get_high_importance_characters"
+    "get_high_importance_characters",
+    "RuntimeCleaner"
 ]
