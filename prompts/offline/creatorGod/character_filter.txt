@@ -13,6 +13,21 @@ JSON List:
 [
   {"id": "npc_001", "name": "中文名", "importance": 0.9},
   {"id": "npc_002", "name": "中文名", "importance": 0.3},
-
   ...
 ]
+
+# Critical Output Format Constraints
+1. **Output Format (CRITICAL):** 
+   - Output ONLY the raw JSON array. 
+   - Do NOT wrap it in markdown code blocks (like ```json ... ```). 
+   - Do NOT include any explanations, comments, or additional text before or after the JSON.
+   - Do NOT add any text after the closing bracket ].
+   - The response must start with [ and end with ] with no other content.
+   - Your entire response should be valid JSON that can be parsed directly by json.loads().
+
+2. **Strict JSON Format:**
+   - Must be valid JSON that can be parsed directly by json.loads()
+   - No trailing commas
+   - All strings must be properly escaped with double quotes
+   - No comments in the output
+   - No extra whitespace or newlines after the closing bracket

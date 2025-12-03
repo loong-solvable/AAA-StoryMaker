@@ -111,3 +111,19 @@
   // ==========================================
   // world_setting.json 只负责定义世界规则，不负责初始化具体场景
 }}
+
+# Critical Output Format Constraints
+1. **Output Format (CRITICAL):** 
+   - Output ONLY the raw JSON object. 
+   - Do NOT wrap it in markdown code blocks (like ```json ... ```). 
+   - Do NOT include any explanations, comments, or additional text before or after the JSON.
+   - Do NOT add any text after the closing brace }}.
+   - The response must start with {{ and end with }} with no other content.
+   - Your entire response should be valid JSON that can be parsed directly by json.loads().
+
+2. **Strict JSON Format:**
+   - Must be valid JSON that can be parsed directly by json.loads()
+   - No trailing commas
+   - All strings must be properly escaped with double quotes
+   - No comments in the output (even though the schema shows comments, the output must be pure JSON)
+   - No extra whitespace or newlines after the closing brace

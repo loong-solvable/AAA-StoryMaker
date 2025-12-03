@@ -50,8 +50,41 @@
 }}
 
 # Critical Constraints
-1. **Output Format:** Output ONLY the raw JSON object. Do not wrap it in markdown code blocks (like ```json ... ```). Do not include any explanations before or after the JSON.
-2. **ID Consistency:** 必须使用角色普查表中确定的ID。当前角色ID为 "{target_id}"，relationship_matrix 中引用其他角色时也必须使用普查表中的ID。
-3. **Relationship Matrix:** 必须区分"面子"和"里子"。address_as 是口头称呼，attitude 是内心独白。二者可能一致也可能不一致。
-4. **Traits:** 在能准确表达意思的基础上不要使用长句。
-5. **Voice Samples:** 必须直接摘录原文，不要自己编造。
+1. **Output Format (CRITICAL):** 
+   - Output ONLY the raw JSON object. 
+   - Do NOT wrap it in markdown code blocks (like ```json ... ```). 
+   - Do NOT include any explanations, comments, or additional text before or after the JSON.
+   - Do NOT add any text after the closing brace }.
+   - The response must start with {{ and end with }} with no other content.
+   - Your entire response should be valid JSON that can be parsed directly by json.loads().
+
+2. **Strict JSON Format:**
+   - Must be valid JSON that can be parsed directly by json.loads()
+   - No trailing commas
+   - All strings must be properly escaped with double quotes
+   - No comments in the output (even though the schema shows comments, the output must be pure JSON)
+   - No extra whitespace or newlines after the closing brace
+
+3. **ID Consistency:** 必须使用角色普查表中确定的ID。当前角色ID为 "{target_id}"，relationship_matrix 中引用其他角色时也必须使用普查表中的ID。
+
+4. **Relationship Matrix:** 必须区分"面子"和"里子"。address_as 是口头称呼，attitude 是内心独白。二者可能一致也可能不一致。
+
+5. **Traits:** 在能准确表达意思的基础上不要使用长句。
+
+6. **Voice Samples:** 必须直接摘录原文，不要自己编造。
+
+# Example Output Format
+Your response should look exactly like this (no markdown, no extra text, no explanations):
+{{
+  "id": "npc_001",
+  "name": "角色名",
+  "gender": "男",
+  "age": "30岁",
+  "importance": 1.0,
+  "traits": ["标签1", "标签2"],
+  "behavior_rules": ["行为规则1"],
+  "relationship_matrix": {{}},
+  "possessions": ["物品1"],
+  "current_appearance": "外貌描述",
+  "voice_samples": ["台词1"]
+}}
