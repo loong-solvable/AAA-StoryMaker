@@ -167,5 +167,21 @@ def parse_json_response(response: str) -> Any:
 
 
 def escape_braces(text: str) -> str:
-    """将 { 和 } 转义为 {{ 和 }}，用于关闭 PromptTemplate 的变量识别"""
-    return text.replace("{", "{{").replace("}", "}}")
+    """
+    将 { 和 } 转义为 {{ 和 }}，用于关闭 PromptTemplate 的变量识别
+    注意：避免双重转义，如果已经是 {{ 或 }}，则不再转义
+    """
+    # 先处理已经转义的 {{ 和 }}，将它们临时替换为占位符
+    # 使用不太可能出现的占位符
+    text = text.replace("{{", "\uE000\uE000")  # 临时占位符1
+    text = text.replace("}}", "\uE001\uE001")  # 临时占位符2
+    
+    # 转义剩余的单个 { 和 }
+    text = text.replace("{", "{{")
+    text = text.replace("}", "}}")
+    
+    # 恢复已经转义的 {{ 和 }}
+    text = text.replace("\uE000\uE000", "{{")
+    text = text.replace("\uE001\uE001", "}}")
+    
+    return text
