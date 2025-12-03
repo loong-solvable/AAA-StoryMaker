@@ -42,6 +42,14 @@ logs/*.log
 # 生成的数据
 data/genesis/*.json
 
+# 运行时数据（不应提交到git）
+data/runtime/
+data/saves/
+
+# 动态生成的角色文件（不应提交到git）
+agents/online/layer3/npc_*.py
+prompts/online/npc_prompt/npc_*_prompt.txt
+
 # 操作系统
 .DS_Store
 Thumbs.db
