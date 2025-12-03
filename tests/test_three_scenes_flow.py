@@ -296,10 +296,10 @@ def run_three_scenes_test(world_name: str = None):
         if scene_num < 3:
             print_separator(f"幕间处理: 第{scene_num}幕 → 第{scene_num+1}幕", char="-")
             
-            # 检查归档前的 history 目录
-            history_dir = runtime_dir / "plot" / "history"
-            files_before = list(history_dir.glob("*.json")) if history_dir.exists() else []
-            print(f"\n📂 归档前 history 文件数: {len(files_before)}")
+            # 检查归档前的 archive 目录
+            archive_dir = runtime_dir / "plot" / "archive"
+            files_before = list(archive_dir.glob("*.json")) if archive_dir.exists() else []
+            print(f"\n📂 归档前 archive 文件数: {len(files_before)}")
             
             transition_result = os_agent.process_scene_transition(
                 runtime_dir=runtime_dir,
@@ -321,11 +321,11 @@ def run_three_scenes_test(world_name: str = None):
             print(f"   - 剧本生成: {transition_result.get('next_script_generated')}")
             print(f"   - 下一幕ID: {transition_result.get('next_scene_id')}")
             
-            # 检查归档后的 history 目录
-            files_after = list(history_dir.glob("*.json")) if history_dir.exists() else []
+            # 检查归档后的 archive 目录
+            files_after = list(archive_dir.glob("*.json")) if archive_dir.exists() else []
             new_files = set(f.name for f in files_after) - set(f.name for f in files_before)
             
-            print(f"\n📂 归档后 history 文件数: {len(files_after)}")
+            print(f"\n📂 归档后 archive 文件数: {len(files_after)}")
             if new_files:
                 print(f"   ✅ 新归档文件:")
                 for f in new_files:
@@ -355,13 +355,13 @@ def run_three_scenes_test(world_name: str = None):
     print(f"   - 已归档幕数: {scenes_archived}")
     print(f"   - 当前幕ID: {all_data.get('meta', {}).get('current_scene_id')}")
     
-    # 检查 history 目录最终状态
-    history_dir = runtime_dir / "plot" / "history"
-    all_history_files = list(history_dir.glob("*.json")) if history_dir.exists() else []
+    # 检查 archive 目录最终状态
+    archive_dir = runtime_dir / "plot" / "archive"
+    all_archive_files = list(archive_dir.glob("*.json")) if archive_dir.exists() else []
     
-    print(f"\n📂 History 目录最终状态:")
-    print(f"   - 文件总数: {len(all_history_files)}")
-    for f in all_history_files:
+    print(f"\n📂 Archive 目录最终状态:")
+    print(f"   - 文件总数: {len(all_archive_files)}")
+    for f in all_archive_files:
         print(f"      - {f.name}")
     
     # 检查当前剧本
