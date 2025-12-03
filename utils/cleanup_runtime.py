@@ -5,9 +5,18 @@
 支持清理指定世界或所有世界的运行时数据。
 """
 
+import sys
 import shutil
 from pathlib import Path
 from typing import List, Optional, Dict
+
+# 添加项目根目录到路径（支持直接运行脚本）
+_script_dir = Path(__file__).resolve().parent
+_project_root = _script_dir.parent
+_project_root_str = str(_project_root)
+if _project_root_str not in sys.path:
+    sys.path.insert(0, _project_root_str)
+
 from config.settings import Settings, PROJECT_ROOT
 
 
