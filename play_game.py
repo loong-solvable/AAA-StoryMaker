@@ -1,21 +1,32 @@
 """
-游戏主入口 - CLI交互界面
-运行完整的互动叙事游戏
+🎭 Infinite Story - 无限故事机
+交互式CLI入口 - 提供完整的游戏管理功能
 
-使用新的 data/worlds/ 格式，通过 IlluminatiInitializer 初始化游戏
+功能:
+- 选择/创建世界
+- 管理多个存档（运行时目录）
+- 新建/继续游戏
+- 玩家角色自定义
+
+使用方法:
+    python play_game.py
 """
 import sys
+import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
+from datetime import datetime
+
 from config.settings import settings
 from utils.logger import default_logger as logger
 
 
-def print_header():
-    """打印游戏标题"""
-    print("\n" + "=" * 70)
+def print_banner():
+    """打印游戏横幅"""
+    print()
+    print("=" * 70)
     print("  🎭 Infinite Story - 无限故事机")
-    print("  生成式互动叙事游戏")
+    print("  交互式CLI游戏界面")
     print("=" * 70)
     print()
 
@@ -30,8 +41,12 @@ def print_help():
     print("  其他输入 - 作为游戏中的行动\n")
 
 
-def list_available_worlds() -> list:
-    """列出所有可用的世界"""
+# ==========================================
+# 世界管理
+# ==========================================
+
+def get_available_worlds() -> List[str]:
+    """获取所有可用的世界"""
     worlds_dir = settings.DATA_DIR / "worlds"
     if not worlds_dir.exists():
         return []
@@ -41,40 +56,59 @@ def list_available_worlds() -> list:
         if world_dir.is_dir() and (world_dir / "world_setting.json").exists():
             worlds.append(world_dir.name)
     
-    return worlds
+    return sorted(worlds)
 
 
-def list_existing_runtimes(world_name: str) -> list:
-    """列出指定世界的现有运行时目录"""
-    runtime_dir = settings.DATA_DIR / "runtime"
-    if not runtime_dir.exists():
-        return []
+def get_world_info(world_name: str) -> Dict[str, Any]:
+    """获取世界的详细信息"""
+    world_dir = settings.DATA_DIR / "worlds" / world_name
     
-    runtimes = []
-    for rt_dir in runtime_dir.iterdir():
-        if rt_dir.is_dir() and rt_dir.name.startswith(f"{world_name}_"):
-            # 检查是否是有效的运行时目录
-            if (rt_dir / "init_summary.json").exists():
-                runtimes.append(rt_dir.name)
+    info = {"name": world_name}
     
-    return sorted(runtimes, reverse=True)  # 最新的在前面
+    # 读取世界设定
+    setting_file = world_dir / "world_setting.json"
+    if setting_file.exists():
+        with open(setting_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            meta = data.get("meta", {})
+            info["title"] = meta.get("world_name", world_name)
+            info["genre"] = meta.get("genre_type", "未知")
+            info["description"] = meta.get("description", "")[:100]
+    
+    # 读取角色列表
+    chars_file = world_dir / "characters_list.json"
+    if chars_file.exists():
+        with open(chars_file, "r", encoding="utf-8") as f:
+            chars = json.load(f)
+            info["character_count"] = len(chars)
+    
+    return info
 
 
 def select_world() -> Optional[str]:
     """让用户选择世界"""
-    worlds = list_available_worlds()
+    worlds = get_available_worlds()
     
     if not worlds:
         print("❌ 未找到任何世界数据")
-        print(f"\n请先运行创世组生成世界数据:")
-        print(f"  python run_creator_god.py")
+        print()
+        print("请先运行创世组生成世界数据:")
+        print("  python run_creator_god.py")
         return None
     
     print("📚 可用的世界:")
-    for i, world in enumerate(worlds, 1):
-        print(f"   {i}. {world}")
-    
     print()
+    
+    for i, world in enumerate(worlds, 1):
+        info = get_world_info(world)
+        print(f"   {i}. {info.get('title', world)}")
+        if info.get("genre"):
+            print(f"      类型: {info['genre']}")
+        if info.get("character_count"):
+            print(f"      角色: {info['character_count']} 人")
+        if info.get("description"):
+            print(f"      简介: {info['description']}...")
+        print()
     
     while True:
         try:
@@ -97,24 +131,63 @@ def select_world() -> Optional[str]:
             
             print("❌ 无效的世界名称")
             
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
             print("\n取消选择")
             return None
 
 
+# ==========================================
+# 运行时（存档）管理
+# ==========================================
+
+def get_existing_runtimes(world_name: str) -> List[Dict[str, Any]]:
+    """获取指定世界的现有运行时目录"""
+    runtime_dir = settings.DATA_DIR / "runtime"
+    if not runtime_dir.exists():
+        return []
+    
+    runtimes = []
+    for rt_dir in runtime_dir.iterdir():
+        if rt_dir.is_dir() and rt_dir.name.startswith(f"{world_name}_"):
+            # 检查是否是有效的运行时目录
+            summary_file = rt_dir / "init_summary.json"
+            if summary_file.exists():
+                try:
+                    with open(summary_file, "r", encoding="utf-8") as f:
+                        summary = json.load(f)
+                    
+                    runtimes.append({
+                        "path": rt_dir,
+                        "name": rt_dir.name,
+                        "initialized_at": summary.get("initialized_at", "未知"),
+                        "llm_model": summary.get("llm_config", {}).get("model", "未知")
+                    })
+                except:
+                    runtimes.append({
+                        "path": rt_dir,
+                        "name": rt_dir.name,
+                        "initialized_at": "未知",
+                        "llm_model": "未知"
+                    })
+    
+    return sorted(runtimes, key=lambda x: x["initialized_at"], reverse=True)
+
+
 def select_or_create_runtime(world_name: str) -> Optional[Path]:
     """选择现有运行时或创建新的"""
-    runtimes = list_existing_runtimes(world_name)
+    runtimes = get_existing_runtimes(world_name)
     
     print()
     print("🎮 运行选项:")
-    print("   0. 开始新游戏 (初始化新的运行时)")
+    print("   0. 🆕 开始新游戏 (初始化新的存档)")
     
     if runtimes:
-        print("   ─────────────────────────────")
+        print()
         print("   继续现有游戏:")
         for i, rt in enumerate(runtimes[:5], 1):  # 只显示最近5个
-            print(f"   {i}. {rt}")
+            time_str = rt["initialized_at"][:16].replace("T", " ") if "T" in rt["initialized_at"] else rt["initialized_at"]
+            print(f"   {i}. {rt['name']}")
+            print(f"      创建时间: {time_str}")
     
     print()
     
@@ -136,72 +209,75 @@ def select_or_create_runtime(world_name: str) -> Optional[Path]:
                 return create_new_runtime(world_name)
             
             if runtimes and 1 <= idx <= len(runtimes[:5]):
-                runtime_name = runtimes[idx - 1]
-                return settings.DATA_DIR / "runtime" / runtime_name
+                return runtimes[idx - 1]["path"]
             
             print("❌ 无效的选择")
             
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, EOFError):
             print("\n取消选择")
             return None
 
 
-def prompt_player_profile() -> dict:
-    """收集玩家的最小角色信息"""
+def prompt_player_profile() -> Dict[str, Any]:
+    """收集玩家的角色信息"""
+    print()
+    print("📝 创建你的角色 (所有项均可回车跳过使用默认值)")
+    print()
+    
     profile = {}
+    
     try:
-        name = input("请输入你的角色名字（回车默认“玩家”） > ").strip()
+        name = input("   角色名字 [默认: 玩家] > ").strip()
         if name:
             profile["name"] = name
-        gender = input("请输入性别（可留空） > ").strip()
+        
+        gender = input("   性别 [可选] > ").strip()
         if gender:
             profile["gender"] = gender
-        appearance = input("一句话外观/风格描述（可留空） > ").strip()
+        
+        appearance = input("   一句话外观/风格描述 [可选] > ").strip()
         if appearance:
             profile["appearance"] = appearance
+            
     except (KeyboardInterrupt, EOFError):
         print("\n使用默认玩家设定")
+    
     return profile
 
 
 def create_new_runtime(world_name: str) -> Optional[Path]:
-    """创建新的运行时（调用 IlluminatiInitializer）"""
+    """创建新的运行时"""
+    from initial_Illuminati import IlluminatiInitializer
+    
     print()
-    print("⏳ 正在初始化游戏世界...")
-    print("   这可能需要几分钟（需要调用LLM生成初始剧情）...")
+    print("⏳ 准备初始化游戏世界...")
+    print("   这需要调用LLM生成初始剧情，可能需要几分钟")
+    print()
+    
+    # 收集玩家信息
+    player_profile = prompt_player_profile()
+    
+    print()
+    print("⏳ 开始初始化...")
+    print("   📍 步骤 1/3: WS - 初始化世界状态")
+    print("   📍 步骤 2/3: Plot - 生成开场剧本")
+    print("   📍 步骤 3/3: Vibe - 生成初始氛围")
     print()
     
     try:
-        from initial_Illuminati import IlluminatiInitializer
-
-        player_profile = prompt_player_profile()
-
         initializer = IlluminatiInitializer(world_name, player_profile=player_profile)
+        runtime_dir = initializer.run()
         
-        # 执行完整初始化流程
-        print("   📍 步骤 1/3: 初始化世界状态...")
-        initializer.init_world_state()
-        
-        print("   📍 步骤 2/3: 生成开场剧情...")
-        initializer.init_plot_and_generate_opening()
-        
-        print("   📍 步骤 3/3: 生成环境氛围...")
-        initializer.init_vibe_and_generate_atmosphere()
-        
-        # 保存初始化总结
-        initializer._save_init_summary()
-        
-        # 保存 genesis.json 兼容文件（供 GameEngine 使用）
-        genesis_path = initializer.runtime_dir / "genesis.json"
-        import json
+        # 保存 genesis.json（供 GameEngine 使用）
+        genesis_path = runtime_dir / "genesis.json"
         with open(genesis_path, "w", encoding="utf-8") as f:
             json.dump(initializer.genesis_data, f, ensure_ascii=False, indent=2)
         
         print()
         print("✅ 游戏世界初始化完成!")
-        print(f"   📁 运行时目录: {initializer.runtime_dir}")
+        print(f"   📁 存档目录: {runtime_dir}")
         
-        return initializer.runtime_dir
+        return runtime_dir
         
     except Exception as e:
         logger.error(f"❌ 初始化失败: {e}", exc_info=True)
@@ -210,15 +286,18 @@ def create_new_runtime(world_name: str) -> Optional[Path]:
         return None
 
 
+# ==========================================
+# 游戏运行
+# ==========================================
+
 def run_game(runtime_dir: Path):
     """运行游戏"""
     from game_engine import GameEngine
     
-    # 查找 genesis.json 文件
     genesis_path = runtime_dir / "genesis.json"
     
     if not genesis_path.exists():
-        print("❌ 运行时目录缺少 genesis.json 文件")
+        print("❌ 存档目录缺少 genesis.json 文件")
         print("   请重新初始化游戏")
         return
     
@@ -228,7 +307,8 @@ def run_game(runtime_dir: Path):
         
         game = GameEngine(genesis_path)
         
-        print("✅ 游戏引擎加载完成!\n")
+        print("✅ 游戏引擎加载完成!")
+        print()
         
         # 开始游戏
         opening = game.start_game()
@@ -237,56 +317,7 @@ def run_game(runtime_dir: Path):
         print_help()
         
         # 游戏主循环
-        while True:
-            try:
-                # 获取用户输入
-                user_input = input("\n👤 你的行动 > ").strip()
-                
-                if not user_input:
-                    continue
-                
-                # 处理命令
-                if user_input.startswith("/"):
-                    command = user_input.lower()
-                    
-                    if command == "/help":
-                        print_help()
-                    elif command == "/status":
-                        print_game_status(game)
-                    elif command == "/save":
-                        game.save_game("manual_save")
-                        print("✅ 游戏已保存")
-                    elif command == "/quit":
-                        print("\n👋 感谢游玩！游戏已自动保存。")
-                        game.save_game("autosave")
-                        break
-                    else:
-                        print(f"❌ 未知命令: {command}")
-                        print("   输入 /help 查看可用命令")
-                    
-                    continue
-                
-                # 处理游戏回合
-                print("\n⏳ 处理中...")
-                result = game.process_turn(user_input)
-                
-                if result["success"]:
-                    print(result["text"])
-                else:
-                    print(f"\n❌ {result.get('error', '未知错误')}")
-                    print("请重新输入\n")
-                
-            except KeyboardInterrupt:
-                print("\n\n⚠️  检测到Ctrl+C")
-                confirm = input("确定要退出吗? (y/n) > ").lower()
-                if confirm == 'y':
-                    print("\n👋 游戏已自动保存，再见!")
-                    game.save_game("autosave")
-                    break
-            except EOFError:
-                print("\n\n👋 游戏已自动保存，再见!")
-                game.save_game("autosave")
-                break
+        game_loop(game)
         
     except FileNotFoundError as e:
         logger.error(f"❌ 文件未找到: {e}")
@@ -294,8 +325,60 @@ def run_game(runtime_dir: Path):
     except Exception as e:
         logger.error(f"❌ 游戏运行出错: {e}", exc_info=True)
         print(f"\n❌ 游戏出错: {e}")
-        print("\n请查看日志文件:")
-        print(f"  {settings.LOGS_DIR}/game_engine.log")
+        print(f"\n请查看日志: {settings.LOGS_DIR}/game_engine.log")
+
+
+def game_loop(game):
+    """游戏主循环"""
+    while True:
+        try:
+            user_input = input("\n👤 你的行动 > ").strip()
+            
+            if not user_input:
+                continue
+            
+            # 处理命令
+            if user_input.startswith("/"):
+                command = user_input.lower()
+                
+                if command == "/help":
+                    print_help()
+                elif command == "/status":
+                    print_game_status(game)
+                elif command == "/save":
+                    game.save_game("manual_save")
+                    print("✅ 游戏已保存")
+                elif command == "/quit":
+                    print("\n👋 感谢游玩！游戏已自动保存。")
+                    game.save_game("autosave")
+                    break
+                else:
+                    print(f"❌ 未知命令: {command}")
+                    print("   输入 /help 查看可用命令")
+                
+                continue
+            
+            # 处理游戏回合
+            print("\n⏳ 处理中...")
+            result = game.process_turn(user_input)
+            
+            if result["success"]:
+                print(result["text"])
+            else:
+                print(f"\n❌ {result.get('error', '未知错误')}")
+                print("请重新输入\n")
+            
+        except KeyboardInterrupt:
+            print("\n\n⚠️  检测到Ctrl+C")
+            confirm = input("确定要退出吗? (y/n) > ").lower()
+            if confirm == 'y':
+                print("\n👋 游戏已自动保存，再见!")
+                game.save_game("autosave")
+                break
+        except EOFError:
+            print("\n\n👋 游戏已自动保存，再见!")
+            game.save_game("autosave")
+            break
 
 
 def print_game_status(game):
@@ -322,9 +405,28 @@ def print_game_status(game):
     print("=" * 70 + "\n")
 
 
+# ==========================================
+# 主函数
+# ==========================================
+
 def main():
     """主函数"""
-    print_header()
+    print_banner()
+    
+    # 验证配置
+    try:
+        settings.validate()
+    except ValueError as e:
+        print(f"❌ 配置验证失败: {e}")
+        print()
+        print("请按以下步骤配置：")
+        print("1. 复制 .env.example 为 .env")
+        print("2. 编辑 .env 文件，填入你的API密钥")
+        print("3. 保存后重新运行本脚本")
+        return
+    
+    # 确保目录存在
+    settings.ensure_directories()
     
     # 选择世界
     world_name = select_world()
