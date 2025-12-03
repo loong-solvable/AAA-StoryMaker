@@ -64,33 +64,122 @@ copy .env.example .env
 # ZHIPU_API_KEY=your_api_key_here
 ```
 
-### 运行Demo
+### 完整运行流程
 
-**第一阶段：创世组（离线构建）**
+按照以下顺序运行，可以体验从世界构建到剧情演绎的完整流程：
+
+#### 第一阶段：创世组（离线构建世界数据）
+
 ```bash
 python run_creator_god.py
 ```
-该脚本会执行创世组的三阶段处理：
-1. **大中正** - 角色普查，识别所有角色并评估重要性
-2. **Demiurge** - 提取世界观设定（物理法则、社会规则、地点）
-3. **许劭** - 为每个角色创建详细档案（角色卡）
 
-生成结果保存在 `data/worlds/<世界名>/` 目录：
-- `world_setting.json` - 世界观设定
-- `characters_list.json` - 角色列表
-- `characters/` - 每个角色的详细档案
+**功能说明：**
+该脚本执行创世组的三阶段处理，从小说文本中提取并构建完整的世界数据：
 
-**第二阶段：OS与Logic（在线系统基础）**
+1. **大中正 (The Censor)** - 角色普查阶段
+   - 识别小说中的所有角色
+   - 评估每个角色的重要性
+   - 生成角色列表（`characters_list.json`）
+
+2. **Demiurge（造物主）** - 世界观提取阶段
+   - 提取物理法则和世界规则
+   - 提取社会背景和规则
+   - 提取地点信息和感官描述
+   - 生成世界观设定（`world_setting.json`）
+
+3. **许劭（角色雕刻师）** - 角色档案制作阶段
+   - 为每个重要角色创建详细档案
+   - 提取角色特征、行为规则、关系网络
+   - 生成角色卡（`characters/character_*.json`）
+
+**输出结果：**
+生成的世界数据保存在 `data/worlds/<世界名>/` 目录：
+```
+data/worlds/<世界名>/
+├── world_setting.json      # Demiurge生成的世界观设定
+├── characters_list.json    # 大中正生成的角色列表
+└── characters/            # 许劭生成的角色详细档案
+    ├── character_npc_001.json
+    ├── character_npc_002.json
+    └── ...
+```
+
+**日志文件：** `logs/genesis_group.log`
+
+---
+
+#### 第二阶段：三幕完整流程测试（在线运行系统）
+
+```bash
+python tests/test_three_scenes_flow.py
+```
+
+**功能说明：**
+该脚本演示完整的游戏运行流程，包括光明会初始化和三幕剧情演绎：
+
+**阶段0：光明会初始化**
+- **WS（世界状态运行者）**：读取世界数据，初始化世界状态
+  - 生成初始场景、天气、在场角色
+  - 保存到 `data/runtime/<世界名>_<时间戳>/ws/world_state.json`
+- **Plot（命运编织者）**：生成起始场景和第一幕剧本
+  - 基于世界数据和角色卡生成开场场景
+  - 生成第一幕剧本（约500字）
+  - 保存到 `data/runtime/.../plot/current_scene.json` 和 `current_script.json`
+- **Vibe（氛围感受者）**：生成初始氛围描写
+  - 基于场景和剧本生成沉浸式环境描写
+  - 保存到 `data/runtime/.../vibe/initial_atmosphere.json`
+
+**第1幕演绎流程：**
+1. **剧本拆分**：OS Agent 将剧本拆分为各角色的任务卡
+2. **角色初始化**：初始化首次出场的角色
+3. **对话循环**：运行最多12轮对话，NPC根据任务卡生成台词和行为
+4. **幕间处理**：归档第1幕剧本，更新世界状态，生成第2幕剧本
+
+**第2幕演绎流程：**
+1. 剧本拆分 → 角色初始化 → 对话循环（最多12轮）
+2. 幕间处理：归档第2幕，更新世界状态，生成第3幕剧本
+
+**第3幕演绎流程：**
+1. 剧本拆分 → 角色初始化 → 对话循环（最多12轮）
+2. 结束：三幕完整流程测试完成
+
+**输出结果：**
+运行时数据保存在 `data/runtime/<世界名>_<时间戳>/` 目录：
+```
+data/runtime/<世界名>_<时间戳>/
+├── ws/
+│   └── world_state.json           # WS世界状态
+├── plot/
+│   ├── current_scene.json         # 当前场景
+│   ├── current_script.json        # 当前剧本
+│   └── archive/                   # 历史剧本存档
+│       ├── scene_1_script.json
+│       └── scene_2_script.json
+├── vibe/
+│   └── initial_atmosphere.json    # 初始氛围
+└── test_report.json                # 测试报告
+```
+
+**测试报告：**
+脚本会在运行时目录生成 `test_report.json`，包含：
+- 每幕的演绎结果（成功状态、轮数、对话数）
+- 归档文件列表
+- 发现的问题（如有）
+
+**日志文件：** 各Agent的日志保存在 `logs/` 目录
+
+---
+
+#### 其他运行选项
+
+**OS与Logic基础测试：**
 ```bash
 python test_phase2_demo.py
 ```
-该脚本会：
-1. 初始化信息中枢OS
-2. 初始化逻辑审查官Logic
-3. 演示消息路由和验证功能
-4. 测试世界上下文管理
+演示信息中枢OS和逻辑审查官Logic的基础功能。
 
-**完整游戏：互动叙事体验**
+**完整游戏体验：**
 ```bash
 python play_game.py
 ```
