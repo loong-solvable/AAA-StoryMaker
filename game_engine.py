@@ -19,6 +19,7 @@ from agents.online.layer3.npc_agent import NPCManager
 from agents.message_protocol import (
     AgentRole, MessageType, create_message, create_validation_request
 )
+from utils.memory_manager import MemoryManager
 
 logger = setup_logger("GameEngine", "game_engine.log")
 
@@ -29,31 +30,44 @@ class GameEngine:
     协调所有Agent，实现完整的游戏回合
     """
     
-    def __init__(self, genesis_path: Path, async_mode: bool = True):
+    def __init__(
+        self,
+        genesis_path: Path,
+        async_mode: bool = True,
+        enable_logic_check: bool = False,  # Logic验证开关，默认关闭
+        enable_vibe: bool = False,  # Vibe氛围开关，默认关闭
+    ):
         """
         初始化游戏引擎
-        
+
         Args:
             genesis_path: Genesis.json文件路径
+            async_mode: 是否启用异步模式
+            enable_logic_check: 是否启用Logic输入验证（默认关闭以提升速度）
+            enable_vibe: 是否启用Vibe氛围描写（默认关闭以提升速度）
         """
         logger.info("=" * 60)
         logger.info("🎮 初始化游戏引擎...")
         logger.info("=" * 60)
-        
+
         # 初始化信息中枢OS
         self.os = OperatingSystem(genesis_path)
         self.async_mode = async_mode
-        
+        self.enable_logic_check = enable_logic_check
+        self.enable_vibe = enable_vibe
+
         self.game_id = uuid4().hex
         self.state_manager = StateManager(
             game_id=self.game_id,
             game_name=self.os.genesis_data.get("world", {}).get("title", "未知世界"),
             genesis_path=str(genesis_path)
         )
-        
-        # 初始化逻辑审查官Logic
-        self.logic = LogicValidator()
-        self.logic.set_world_rules(self.os.genesis_data['world'])
+
+        # 初始化逻辑审查官Logic（可选）
+        self.logic = None
+        if self.enable_logic_check:
+            self.logic = LogicValidator()
+            self.logic.set_world_rules(self.os.genesis_data['world'])
         
         # 初始化光明会
         self.world_state = WorldStateManager(self.os.genesis_data)
@@ -63,8 +77,9 @@ class GameEngine:
         # 初始化NPC管理器
         self.npc_manager = NPCManager(self.os.genesis_data)
         
-        # 注册所有Agent到OS
-        self.os.register_handler(AgentRole.LOGIC, self.logic.handle_message)
+        # 注册所有Agent到OS（跳过禁用的Agent）
+        if self.logic:
+            self.os.register_handler(AgentRole.LOGIC, self.logic.handle_message)
         self.os.register_handler(AgentRole.WORLD_STATE, self.world_state.handle_message)
         self.os.register_handler(AgentRole.PLOT, self.plot.handle_message)
         self.os.register_handler(AgentRole.VIBE, self.vibe.handle_message)
@@ -78,6 +93,14 @@ class GameEngine:
         # 初始化世界状态同步器（用于同步 world_state.json）
         self.runtime_dir = genesis_path.parent if genesis_path else None
         self.world_state_sync: Optional[WorldStateSync] = None
+
+        # 初始化长期记忆管理器（默认启用，失败不阻断）
+        self.memory_manager = None
+        try:
+            self.memory_manager = MemoryManager(runtime_dir=self.runtime_dir)
+            logger.info("🧠 长期记忆管理器已启用")
+        except Exception as e:
+            logger.warning(f"⚠️ 长期记忆管理器初始化失败: {e}")
         if self.runtime_dir and (self.runtime_dir / "ws").exists():
             try:
                 self.world_state_sync = WorldStateSync(self.runtime_dir)
@@ -92,6 +115,8 @@ class GameEngine:
         logger.info(f"   - 世界: {self.os.genesis_data['world']['title']}")
         logger.info(f"   - NPC数量: {len(self.npc_manager.npcs)}")
         logger.info(f"   - 异步模式: {'ON' if self.async_mode else 'OFF'}")
+        logger.info(f"   - Logic验证: {'ON' if self.enable_logic_check else 'OFF'}")
+        logger.info(f"   - Vibe氛围: {'ON' if self.enable_vibe else 'OFF'}")
         logger.info("=" * 60)
     
     def start_game(self) -> str:
@@ -112,13 +137,15 @@ class GameEngine:
         )
         
         # 生成开场氛围
-        atmosphere_instruction = self._find_instruction(initial_script, "vibe")
-        atmosphere = self.vibe.create_atmosphere(
-            location_id=self.player_location,
-            director_instruction=atmosphere_instruction or {},
-            current_time=self.os.world_context.current_time,
-            present_characters=self.os.world_context.present_characters  # ✨传递在场角色
-        )
+        atmosphere = None
+        if self.enable_vibe:
+            atmosphere_instruction = self._find_instruction(initial_script, "vibe")
+            atmosphere = self.vibe.create_atmosphere(
+                location_id=self.player_location,
+                director_instruction=atmosphere_instruction or {},
+                current_time=self.os.world_context.current_time,
+                present_characters=self.os.world_context.present_characters  # ✨传递在场角色
+            )
         
         # 拼接开场文本
         opening = self._format_opening(atmosphere, initial_script)
@@ -166,19 +193,22 @@ class GameEngine:
         current_turn = self.os.turn_count + 1
         
         try:
-            # Step 1: 输入拦截（Logic验证）
+            # Step 1: 输入拦截（Logic验证，可选）
             logger.info("📍 Step 1: 输入拦截")
-            validation_result = self._validate_input(player_input)
-            
-            if not validation_result['is_valid']:
-                logger.warning("❌ 输入被拒绝")
-                return {
-                    "success": False,
-                    "error": validation_result['errors'][0] if validation_result['errors'] else "输入不符合世界观",
-                    "text": f"❌ {validation_result['errors'][0]}"
-                }
-            
-            logger.info("✅ 输入验证通过")
+            if self.enable_logic_check and self.logic:
+                validation_result = self._validate_input(player_input)
+                
+                if not validation_result['is_valid']:
+                    logger.warning("❌ 输入被拒绝")
+                    return {
+                        "success": False,
+                        "error": validation_result['errors'][0] if validation_result['errors'] else "输入不符合世界观",
+                        "text": f"❌ {validation_result['errors'][0]}"
+                    }
+                
+                logger.info("✅ 输入验证通过")
+            else:
+                logger.info("ℹ️ Logic验证已关闭，跳过输入拦截")
             
             # Step 2: 世界状态更新
             logger.info("📍 Step 2: 世界状态更新")
@@ -197,38 +227,62 @@ class GameEngine:
                 player_action=player_input,
                 player_location=self.player_location,
                 present_characters=self.os.world_context.present_characters,
-                world_context=self.world_state.get_context_summary()
+                world_context=self.world_state.get_context_summary(),
+                story_history=self._get_story_history(),
+                last_scene_dialogues=self._get_last_scene_dialogues()
             )
             
-            # Step 4: 内容生成（Vibe + NPC）
+            # Step 4: 内容生成（Vibe 可选 + NPC）
             logger.info("📍 Step 4: 内容生成")
             logger.info(f"   - 在场 NPC: {len(self.os.world_context.present_characters) - 1}")
             
-            # 生成氛围描写
-            atmosphere_instruction = self._find_instruction(script, "vibe")
             atmosphere = None
-            if atmosphere_instruction:
+            if self.enable_vibe:
+                atmosphere_instruction = self._find_instruction(script, "vibe")
+                if not atmosphere_instruction:
+                    atmosphere_instruction = {
+                        "target": "vibe",
+                        "parameters": {
+                            "emotional_tone": script.get("scene_theme", {}).get("mood", "平静"),
+                            "focus": "环境变化与角色互动",
+                            "sensory_details": ["视觉", "听觉", "嗅觉", "触觉"]
+                        }
+                    }
                 atmosphere = self.vibe.create_atmosphere(
                     location_id=self.player_location,
                     director_instruction=atmosphere_instruction,
                     current_time=self.world_state.current_time,
-                    present_characters=self.os.world_context.present_characters  # ✨传递在场角色
+                    present_characters=self.os.world_context.present_characters
                 )
+            else:
+                logger.info("ℹ️ Vibe氛围已关闭，跳过生成")
             
             # NPC反应
             npc_reactions = []
+            # 提取剧情推演作为场景摘要
+            scene_summary = script.get("director_notes", "")
             for char_id in self.os.world_context.present_characters:
                 if char_id == "user":
                     continue
                 npc = self.npc_manager.get_npc(char_id)
                 if npc:
                     npc_instruction = self._find_instruction(script, f"npc_{char_id}")
+                    # 如果没有专属指令，用通用剧情作为指导
+                    if not npc_instruction and scene_summary:
+                        npc_instruction = {
+                            "target": f"npc_{char_id}",
+                            "parameters": {
+                                "scene_summary": scene_summary,
+                                "objective": "根据剧情推演自然反应"
+                            }
+                        }
                     reaction = npc.react(
                         player_input=player_input,
                         scene_context={
                             "location": self.player_location,
                             "time": self.world_state.current_time,
-                            "mood": script.get("scene_theme", {}).get("mood", "平静")
+                            "mood": script.get("scene_theme", {}).get("mood", "平静"),
+                            "scene_summary": scene_summary
                         },
                         director_instruction=npc_instruction
                     )
@@ -293,51 +347,94 @@ class GameEngine:
         current_turn = self.os.turn_count + 1
 
         try:
-            # Step 1: 输入拦截（Logic验证）
-            logger.info("📍 Step 1: 输入拦截")
-            validation_result = self._validate_input(player_input)
+            # 先获取当前的world_context（上一回合状态），供Plot使用
+            pre_update_context = self.world_state.get_context_summary()
 
-            if not validation_result['is_valid']:
-                logger.warning("❌ 输入被拒绝")
-                return {
-                    "success": False,
-                    "error": validation_result['errors'][0] if validation_result['errors'] else "输入不符合世界观",
-                    "text": f"❌ {validation_result['errors'][0]}"
-                }
+            # 获取历史数据供Plot使用
+            story_history = self._get_story_history()
+            last_scene_dialogues = self._get_last_scene_dialogues()
 
-            logger.info("✅ 输入验证通过")
+            # 根据开关决定并行任务
+            if self.enable_logic_check and self.logic:
+                # Logic开启：Logic + WS + Plot 全并行
+                logger.info("📍 Step 1-3: 验证 + 世界状态 + 剧情（全并行）")
+                logic_task = self._async_validate_input(player_input)
+                ws_task = self.world_state.async_update_world_state(
+                    player_action=player_input,
+                    player_location=self.player_location,
+                    time_cost=10
+                )
+                plot_task = self.plot.async_generate_scene_script(
+                    player_action=player_input,
+                    player_location=self.player_location,
+                    present_characters=self.os.world_context.present_characters,
+                    world_context=pre_update_context,
+                    story_history=story_history,
+                    last_scene_dialogues=last_scene_dialogues
+                )
 
-            # Step 2: 世界状态更新
-            logger.info("📍 Step 2: 世界状态更新")
-            world_update = self.world_state.update_world_state(
-                player_action=player_input,
-                player_location=self.player_location,
-                time_cost=10
-            )
+                validation_result, world_update, script = await asyncio.gather(
+                    logic_task, ws_task, plot_task
+                )
 
-            # 更新NPC状态
+                # 检查Logic验证结果
+                if not validation_result['is_valid']:
+                    logger.warning("❌ 输入被拒绝")
+                    return {
+                        "success": False,
+                        "error": validation_result['errors'][0] if validation_result['errors'] else "输入不符合世界观",
+                        "text": f"❌ {validation_result['errors'][0]}"
+                    }
+            else:
+                # Logic关闭：只执行 WS + Plot 并行
+                logger.info("📍 Step 1-2: 世界状态 + 剧情（并行，Logic跳过）")
+                ws_task = self.world_state.async_update_world_state(
+                    player_action=player_input,
+                    player_location=self.player_location,
+                    time_cost=10
+                )
+                plot_task = self.plot.async_generate_scene_script(
+                    player_action=player_input,
+                    player_location=self.player_location,
+                    present_characters=self.os.world_context.present_characters,
+                    world_context=pre_update_context,
+                    story_history=story_history,
+                    last_scene_dialogues=last_scene_dialogues
+                )
+
+                world_update, script = await asyncio.gather(ws_task, plot_task)
+
+            logger.info("✅ 世界状态 + 剧情决策完成")
+
+            # WS完成后更新NPC状态
             self.npc_manager.update_npc_states(world_update.get("npc_updates", []))
 
-            # Step 3: 剧情决策（Plot生成剧本）
-            logger.info("📍 Step 3: 剧情决策")
-            script = self.plot.generate_scene_script(
-                player_action=player_input,
-                player_location=self.player_location,
-                present_characters=self.os.world_context.present_characters,
-                world_context=self.world_state.get_context_summary()
-            )
-
-            # Step 4: 内容生成（Vibe + NPC 全并行）
-            logger.info("📍 Step 4: 内容生成（Vibe + NPC 并行）")
+            # Step 3: 内容生成（Vibe可选 + NPC 并行）
+            vibe_status = "ON" if self.enable_vibe else "OFF"
+            logger.info(f"📍 Step 3: 内容生成（Vibe:{vibe_status} + NPC 并行）")
             logger.info(f"   - 在场 NPC: {len(self.os.world_context.present_characters) - 1}")
 
             # 收集所有并行任务
             all_tasks = []
             task_labels = []  # 用于标识任务类型
 
-            # Vibe 任务
-            atmosphere_instruction = self._find_instruction(script, "vibe")
-            if atmosphere_instruction:
+            # Vibe 任务（仅在开启时执行）
+            if self.enable_vibe:
+                atmosphere_instruction = self._find_instruction(script, "vibe")
+                if not atmosphere_instruction:
+                    atmosphere_instruction = {
+                        "target": "vibe",
+                        "parameters": {
+                            "emotional_tone": script.get("scene_theme", {}).get("mood", "平静"),
+                            "focus": "环境变化与角色互动",
+                            "sensory_details": ["视觉", "听觉", "嗅觉"]
+                        }
+                    }
+                params = atmosphere_instruction.get("parameters", {})
+                if not params.get("sensory_details"):
+                    params["sensory_details"] = ["视觉", "听觉", "嗅觉", "触觉"]
+                    atmosphere_instruction["parameters"] = params
+
                 all_tasks.append(
                     self.vibe.async_create_atmosphere(
                         location_id=self.player_location,
@@ -350,12 +447,23 @@ class GameEngine:
 
             # NPC 任务
             npc_objs = []
+            # 提取剧情推演作为场景摘要（关键：让NPC知道当前剧情发展）
+            scene_summary = script.get("director_notes", "")
             for char_id in self.os.world_context.present_characters:
                 if char_id == "user":
                     continue
                 npc = self.npc_manager.get_npc(char_id)
                 if npc:
                     npc_instruction = self._find_instruction(script, f"npc_{char_id}")
+                    # 如果没有专属指令，用通用剧情作为指导
+                    if not npc_instruction and scene_summary:
+                        npc_instruction = {
+                            "target": f"npc_{char_id}",
+                            "parameters": {
+                                "scene_summary": scene_summary,
+                                "objective": "根据剧情推演自然反应"
+                            }
+                        }
                     npc_objs.append((npc, npc_instruction))
                     all_tasks.append(
                         npc.async_react(
@@ -363,7 +471,8 @@ class GameEngine:
                             scene_context={
                                 "location": self.player_location,
                                 "time": self.world_state.current_time,
-                                "mood": script.get("scene_theme", {}).get("mood", "平静")
+                                "mood": script.get("scene_theme", {}).get("mood", "平静"),
+                                "scene_summary": scene_summary  # 传递剧情摘要
                             },
                             director_instruction=npc_instruction
                         )
@@ -437,6 +546,9 @@ class GameEngine:
     
     def _validate_input(self, user_input: str) -> Dict[str, Any]:
         """验证用户输入"""
+        if not self.logic:
+            return {"is_valid": True, "errors": []}
+
         context = {
             "current_location": self.player_location,
             "current_time": self.world_state.current_time,
@@ -444,6 +556,10 @@ class GameEngine:
         
         result = self.logic.validate_user_input(user_input, context)
         return result.dict()
+
+    async def _async_validate_input(self, user_input: str) -> Dict[str, Any]:
+        """异步版本的输入验证"""
+        return await asyncio.to_thread(self._validate_input, user_input)
     
     def _find_instruction(self, script: Dict[str, Any], target: str) -> Optional[Dict[str, Any]]:
         """从剧本中查找指定目标的指令"""
@@ -499,15 +615,24 @@ class GameEngine:
             for item in npc_reactions:
                 npc = item["npc"]
                 reaction = item["reaction"]
-                
+
                 lines.append(f"🎭 {npc.character_name}:")
-                
+
+                # 显示内心独白（用斜体/淡色提示）
+                if reaction.get("thought"):
+                    thought = reaction["thought"][:80]
+                    lines.append(f"   💭 ({thought}...)")
+
                 if reaction.get("action"):
                     lines.append(f"   {reaction['action']}")
-                
+
                 if reaction.get("dialogue"):
                     lines.append(f'   "{reaction["dialogue"]}"')
-                
+
+                # 显示情感状态
+                if reaction.get("emotion"):
+                    lines.append(f"   [情感: {reaction['emotion']}]")
+
                 lines.append("")
         
         lines.append("─" * 70)
@@ -576,10 +701,16 @@ class GameEngine:
                 turn_number=turn_number,
             )
             self._record_agent_snapshots(turn_number=turn_number)
-            
+
             # 同步世界状态到 world_state.json
             self._sync_world_state_file(turn_number, world_update)
-            
+
+            # 记录到长期记忆管理器
+            if self.memory_manager:
+                self._record_to_memory_manager(
+                    turn_number, player_input, npc_reactions, atmosphere
+                )
+
         except Exception as exc:
             logger.warning(f"⚠️ 记录回合数据失败: {exc}")
     
@@ -629,7 +760,98 @@ class GameEngine:
             
         except Exception as e:
             logger.warning(f"⚠️ 同步 world_state.json 失败: {e}")
-    
+
+    def _record_to_memory_manager(
+        self,
+        turn_number: int,
+        player_input: str,
+        npc_reactions: Optional[List[Dict[str, Any]]],
+        atmosphere: Optional[Dict[str, Any]]  # noqa: ARG002 - 预留参数，后续可用于记录环境变化
+    ):
+        """记录到长期记忆管理器，用于跨幕记忆"""
+        if not self.memory_manager:
+            return
+        try:
+            scene_id = self._get_scene_id_from_script_or_turn(npc_reactions, turn_number)
+
+            # 参与者统一使用 ID + name，避免歧义
+            participants = [{"id": "user", "name": self.player_name}]
+            emotional_shifts = {}
+
+            for item in (npc_reactions or []):
+                npc = item.get("npc")
+                reaction = item.get("reaction", {})
+                if npc:
+                    char_id = getattr(npc, "character_id", None)
+                    char_name = getattr(npc, "character_name", "未知角色")
+                    if not char_id:
+                        continue
+                    participants.append({"id": char_id, "name": char_name})
+
+                    # 记录情感变化
+                    emotion = reaction.get("emotion", "")
+                    if emotion:
+                        emotional_shifts[char_id] = emotion
+
+                    # 记录角色互动
+                    # attitude_delta: 当前态度与中性值(0.5)的偏移，正数表示好感，负数表示敌意
+                    emotional_state = getattr(npc, "emotional_state", {})
+                    attitude_delta = emotional_state.get("attitude_toward_player", 0.5) - 0.5
+                    self.memory_manager.record_interaction(
+                        character_id=char_id,
+                        player_action=player_input[:100],
+                        character_response=reaction.get("dialogue", reaction.get("action", ""))[:100],
+                        emotional_impact=attitude_delta,
+                        is_significant=abs(attitude_delta) > 0.1
+                    )
+
+            # 提取关键事件（基于NPC对话和行为）
+            key_events = []
+            for item in (npc_reactions or []):
+                reaction = item.get("reaction", {})
+                npc = item.get("npc")
+                npc_name = getattr(npc, "character_name", "某人") if npc else "某人"
+
+                # 优先记录对话内容（最重要）
+                dialogue = reaction.get("dialogue", "")
+                if dialogue and len(dialogue) > 5:
+                    key_events.append(f"{npc_name}说: {dialogue[:50]}")
+
+                # 其次记录动作
+                action = reaction.get("action", "")
+                if action and len(action) > 10:
+                    key_events.append(f"{npc_name}: {action[:30]}")
+
+            # 记录场景摘要（场景ID 优先取 Plot/OS，缺省回退 turn_number）
+            self.memory_manager.record_scene_summary(
+                scene_number=scene_id,
+                location=self.player_location,
+                participants=participants,
+                key_events=key_events[:6],  # 增加到6条，包含对话和动作
+                emotional_shifts=emotional_shifts,
+                player_action_summary=player_input[:80]
+            )
+
+            logger.debug(f"🧠 长期记忆已更新 (场景 {scene_id}, 回合 {turn_number})")
+
+        except Exception as e:
+            logger.warning(f"⚠️ 记录长期记忆失败: {e}")
+
+    def _get_scene_id_from_script_or_turn(
+        self,
+        npc_reactions: Optional[List[Dict[str, Any]]],
+        turn_number: int
+    ) -> int:
+        """
+        获取当前场景ID，优先从 Plot/OS 的场景信息中读取，缺省回退为 turn_number。
+        目前 Plot/OS 未暴露 scene_id，占位为 turn_number，便于后续对齐。
+        """
+        try:
+            # future: 如果 script 或 world_state 返回 scene_id，可在调用 _record_to_memory_manager 时传入并使用
+            return turn_number
+        except Exception:
+            return turn_number
+
     def _get_location_name(self, location_id: str) -> str:
         """获取地点名称"""
         for loc in self.os.genesis_data.get("locations", []):
@@ -663,6 +885,41 @@ class GameEngine:
         """获取当前时间戳"""
         from datetime import datetime
         return datetime.now().isoformat()
+
+    def _get_story_history(self) -> str:
+        """获取历史剧情摘要（供Plot使用）"""
+        if not self.memory_manager:
+            return ""
+        return self.memory_manager.get_scene_context(limit=5)
+
+    def _get_last_scene_dialogues(self) -> str:
+        """获取上一幕对话记录（供Plot使用）"""
+        if not self.memory_manager:
+            return ""
+        # 从scene_summaries中获取最近场景的关键事件
+        summaries = self.memory_manager.memories.get("scene_summaries", [])
+        if not summaries:
+            return ""
+        last_summary = summaries[-1]
+        key_events = last_summary.get("key_events", [])
+        player_action = last_summary.get("player_action", "")
+        participants = last_summary.get("participants", [])
+
+        lines = []
+        if participants:
+            # participants可能是dict列表 [{"id": "x", "name": "y"}] 或字符串列表
+            if participants and isinstance(participants[0], dict):
+                names = [p.get("name", p.get("id", "")) for p in participants]
+            else:
+                names = participants
+            lines.append(f"参与角色: {', '.join(names)}")
+        if player_action:
+            lines.append(f"玩家行动: {player_action}")
+        if key_events:
+            lines.append("发生的事件:")
+            for event in key_events:
+                lines.append(f"  - {event}")
+        return "\n".join(lines) if lines else ""
 
     def _serialize_reactions(self, reactions: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
         """将NPC反应转换为可序列化的结构"""
@@ -706,3 +963,76 @@ class GameEngine:
             )
         except Exception as exc:
             logger.warning(f"⚠️ 记录Agent状态失败: {exc}")
+
+    def generate_action_suggestions(self) -> List[str]:
+        """
+        生成玩家行动建议（2个选项）
+
+        Returns:
+            包含2个行动建议的列表
+        """
+        try:
+            from utils.llm_factory import get_llm
+            from langchain_core.prompts import ChatPromptTemplate
+            from langchain_core.output_parsers import StrOutputParser
+
+            llm = get_llm(temperature=0.9)  # 高温度增加多样性
+
+            # 构建上下文
+            player_name = self._get_player_name()
+            location_name = self._get_location_name(self.player_location)
+            present_chars = [
+                self._get_character_name(c)
+                for c in self.os.world_context.present_characters
+                if c != "user"
+            ]
+            recent_events = self.os.recent_events[-3:] if hasattr(self.os, 'recent_events') else []
+
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", """你是一个互动叙事游戏的行动建议器。
+根据当前场景，为玩家生成2个有趣且合理的行动选项。
+
+要求：
+1. 每个选项应该是具体的行动描述，10-30字
+2. 两个选项应该代表不同的方向（如：探索vs对话，主动vs被动）
+3. 行动应符合当前场景和世界观
+4. 不要使用编号，直接输出两个选项，用换行分隔"""),
+                ("human", """当前场景信息：
+- 玩家: {player_name}
+- 位置: {location}
+- 在场角色: {present_characters}
+- 最近事件: {recent_events}
+- 当前时间: {current_time}
+
+请生成2个行动建议：""")
+            ])
+
+            chain = prompt | llm | StrOutputParser()
+
+            response = chain.invoke({
+                "player_name": player_name,
+                "location": location_name,
+                "present_characters": "、".join(present_chars) if present_chars else "无其他角色",
+                "recent_events": " | ".join(recent_events) if recent_events else "游戏刚开始",
+                "current_time": self.world_state.current_time if self.world_state else "未知"
+            })
+
+            # 解析响应，分割成两个选项
+            lines = [line.strip() for line in response.strip().split("\n") if line.strip()]
+            # 清理可能的编号前缀
+            suggestions = []
+            for line in lines[:2]:
+                # 移除常见的编号格式：1. 2. 1、2、① ② - 等
+                cleaned = line.lstrip("0123456789.、①②③④⑤-) ").strip()
+                if cleaned:
+                    suggestions.append(cleaned)
+
+            # 确保返回2个选项
+            while len(suggestions) < 2:
+                suggestions.append("观察周围环境")
+
+            return suggestions[:2]
+
+        except Exception as e:
+            logger.warning(f"⚠️ 生成行动建议失败: {e}")
+            return ["与在场角色交谈", "观察周围环境"]

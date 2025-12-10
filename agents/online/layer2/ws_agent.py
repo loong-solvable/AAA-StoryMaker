@@ -2,6 +2,7 @@
 世界状态运行者 (World State Manager)
 仿真引擎，负责模拟时间流逝、NPC状态、离屏事件
 """
+import asyncio
 import json
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
@@ -72,30 +73,33 @@ class WorldStateManager:
         return template
     
     def _build_chain(self):
-        """构建处理链"""
+        """构建处理链（增量更新模式）"""
         prompt = ChatPromptTemplate.from_messages([
-            ("system", self.system_prompt),
-            ("human", """请更新世界状态：
+            ("system", """你是世界状态更新器，负责计算玩家行动后的状态变化。
+只返回**变化的部分**，不要返回完整状态。
 
-【当前世界信息】
-世界：{world_name}
+输出JSON格式：
+{{
+  "time_delta_minutes": 10,
+  "npc_updates": [
+    {{"npc_id": "npc_001", "mood": "新心情", "activity": "新活动"}}
+  ],
+  "offscreen_events": ["离屏事件描述"],
+  "environment_changes": ["环境变化"]
+}}
+
+规则：
+- time_delta_minutes: 根据行动推算经过的分钟数(5-30)
+- npc_updates: 只列出状态有变化的NPC，没变化就不写
+- 大部分简单行动不需要更新NPC状态，返回空数组即可
+- 保持简洁，不要过度解读"""),
+            ("human", """玩家行动：{player_action}
 当前时间：{current_time}
-当前天气：{weather}
+在场NPC：{npc_states}
 
-【玩家行动】
-行动：{player_action}
-位置：{player_location}
-预计耗时：{time_cost}
-
-【当前NPC状态】
-{npc_states}
-
-【已触发剧情】
-{triggered_plots}
-
-请计算时间流逝后的世界状态，返回JSON格式。""")
+请返回状态变化（JSON）：""")
         ])
-        
+
         return prompt | self.llm | StrOutputParser()
     
     def _parse_initial_time(self) -> str:
@@ -208,56 +212,67 @@ class WorldStateManager:
     def update_world_state(
         self,
         player_action: str,
-        player_location: str,
+        player_location: str,  # noqa: ARG002 - 保留参数，后续可用
         time_cost: int = 10
     ) -> Dict[str, Any]:
         """
-        根据玩家行动更新世界状态
-        
+        根据玩家行动更新世界状态（增量模式）
+
         Args:
             player_action: 玩家的行动描述
             player_location: 玩家所在位置ID
             time_cost: 行动耗时（分钟）
-        
+
         Returns:
-            世界状态更新结果
+            世界状态更新结果（增量diff）
         """
         logger.info(f"🔄 更新世界状态: {player_action[:30]}...")
-        
-        # 构建NPC状态描述
+
+        # 构建简洁的NPC状态描述
         npc_states_str = self._format_npc_states()
-        
-        # 调用LLM
+
+        # 调用LLM获取增量更新
         try:
             response = self.chain.invoke({
-                "world_name": self.world_info.get("title", "未知世界"),
-                "current_time": self.current_time,
-                "weather": "晴朗",  # 简化处理
                 "player_action": player_action,
-                "player_location": player_location,
-                "time_cost": f"{time_cost}分钟",
-                "npc_states": npc_states_str,
-                "triggered_plots": ", ".join(self.triggered_plots) if self.triggered_plots else "无"
+                "current_time": self.current_time,
+                "npc_states": npc_states_str
             })
-            
-            # 解析结果
+
+            # 解析增量结果
             update_data = self._parse_update_result(response)
-            
-            # 应用更新
-            self._apply_updates(update_data, time_cost)
-            
+
+            # 应用增量更新
+            self._apply_incremental_updates(update_data, time_cost)
+
             logger.info(f"✅ 世界状态更新完成")
             logger.info(f"   - 新时间: {self.current_time}")
             logger.info(f"   - NPC更新: {len(update_data.get('npc_updates', []))}")
             logger.info(f"   - 离屏事件: {len(update_data.get('offscreen_events', []))}")
-            
+
             return update_data
-            
+
         except Exception as e:
             logger.error(f"❌ 世界状态更新失败: {e}", exc_info=True)
             # 返回最小更新
             return self._create_minimal_update(time_cost)
-    
+
+    async def async_update_world_state(
+        self,
+        player_action: str,
+        player_location: str,
+        time_cost: int = 10
+    ) -> Dict[str, Any]:
+        """
+        异步版本的世界状态更新，使用线程池执行
+        """
+        return await asyncio.to_thread(
+            self.update_world_state,
+            player_action,
+            player_location,
+            time_cost
+        )
+
     def _format_npc_states(self) -> str:
         """格式化NPC状态为文本"""
         lines = []
@@ -290,38 +305,43 @@ class WorldStateManager:
             logger.error(f"原始响应: {response[:200]}...")
             return {}
     
-    def _apply_updates(self, update_data: Dict[str, Any], time_cost: int):
-        """应用世界状态更新"""
-        # 更新时间
-        if "timestamp" in update_data:
-            self.current_time = update_data["timestamp"]
-        else:
-            # 手动推进时间
-            try:
-                dt = datetime.strptime(self.current_time, "%Y-%m-%d %H:%M")
-                dt += timedelta(minutes=time_cost)
-                self.current_time = dt.strftime("%Y-%m-%d %H:%M")
-            except:
-                pass
-        
-        # 更新NPC状态
+    def _apply_incremental_updates(self, update_data: Dict[str, Any], default_time_cost: int):
+        """应用增量更新（diff模式）"""
+        # 更新时间（优先使用LLM返回的时间增量）
+        time_delta = update_data.get("time_delta_minutes", default_time_cost)
+        try:
+            dt = datetime.strptime(self.current_time, "%Y-%m-%d %H:%M")
+            dt += timedelta(minutes=time_delta)
+            self.current_time = dt.strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            pass
+
+        # 增量更新NPC状态（只更新有变化的字段）
         for npc_update in update_data.get("npc_updates", []):
             npc_id = npc_update.get("npc_id")
-            if npc_id in self.npc_states:
-                self.npc_states[npc_id].update({
-                    "current_location": npc_update.get("current_location", self.npc_states[npc_id]["current_location"]),
-                    "current_activity": npc_update.get("current_activity", self.npc_states[npc_id]["current_activity"]),
-                    "mood": npc_update.get("mood", self.npc_states[npc_id]["mood"])
-                })
-        
+            if npc_id and npc_id in self.npc_states:
+                # 只更新提供的字段
+                if "mood" in npc_update:
+                    self.npc_states[npc_id]["mood"] = npc_update["mood"]
+                if "current_activity" in npc_update:
+                    self.npc_states[npc_id]["current_activity"] = npc_update["current_activity"]
+                if "current_location" in npc_update:
+                    self.npc_states[npc_id]["current_location"] = npc_update["current_location"]
+
         # 记录离屏事件
         for event in update_data.get("offscreen_events", []):
-            self.world_events.append(event)
-        
-        # 记录潜在的剧情发展（仅供Plot Agent参考，不触发硬编码分支）
-        plot_developments = update_data.get("potential_plot_developments", [])
-        if plot_developments:
-            logger.debug(f"💡 潜在剧情发展: {plot_developments}")
+            if event:
+                self.world_events.append(event)
+
+        # 记录环境变化
+        for change in update_data.get("environment_changes", []):
+            if change:
+                self.world_events.append(f"[环境]{change}")
+
+        # 记录潜在剧情发展，供参考
+        for dev in update_data.get("potential_plot_developments", []):
+            if dev:
+                self.world_events.append(f"[剧情线索]{dev}")
     
     def _create_minimal_update(self, time_cost: int) -> Dict[str, Any]:
         """创建最小更新（出错时使用）"""

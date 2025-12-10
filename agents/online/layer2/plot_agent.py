@@ -2,6 +2,7 @@
 命运编织者 (Plot Director)
 游戏的导演和编剧，负责剧情走向和场景设计
 """
+import asyncio
 import json
 from typing import Dict, Any, List, Optional
 from langchain_core.prompts import ChatPromptTemplate
@@ -80,6 +81,17 @@ class PlotDirector:
                 "{world_setting}", json.dumps(world_setting_summary, ensure_ascii=False, indent=2)
             )
         
+        # 提取玩家名字（从characters中找is_player=True或id=user的角色）
+        player_name = "玩家"  # 默认值
+        for char in self.characters:
+            if char.get("is_player") or char.get("id") == "user":
+                player_name = char.get("name", "玩家")
+                break
+
+        # 替换玩家名字占位符
+        if "{player_name}" in template:
+            template = template.replace("{player_name}", player_name)
+
         # 填充运行时变量（使用占位符，因为这些数据在 plot_agent.py 中无法获取）
         for var, placeholder in [
             ("{world_state}", "（世界状态将在运行时提供）"),
@@ -113,6 +125,12 @@ class PlotDirector:
 已完成节点：{completed_nodes}
 当前激活节点：{active_nodes}
 
+【历史剧情摘要】
+{story_history}
+
+【上一幕发生的事】
+{last_scene_dialogues}
+
 【当前情况】
 场景编号：第{scene_number}幕
 玩家行动：{player_action}
@@ -124,7 +142,7 @@ class PlotDirector:
 
 请按照系统提示词中的格式要求生成场景剧本。""")
         ])
-        
+
         return prompt | self.llm | StrOutputParser()
     
     def generate_scene_script(
@@ -132,27 +150,31 @@ class PlotDirector:
         player_action: str,
         player_location: str,
         present_characters: List[str],
-        world_context: Dict[str, Any]
+        world_context: Dict[str, Any],
+        story_history: str = "",
+        last_scene_dialogues: str = ""
     ) -> Dict[str, Any]:
         """
         生成场景剧本
-        
+
         Args:
             player_action: 玩家行动
             player_location: 玩家位置
             present_characters: 在场角色ID列表
             world_context: 世界状态上下文
-        
+            story_history: 历史剧情摘要（来自MemoryManager）
+            last_scene_dialogues: 上一幕的对话记录
+
         Returns:
             场景剧本数据
         """
         logger.info(f"🎬 生成第 {self.scene_count + 1} 幕剧本...")
-        
+
         self.scene_count += 1
-        
+
         # 构建剧情节点描述
         available_plots = self._format_available_plots()
-        
+
         # 构建角色名称列表（包含importance权重信息）
         char_names = []
         char_importance_info = []
@@ -163,9 +185,9 @@ class PlotDirector:
                 importance = char_data.get("importance", 50.0)
                 char_names.append(char_name)
                 char_importance_info.append(f"{char_name}(权重:{importance})")
-        
+
         logger.info(f"   - 在场角色权重: {', '.join(char_importance_info)}")
-        
+
         try:
             response = self.chain.invoke({
                 "world_name": self.world_info.get("title", "未知世界"),
@@ -173,6 +195,8 @@ class PlotDirector:
                 "available_plots": available_plots,
                 "completed_nodes": ", ".join(self.completed_nodes) if self.completed_nodes else "无",
                 "active_nodes": ", ".join(self.active_nodes) if self.active_nodes else "无",
+                "story_history": story_history if story_history else "（这是故事的开始）",
+                "last_scene_dialogues": last_scene_dialogues if last_scene_dialogues else "（这是第一幕）",
                 "scene_number": self.scene_count,
                 "player_action": player_action,
                 "player_location": player_location,
@@ -195,7 +219,29 @@ class PlotDirector:
         except Exception as e:
             logger.error(f"❌ 剧本生成失败: {e}", exc_info=True)
             return self._create_minimal_script()
-    
+
+    async def async_generate_scene_script(
+        self,
+        player_action: str,
+        player_location: str,
+        present_characters: List[str],
+        world_context: Dict[str, Any],
+        story_history: str = "",
+        last_scene_dialogues: str = ""
+    ) -> Dict[str, Any]:
+        """
+        异步版本的剧本生成，使用线程池执行
+        """
+        return await asyncio.to_thread(
+            self.generate_scene_script,
+            player_action,
+            player_location,
+            present_characters,
+            world_context,
+            story_history,
+            last_scene_dialogues
+        )
+
     def _format_available_plots(self) -> str:
         """格式化可用的剧情线索"""
         lines = []

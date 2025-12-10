@@ -47,7 +47,9 @@ data/runtime/
 data/saves/
 
 # 动态生成的角色文件（不应提交到git）
-agents/online/layer3/npc_*.py
+# 注意：npc_agent.py是通用NPC Agent，需要保留
+agents/online/layer3/npc_0*.py
+agents/online/layer3/npc_1*.py
 prompts/online/npc_prompt/npc_*_prompt.txt
 
 # 操作系统
