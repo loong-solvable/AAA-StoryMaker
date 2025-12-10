@@ -2,6 +2,7 @@
 游戏引擎 - 完整的游戏回合逻辑
 整合所有Agent，实现完整的游戏循环
 """
+import asyncio
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from uuid import uuid4
@@ -28,7 +29,7 @@ class GameEngine:
     协调所有Agent，实现完整的游戏回合
     """
     
-    def __init__(self, genesis_path: Path):
+    def __init__(self, genesis_path: Path, async_mode: bool = True):
         """
         初始化游戏引擎
         
@@ -41,6 +42,7 @@ class GameEngine:
         
         # 初始化信息中枢OS
         self.os = OperatingSystem(genesis_path)
+        self.async_mode = async_mode
         
         self.game_id = uuid4().hex
         self.state_manager = StateManager(
@@ -89,6 +91,7 @@ class GameEngine:
         logger.info("✅ 游戏引擎初始化完成")
         logger.info(f"   - 世界: {self.os.genesis_data['world']['title']}")
         logger.info(f"   - NPC数量: {len(self.npc_manager.npcs)}")
+        logger.info(f"   - 异步模式: {'ON' if self.async_mode else 'OFF'}")
         logger.info("=" * 60)
     
     def start_game(self) -> str:
@@ -143,6 +146,18 @@ class GameEngine:
         Returns:
             回合结果（包含所有输出文本和状态）
         """
+        # 如果开启异步模式，委托给 async 版本并运行事件循环
+        if self.async_mode:
+            # 如果当前已有事件循环，提示直接使用 await
+            try:
+                asyncio.get_running_loop()
+                raise RuntimeError(
+                    "检测到已存在的事件循环，请直接调用 await process_turn_async() 而非 process_turn()"
+                )
+            except RuntimeError:
+                # 没有运行中的事件循环，可以使用 asyncio.run
+                return asyncio.run(self.process_turn_async(player_input))
+
         logger.info("=" * 60)
         logger.info(f"🎮 处理回合 #{self.os.turn_count + 1}")
         logger.info(f"玩家输入: {player_input[:50]}...")
@@ -187,6 +202,7 @@ class GameEngine:
             
             # Step 4: 内容生成（Vibe + NPC）
             logger.info("📍 Step 4: 内容生成")
+            logger.info(f"   - 在场 NPC: {len(self.os.world_context.present_characters) - 1}")
             
             # 生成氛围描写
             atmosphere_instruction = self._find_instruction(script, "vibe")
@@ -259,6 +275,160 @@ class GameEngine:
             
         except Exception as e:
             logger.error(f"❌ 回合处理出错: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "text": f"❌ 系统错误: {e}"
+            }
+
+    async def process_turn_async(self, player_input: str) -> Dict[str, Any]:
+        """
+        异步版本的回合处理，使用并发方式生成 NPC 反应。
+        """
+        logger.info("=" * 60)
+        logger.info(f"🎮 [async] 处理回合 #{self.os.turn_count + 1}")
+        logger.info(f"玩家输入: {player_input[:50]}...")
+        logger.info("=" * 60)
+
+        current_turn = self.os.turn_count + 1
+
+        try:
+            # Step 1: 输入拦截（Logic验证）
+            logger.info("📍 Step 1: 输入拦截")
+            validation_result = self._validate_input(player_input)
+
+            if not validation_result['is_valid']:
+                logger.warning("❌ 输入被拒绝")
+                return {
+                    "success": False,
+                    "error": validation_result['errors'][0] if validation_result['errors'] else "输入不符合世界观",
+                    "text": f"❌ {validation_result['errors'][0]}"
+                }
+
+            logger.info("✅ 输入验证通过")
+
+            # Step 2: 世界状态更新
+            logger.info("📍 Step 2: 世界状态更新")
+            world_update = self.world_state.update_world_state(
+                player_action=player_input,
+                player_location=self.player_location,
+                time_cost=10
+            )
+
+            # 更新NPC状态
+            self.npc_manager.update_npc_states(world_update.get("npc_updates", []))
+
+            # Step 3: 剧情决策（Plot生成剧本）
+            logger.info("📍 Step 3: 剧情决策")
+            script = self.plot.generate_scene_script(
+                player_action=player_input,
+                player_location=self.player_location,
+                present_characters=self.os.world_context.present_characters,
+                world_context=self.world_state.get_context_summary()
+            )
+
+            # Step 4: 内容生成（Vibe + NPC 全并行）
+            logger.info("📍 Step 4: 内容生成（Vibe + NPC 并行）")
+            logger.info(f"   - 在场 NPC: {len(self.os.world_context.present_characters) - 1}")
+
+            # 收集所有并行任务
+            all_tasks = []
+            task_labels = []  # 用于标识任务类型
+
+            # Vibe 任务
+            atmosphere_instruction = self._find_instruction(script, "vibe")
+            if atmosphere_instruction:
+                all_tasks.append(
+                    self.vibe.async_create_atmosphere(
+                        location_id=self.player_location,
+                        director_instruction=atmosphere_instruction,
+                        current_time=self.world_state.current_time,
+                        present_characters=self.os.world_context.present_characters
+                    )
+                )
+                task_labels.append(("vibe", None))
+
+            # NPC 任务
+            npc_objs = []
+            for char_id in self.os.world_context.present_characters:
+                if char_id == "user":
+                    continue
+                npc = self.npc_manager.get_npc(char_id)
+                if npc:
+                    npc_instruction = self._find_instruction(script, f"npc_{char_id}")
+                    npc_objs.append((npc, npc_instruction))
+                    all_tasks.append(
+                        npc.async_react(
+                            player_input=player_input,
+                            scene_context={
+                                "location": self.player_location,
+                                "time": self.world_state.current_time,
+                                "mood": script.get("scene_theme", {}).get("mood", "平静")
+                            },
+                            director_instruction=npc_instruction
+                        )
+                    )
+                    task_labels.append(("npc", npc))
+
+            # 并行执行所有任务
+            atmosphere = None
+            npc_reactions: List[Dict[str, Any]] = []
+
+            if all_tasks:
+                results = await asyncio.gather(*all_tasks, return_exceptions=True)
+                for (label_type, label_data), res in zip(task_labels, results):
+                    if isinstance(res, Exception):
+                        if label_type == "vibe":
+                            logger.error("❌ Vibe 并行生成失败: %s", res)
+                        else:
+                            logger.error("❌ NPC[%s] 并行演绎失败: %s", label_data.character_id, res)
+                        continue
+
+                    if label_type == "vibe":
+                        atmosphere = res
+                    else:
+                        npc_reactions.append({
+                            "npc": label_data,
+                            "reaction": res
+                        })
+
+            # Step 5: 输出审查（可选，避免过慢） - 保持简化
+
+            # Step 6: 最终渲染
+            logger.info("📍 Step 6: 最终渲染")
+            output_text = self._render_output(atmosphere, npc_reactions, script)
+
+            self._record_turn_summary(
+                turn_number=current_turn,
+                player_input=player_input,
+                world_update=world_update,
+                script=script,
+                atmosphere=atmosphere,
+                npc_reactions=npc_reactions
+            )
+
+            # 更新OS状态
+            self.os.next_turn()
+            self.os.add_to_history({
+                "type": "player_action",
+                "action": player_input,
+                "location": self.player_location
+            })
+
+            logger.info("✅ 回合处理完成 [async]")
+            logger.info("=" * 60)
+
+            return {
+                "success": True,
+                "text": output_text,
+                "world_state": world_update,
+                "script": script,
+                "atmosphere": atmosphere,
+                "npc_reactions": npc_reactions
+            }
+
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"❌ 回合处理出错 [async]: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
@@ -536,4 +706,3 @@ class GameEngine:
             )
         except Exception as exc:
             logger.warning(f"⚠️ 记录Agent状态失败: {exc}")
-

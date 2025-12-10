@@ -3,7 +3,10 @@
 美工/摄影师，负责生成沉浸式的环境描写
 利用角色的current_appearance字段进行视觉描写
 """
+import asyncio
 import json
+import os
+import weakref
 from typing import Dict, Any, Optional, List
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -11,6 +14,28 @@ from utils.llm_factory import get_llm
 from utils.logger import setup_logger
 from config.settings import settings
 from agents.message_protocol import Message, AgentRole, MessageType, GeneratedContent
+
+# 并发控制（与其他模块共享配置）
+_LLM_CONCURRENCY = int(os.getenv("LLM_CONCURRENCY", "5"))
+_LLM_SEMAPHORES: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _get_semaphore() -> asyncio.Semaphore:
+    """获取与当前事件循环绑定的 Semaphore"""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop:
+        sem = _LLM_SEMAPHORES.get(loop)
+        if sem is None:
+            sem = asyncio.Semaphore(_LLM_CONCURRENCY)
+            _LLM_SEMAPHORES[loop] = sem
+        return sem
+    return asyncio.Semaphore(_LLM_CONCURRENCY)
 
 logger = setup_logger("Vibe", "vibe.log")
 
@@ -160,11 +185,33 @@ class AtmosphereCreator:
             logger.info(f"   - 情绪: {', '.join(atmosphere.get('mood_keywords', []))}")
             
             return atmosphere
-            
+
         except Exception as e:
             logger.error(f"❌ 氛围创作失败: {e}", exc_info=True)
             return self._create_minimal_atmosphere(location_data)
-    
+
+    async def async_create_atmosphere(
+        self,
+        location_id: str,
+        director_instruction: Dict[str, Any],
+        current_time: str = "",
+        weather: str = "晴朗",
+        present_characters: List[str] = None
+    ) -> Dict[str, Any]:
+        """
+        异步版本的氛围创作，使用线程池 + 并发限流
+        """
+        sem = _get_semaphore()
+        async with sem:
+            return await asyncio.to_thread(
+                self.create_atmosphere,
+                location_id,
+                director_instruction,
+                current_time,
+                weather,
+                present_characters,
+            )
+
     def _get_location_data(self, location_id: str) -> Dict[str, Any]:
         """获取地点数据"""
         for loc in self.locations:
