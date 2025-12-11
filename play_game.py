@@ -332,15 +332,29 @@ def game_loop(game):
     """游戏主循环"""
     while True:
         try:
+            # 生成行动建议
+            print("\n💡 行动建议:")
+            suggestions = game.generate_action_suggestions()
+            for i, suggestion in enumerate(suggestions, 1):
+                print(f"   [{i}] {suggestion}")
+            print("   [自定义] 直接输入你的行动")
+
             user_input = input("\n👤 你的行动 > ").strip()
-            
+
             if not user_input:
                 continue
-            
+
+            # 检查是否选择了建议选项
+            if user_input in ("1", "2"):
+                idx = int(user_input) - 1
+                if 0 <= idx < len(suggestions):
+                    user_input = suggestions[idx]
+                    print(f"   → 选择: {user_input}")
+
             # 处理命令
             if user_input.startswith("/"):
                 command = user_input.lower()
-                
+
                 if command == "/help":
                     print_help()
                 elif command == "/status":
@@ -355,9 +369,9 @@ def game_loop(game):
                 else:
                     print(f"❌ 未知命令: {command}")
                     print("   输入 /help 查看可用命令")
-                
+
                 continue
-            
+
             # 处理游戏回合
             print("\n⏳ 处理中...")
             result = game.process_turn(user_input)

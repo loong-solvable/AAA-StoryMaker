@@ -118,6 +118,14 @@ class PlotDirector:
 世界：{world_name}
 类型：{genre}
 
+【当前幕目标】
+幕名称：{act_name}
+幕目标：{act_objective}
+当前进度：{act_progress}
+推进紧迫度：{act_urgency}（0=不急，1=非常紧迫）
+剩余回合：{turns_remaining}
+导演提示：{act_guidance}
+
 【剧情节点信息】
 可用剧情节点：
 {available_plots}
@@ -140,7 +148,11 @@ class PlotDirector:
 【世界状态摘要】
 {world_context}
 
-请按照系统提示词中的格式要求生成场景剧本。""")
+【待融入的事件】
+{triggered_events}
+
+请按照系统提示词中的格式要求生成场景剧本。
+注意：根据幕目标和紧迫度调整剧情推进节奏。紧迫度越高，越应主动推进剧情；紧迫度低时可让玩家自由探索。""")
         ])
 
         return prompt | self.llm | StrOutputParser()
@@ -152,7 +164,9 @@ class PlotDirector:
         present_characters: List[str],
         world_context: Dict[str, Any],
         story_history: str = "",
-        last_scene_dialogues: str = ""
+        last_scene_dialogues: str = "",
+        act_context: Optional[Dict[str, Any]] = None,
+        triggered_events: Optional[List[Dict]] = None
     ) -> Dict[str, Any]:
         """
         生成场景剧本
@@ -164,6 +178,8 @@ class PlotDirector:
             world_context: 世界状态上下文
             story_history: 历史剧情摘要（来自MemoryManager）
             last_scene_dialogues: 上一幕的对话记录
+            act_context: 幕目标上下文（来自ActDirector）
+            triggered_events: 触发的事件列表（来自EventEngine）
 
         Returns:
             场景剧本数据
@@ -188,10 +204,43 @@ class PlotDirector:
 
         logger.info(f"   - 在场角色权重: {', '.join(char_importance_info)}")
 
+        # 处理幕目标上下文
+        if act_context:
+            act_name = act_context.get("act_name", "自由探索")
+            act_objective = act_context.get("objective", "")
+            act_progress = f"{act_context.get('progress', 0) * 100:.0f}%"
+            act_urgency = f"{act_context.get('urgency', 0.5):.1f}"
+            turns_remaining = act_context.get("turns_remaining", 999)
+            act_guidance = act_context.get("guidance", "")
+            logger.info(f"   - 幕目标: {act_name}, 紧迫度: {act_urgency}")
+        else:
+            act_name = "自由探索"
+            act_objective = "响应玩家的探索行为"
+            act_progress = "N/A"
+            act_urgency = "0.5"
+            turns_remaining = 999
+            act_guidance = ""
+
+        # 处理触发事件
+        if triggered_events:
+            events_desc = "\n".join([
+                f"- {e.get('event_name', '未知事件')}: {e.get('description', '')}"
+                for e in triggered_events
+            ])
+            logger.info(f"   - 触发事件: {len(triggered_events)} 个")
+        else:
+            events_desc = "（无待融入事件）"
+
         try:
             response = self.chain.invoke({
                 "world_name": self.world_info.get("title", "未知世界"),
                 "genre": self.world_info.get("genre", "未知类型"),
+                "act_name": act_name,
+                "act_objective": act_objective,
+                "act_progress": act_progress,
+                "act_urgency": act_urgency,
+                "turns_remaining": turns_remaining,
+                "act_guidance": act_guidance if act_guidance else "（无特定引导）",
                 "available_plots": available_plots,
                 "completed_nodes": ", ".join(self.completed_nodes) if self.completed_nodes else "无",
                 "active_nodes": ", ".join(self.active_nodes) if self.active_nodes else "无",
@@ -201,7 +250,8 @@ class PlotDirector:
                 "player_action": player_action,
                 "player_location": player_location,
                 "present_characters": ", ".join(char_names) if char_names else "无",
-                "world_context": json.dumps(world_context, ensure_ascii=False, indent=2)
+                "world_context": json.dumps(world_context, ensure_ascii=False, indent=2),
+                "triggered_events": events_desc
             })
             
             # 解析剧本
@@ -227,7 +277,9 @@ class PlotDirector:
         present_characters: List[str],
         world_context: Dict[str, Any],
         story_history: str = "",
-        last_scene_dialogues: str = ""
+        last_scene_dialogues: str = "",
+        act_context: Optional[Dict[str, Any]] = None,
+        triggered_events: Optional[List[Dict]] = None
     ) -> Dict[str, Any]:
         """
         异步版本的剧本生成，使用线程池执行
@@ -239,7 +291,9 @@ class PlotDirector:
             present_characters,
             world_context,
             story_history,
-            last_scene_dialogues
+            last_scene_dialogues,
+            act_context,
+            triggered_events
         )
 
     def _format_available_plots(self) -> str:

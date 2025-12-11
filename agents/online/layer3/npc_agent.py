@@ -461,6 +461,245 @@ class NPCAgent:
                 director_instruction,
             )
 
+    # --------------------------------------------------------------------- #
+    # NPC 主动性方法 (Phase 3: 三合一RPG体验)
+    # --------------------------------------------------------------------- #
+
+    def decide_behavior(
+        self,
+        is_interaction_target: bool,
+        scene_context: Optional[Dict[str, Any]] = None,
+        other_npcs: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        决定本回合行为模式
+
+        Args:
+            is_interaction_target: 是否是玩家的交互目标
+            scene_context: 场景上下文
+            other_npcs: 其他在场NPC的ID列表
+
+        Returns:
+            {
+                "mode": "respond"|"observe"|"autonomous"|"initiate",
+                "priority": 1-10,
+                "reason": "..."
+            }
+        """
+        # 1. 如果是交互目标，必须响应
+        if is_interaction_target:
+            return {
+                "mode": "respond",
+                "priority": 10,
+                "reason": f"{self.character_name}是玩家的交互目标"
+            }
+
+        # 2. 检查情感状态决定是否主动发起
+        attitude = self.emotional_state.get("attitude_toward_player", 0.5)
+        trust = self.emotional_state.get("trust_level", 0.3)
+
+        # 高好感度+高信任可能主动发起
+        if attitude > 0.7 and trust > 0.5:
+            # 有一定概率主动发起
+            import random
+            if random.random() < 0.3:  # 30%概率
+                return {
+                    "mode": "initiate",
+                    "priority": 7,
+                    "reason": f"{self.character_name}与玩家关系很好，想主动互动"
+                }
+
+        # 3. 根据态度决定是否旁观
+        if attitude > 0.4:
+            return {
+                "mode": "observe",
+                "priority": 4,
+                "reason": f"{self.character_name}关注场景中发生的事"
+            }
+
+        # 4. 低好感度可能执行自主行为
+        if attitude < 0.3:
+            return {
+                "mode": "autonomous",
+                "priority": 3,
+                "reason": f"{self.character_name}对玩家不太关心，做自己的事"
+            }
+
+        # 5. 默认：旁观
+        return {
+            "mode": "observe",
+            "priority": 2,
+            "reason": f"{self.character_name}保持观察"
+        }
+
+    def observe_scene(
+        self,
+        player_input: str,
+        scene_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        旁观模式 - 生成内心活动但不主动输出对话
+
+        Returns:
+            {
+                "thought": "内心想法",
+                "emotion": "情绪",
+                "observation": "观察到什么",
+                "should_interject": False,  # 是否应该插嘴
+                "character_id": "...",
+                "character_name": "..."
+            }
+        """
+        # 简单的旁观响应，不调用LLM以节省token
+        # 只记录NPC注意到了玩家的行为
+
+        # 根据态度决定观察程度
+        attitude = self.emotional_state.get("attitude_toward_player", 0.5)
+
+        if attitude > 0.6:
+            thought = f"{self.character_name}注意到玩家的动作，略带关心"
+            should_interject = False  # 高好感但不随便插话
+        elif attitude > 0.3:
+            thought = f"{self.character_name}余光注意到玩家在做什么"
+            should_interject = False
+        else:
+            thought = f"{self.character_name}对玩家的行为不太在意"
+            should_interject = False
+
+        return {
+            "thought": thought,
+            "emotion": self.current_mood,
+            "observation": f"注意到: {player_input[:30]}...",
+            "should_interject": should_interject,
+            "character_id": self.character_id,
+            "character_name": self.character_name,
+            "mode": "observe"
+        }
+
+    def take_initiative(
+        self,
+        scene_context: Optional[Dict[str, Any]] = None,
+        player_available: bool = True
+    ) -> Optional[Dict[str, Any]]:
+        """
+        主动发起行动（不响应玩家输入，而是NPC自己的行为）
+
+        Args:
+            scene_context: 场景上下文
+            player_available: 玩家是否可以被搭话
+
+        Returns:
+            主动行为数据，或None表示不主动行动
+        """
+        # 检查是否应该主动发起
+        attitude = self.emotional_state.get("attitude_toward_player", 0.5)
+        trust = self.emotional_state.get("trust_level", 0.3)
+
+        # 构建主动发起的Prompt
+        prompt = self._build_initiative_prompt(scene_context, player_available)
+
+        try:
+            messages = [
+                SystemMessage(content=prompt),
+                HumanMessage(content="请生成NPC的主动行为（对话或动作）")
+            ]
+            raw = self.llm.invoke(messages).content
+            result = self._parse_response(raw)
+
+            # 标记为主动发起
+            result["mode"] = "initiate"
+            result["is_initiative"] = True
+
+            # 记录对话
+            if result.get("dialogue"):
+                self._append_dialogue(
+                    self.character_id,
+                    self.character_name,
+                    result["dialogue"],
+                    result.get("thought", ""),
+                    result.get("emotion", "")
+                )
+
+            logger.info(f"💬 NPC[{self.character_name}] 主动发起: {result.get('dialogue', result.get('action', ''))[:50]}...")
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ NPC[{self.character_name}] 主动发起失败: {e}")
+            return None
+
+    def _build_initiative_prompt(
+        self,
+        scene_context: Optional[Dict[str, Any]],
+        player_available: bool
+    ) -> str:
+        """构建主动发起的Prompt"""
+        traits = self.character_data.get("traits") or []
+        behavior_rules = self.character_data.get("behavior_rules") or []
+
+        location = scene_context.get("location", "未知地点") if scene_context else "未知地点"
+        mood = scene_context.get("mood", "平静") if scene_context else "平静"
+
+        emotional_context = self._format_emotional_context()
+        dialogue_history = self._format_dialogue_history(limit=5)
+
+        prompt = f"""你是 {self.character_name}，一个有血有肉的角色。
+
+# 你的性格特点
+{', '.join(traits[:5]) if traits else '（未指定）'}
+
+# 你的行为规则
+{chr(10).join('- ' + r for r in behavior_rules[:3]) if behavior_rules else '（未指定）'}
+
+# 当前情感状态
+{emotional_context}
+
+# 当前场景
+- 地点: {location}
+- 氛围: {mood}
+- 玩家在场: {'是' if player_available else '否'}
+
+# 最近对话
+{dialogue_history if dialogue_history else '（无最近对话）'}
+
+# 任务
+你决定主动做点什么。可以是：
+- 主动向玩家搭话
+- 做一些符合你性格的动作
+- 自言自语或思考
+
+请输出JSON格式：
+{{
+    "thought": "你的内心想法",
+    "emotion": "你的情绪",
+    "dialogue": "你要说的话（如果你选择说话）",
+    "action": "你的动作描述",
+    "addressing_target": "user或everyone"
+}}
+"""
+        return prompt
+
+    async def async_observe_scene(
+        self,
+        player_input: str,
+        scene_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """异步版本的旁观模式"""
+        return self.observe_scene(player_input, scene_context)
+
+    async def async_take_initiative(
+        self,
+        scene_context: Optional[Dict[str, Any]] = None,
+        player_available: bool = True
+    ) -> Optional[Dict[str, Any]]:
+        """异步版本的主动发起"""
+        sem = _get_semaphore()
+        async with sem:
+            return await asyncio.to_thread(
+                self.take_initiative,
+                scene_context,
+                player_available
+            )
+
     def _append_dialogue(
         self,
         speaker_id: str,

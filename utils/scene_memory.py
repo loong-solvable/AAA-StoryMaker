@@ -62,6 +62,8 @@ class SceneMemory:
         return {
             "meta": {
                 "scene_id": self.scene_id,
+                # 兼容旧测试脚本中使用的 turn_id 命名
+                "turn_id": self.scene_id,
                 "scene_status": "ACTIVE",
                 "created_at": datetime.now().isoformat(),
                 "last_updated": datetime.now().isoformat()
@@ -417,17 +419,26 @@ class AllSceneMemory:
 
 
 # 便捷函数
-def create_scene_memory(runtime_dir: Path, scene_id: int = 1) -> SceneMemory:
+def create_scene_memory(
+    runtime_dir: Path,
+    scene_id: int = 1,
+    *,
+    turn_id: Optional[int] = None,
+) -> SceneMemory:
     """
     创建场景记忆板实例
     
     Args:
         runtime_dir: 运行时目录，如 data/runtime/江城市_20251128_183246
         scene_id: 当前幕次ID（第几幕）
+        turn_id: 兼容旧接口的别名，如果提供则优先使用
     
     Returns:
         SceneMemory 实例
     """
+    if turn_id is not None:
+        scene_id = int(turn_id)
+
     memory_dir = runtime_dir / "npc" / "memory"
     return SceneMemory(memory_dir, scene_id)
 

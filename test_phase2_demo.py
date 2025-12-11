@@ -11,8 +11,12 @@ from utils.logger import default_logger as logger
 from agents.online.layer1.os_agent import OperatingSystem
 from agents.online.layer1.logic_agent import LogicValidator
 from agents.message_protocol import (
-    AgentRole, MessageType, create_message, create_validation_request
+    AgentRole,
+    MessageType,
+    create_message,
+    create_validation_request,
 )
+import pytest
 
 
 def print_separator(title: str = ""):
@@ -133,6 +137,20 @@ def test_os_initialization():
     return os_system
 
 
+@pytest.fixture
+def os_system():
+    """
+    Pytest fixture: 提供已初始化的信息中枢 OS 实例。
+
+    如果当前环境下无法构建 genesis 数据，则跳过依赖该 fixture 的测试，
+    避免因为环境未准备好导致整个测试套件报错。
+    """
+    system = test_os_initialization()
+    if system is None:
+        pytest.skip("未能初始化 OperatingSystem，跳过依赖 OS 的阶段2 Demo 测试")
+    return system
+
+
 def test_logic_validation(os_system: OperatingSystem):
     """测试2: 逻辑审查官验证"""
     print_separator("测试2: 逻辑审查官Logic初始化与验证")
@@ -231,9 +249,12 @@ def test_message_routing(os_system: OperatingSystem):
     )
     
     print(f"\n📤 发送测试消息:")
-    print(f"   发送者: {test_msg.from_agent.value}")
-    print(f"   接收者: {test_msg.to_agent.value}")
-    print(f"   类型: {test_msg.message_type.value}")
+    from_name = getattr(test_msg.from_agent, "value", str(test_msg.from_agent))
+    to_name = getattr(test_msg.to_agent, "value", str(test_msg.to_agent))
+    type_name = getattr(test_msg.message_type, "value", str(test_msg.message_type))
+    print(f"   发送者: {from_name}")
+    print(f"   接收者: {to_name}")
+    print(f"   类型: {type_name}")
     
     # 添加到消息队列
     os_system.message_queue.append(test_msg)
@@ -244,7 +265,10 @@ def test_message_routing(os_system: OperatingSystem):
     # 显示最近的消息
     print(f"\n📋 最近的5条消息:")
     for msg in os_system.message_queue[-5:]:
-        print(f"   - {msg.from_agent.value} → {msg.to_agent.value}: {msg.message_type.value}")
+        m_from = getattr(msg.from_agent, "value", str(msg.from_agent))
+        m_to = getattr(msg.to_agent, "value", str(msg.to_agent))
+        m_type = getattr(msg.message_type, "value", str(msg.message_type))
+        print(f"   - {m_from} → {m_to}: {m_type}")
 
 
 def test_world_context_update(os_system: OperatingSystem):

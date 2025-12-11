@@ -184,14 +184,19 @@ class IlluminatiInitializer:
     # ==========================================
 
     def _normalize_player_profile(self, profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-        """标准化玩家资料，确保最小字段存在"""
+        """标准化玩家资料，确保最小字段存在，增强沉浸感"""
         base = {
             "id": "user",
             "name": "玩家",
             "gender": "未知",
             "age": "未知",
             "appearance": "",
-            "importance": 0.8
+            "importance": 0.8,
+            # 增强字段：提升玩家角色认同感
+            "background": "",  # 玩家背景故事
+            "motivation": "",  # 玩家动机/目标
+            "personality": "",  # 玩家性格倾向
+            "skills": [],  # 玩家特长
         }
         if not profile:
             return base
@@ -201,23 +206,40 @@ class IlluminatiInitializer:
                 normalized[key] = value
         return normalized
 
+    def _generate_player_traits(self) -> List[str]:
+        """根据玩家资料生成性格特质"""
+        traits = ["由玩家实时展现"]
+        personality = self.player_profile.get("personality", "")
+        if personality:
+            traits.append(personality)
+        skills = self.player_profile.get("skills", [])
+        if skills:
+            traits.extend([f"擅长{s}" for s in skills[:2]])
+        return traits
+
     def _inject_player_into_cast(self):
         """将玩家作为正式角色加入角色花名册与角色卡"""
         player_id = self.player_profile.get("id", "user")
 
-        # 生成最小玩家卡
+        # 生成增强版玩家卡（提升角色认同感）
         self.player_card = {
             "id": player_id,
             "name": self.player_profile.get("name", "玩家"),
             "gender": self.player_profile.get("gender", "未知"),
             "age": self.player_profile.get("age", "未知"),
             "importance": self.player_profile.get("importance", 0.8),
-            "traits": ["由玩家实时展现"],
+            "traits": self._generate_player_traits(),
             "behavior_rules": ["遵从玩家实时选择"],
             "relationship_matrix": {},
             "possessions": [],
             "current_appearance": self.player_profile.get("appearance", ""),
-            "voice_samples": []
+            "voice_samples": [],
+            # 增强字段：玩家角色认同
+            "background": self.player_profile.get("background", ""),
+            "motivation": self.player_profile.get("motivation", "探索这个世界的真相"),
+            "personality": self.player_profile.get("personality", ""),
+            "skills": self.player_profile.get("skills", []),
+            "is_player": True  # 标记为玩家角色
         }
 
         # 加入角色列表（如未存在）

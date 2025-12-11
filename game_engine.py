@@ -16,10 +16,11 @@ from agents.online.layer2.ws_agent import WorldStateManager
 from agents.online.layer2.plot_agent import PlotDirector
 from agents.online.layer2.vibe_agent import AtmosphereCreator
 from agents.online.layer3.npc_agent import NPCManager
-from agents.message_protocol import (
-    AgentRole, MessageType, create_message, create_validation_request
-)
+from utils.interaction_parser import identify_interaction_target, should_npc_respond
+from agents.message_protocol import AgentRole
 from utils.memory_manager import MemoryManager
+from agents.online.layer1.conductor import Conductor, TurnMode, TurnDecision
+from utils.in_act_accumulator import InActAccumulator
 
 logger = setup_logger("GameEngine", "game_engine.log")
 
@@ -73,7 +74,20 @@ class GameEngine:
         self.world_state = WorldStateManager(self.os.genesis_data)
         self.plot = PlotDirector(self.os.genesis_data)
         self.vibe = AtmosphereCreator(self.os.genesis_data)
-        
+
+        # 初始化Conductor（中枢指挥家）
+        # 合并了 ActDirector + EventEngine + TurnModeClassifier
+        self.conductor = Conductor(
+            genesis_data=self.os.genesis_data,
+            enable_async_predict=True
+        )
+
+        # 初始化幕内状态累积器（轻量交互优化核心组件）
+        self.in_act_accumulator = InActAccumulator()
+
+        # 后台IO任务队列
+        self._pending_io_tasks: List[asyncio.Task] = []
+
         # 初始化NPC管理器
         self.npc_manager = NPCManager(self.os.genesis_data)
         
@@ -89,6 +103,9 @@ class GameEngine:
         if "user" not in self.os.world_context.present_characters:
             self.os.world_context.present_characters.append("user")
         self.player_name = self._get_player_name()
+
+        # 对话历史（用于生成行动建议）
+        self.dialogue_history: List[Dict[str, str]] = []
         
         # 初始化世界状态同步器（用于同步 world_state.json）
         self.runtime_dir = genesis_path.parent if genesis_path else None
@@ -112,11 +129,12 @@ class GameEngine:
         self._record_agent_snapshots(turn_number=0)
         
         logger.info("✅ 游戏引擎初始化完成")
-        logger.info(f"   - 世界: {self.os.genesis_data['world']['title']}")
+        logger.info(f"   - 世界: {self.os.genesis_data.get('world', {}).get('title', '未知')}")
         logger.info(f"   - NPC数量: {len(self.npc_manager.npcs)}")
         logger.info(f"   - 异步模式: {'ON' if self.async_mode else 'OFF'}")
         logger.info(f"   - Logic验证: {'ON' if self.enable_logic_check else 'OFF'}")
         logger.info(f"   - Vibe氛围: {'ON' if self.enable_vibe else 'OFF'}")
+        logger.info(f"   - 轻量交互优化: ON")
         logger.info("=" * 60)
     
     def start_game(self) -> str:
@@ -220,8 +238,44 @@ class GameEngine:
             
             # 更新NPC状态
             self.npc_manager.update_npc_states(world_update.get("npc_updates", []))
-            
-            # Step 3: 剧情决策（Plot生成剧本）
+
+            # Step 2.5: 事件检查
+            logger.info("📍 Step 2.5: 事件检查")
+            game_state_for_events = {
+                "player_location": self.player_location,
+                "npc_states": self.npc_manager.get_state_snapshot() if hasattr(self.npc_manager, 'get_state_snapshot') else {},
+                "player_action": player_input
+            }
+            triggered_events = self.conductor.check_triggers(
+                game_state=game_state_for_events,
+                current_time=self.world_state.current_time,
+                turn_number=self.os.turn_count
+            )
+            if triggered_events:
+                logger.info(f"   - 触发事件: {len(triggered_events)} 个")
+                for evt in triggered_events:
+                    logger.info(f"     ⚡ {evt.event_name} (优先级:{evt.priority})")
+
+            # Step 2.6: 幕目标评估
+            logger.info("📍 Step 2.6: 幕目标评估")
+            act_context = self.conductor.get_plot_context()
+            act_evaluation = self.conductor.evaluate_progress({
+                "player_location": self.player_location,
+                "present_characters": self.os.world_context.present_characters,
+                "npc_interactions": [],  # 将在回合结束后更新
+                "triggered_events": [{"event_id": e.event_id} for e in triggered_events],
+                "player_action": player_input
+            })
+            logger.info(f"   - 当前幕: {act_context.get('act_name')}")
+            logger.info(f"   - 进度: {act_context.get('progress', 0) * 100:.0f}%, 紧迫度: {act_context.get('urgency', 0):.2f}")
+
+            # 转换事件为Plot可用的格式
+            triggered_events_for_plot = [
+                {"event_id": e.event_id, "event_name": e.event_name, "description": e.description, "priority": e.priority}
+                for e in triggered_events
+            ] if triggered_events else None
+
+            # Step 3: 剧情决策（Plot生成剧本，带幕目标和事件上下文）
             logger.info("📍 Step 3: 剧情决策")
             script = self.plot.generate_scene_script(
                 player_action=player_input,
@@ -229,7 +283,9 @@ class GameEngine:
                 present_characters=self.os.world_context.present_characters,
                 world_context=self.world_state.get_context_summary(),
                 story_history=self._get_story_history(),
-                last_scene_dialogues=self._get_last_scene_dialogues()
+                last_scene_dialogues=self._get_last_scene_dialogues(),
+                act_context=act_context,
+                triggered_events=triggered_events_for_plot
             )
             
             # Step 4: 内容生成（Vibe 可选 + NPC）
@@ -257,17 +313,60 @@ class GameEngine:
             else:
                 logger.info("ℹ️ Vibe氛围已关闭，跳过生成")
             
-            # NPC反应
+            # NPC反应 - 智能响应版本
             npc_reactions = []
             # 提取剧情推演作为场景摘要
             scene_summary = script.get("director_notes", "")
+            scene_context = {
+                "location": self.player_location,
+                "time": self.world_state.current_time,
+                "mood": script.get("scene_theme", {}).get("mood", "平静"),
+                "scene_summary": scene_summary
+            }
+
+            # Step 4.1: 识别玩家交互目标
+            present_chars = []
+            for char_id in self.os.world_context.present_characters:
+                if char_id == "user":
+                    continue
+                char_data = self.os.get_character_data(char_id)
+                if char_data:
+                    present_chars.append({
+                        "id": char_id,
+                        "name": char_data.get("name", char_id),
+                        "gender": char_data.get("gender", "")
+                    })
+
+            interaction_info = identify_interaction_target(
+                player_input=player_input,
+                present_characters=present_chars,
+                dialogue_history=self.os.get_dialogue_history()[-10:] if hasattr(self.os, 'get_dialogue_history') else None
+            )
+            logger.info(f"🎯 交互目标识别: {interaction_info['target_type']} -> {interaction_info['target_names']} (置信度: {interaction_info['confidence']:.2f})")
+
+            # Step 4.2: 根据交互目标决定每个NPC的响应模式
             for char_id in self.os.world_context.present_characters:
                 if char_id == "user":
                     continue
                 npc = self.npc_manager.get_npc(char_id)
-                if npc:
+                if not npc:
+                    continue
+
+                # 使用should_npc_respond进行细粒度判断
+                npc_response_decision = should_npc_respond(
+                    npc_id=char_id,
+                    npc_name=npc.character_name,
+                    interaction_info=interaction_info,
+                    npc_emotional_state=npc.emotional_state
+                )
+
+                response_mode = npc_response_decision.get("response_mode", "ignore")
+                logger.debug(f"   NPC[{npc.character_name}] 响应模式: {response_mode} ({npc_response_decision.get('reason', '')})")
+
+                # 根据响应模式处理
+                if response_mode == "respond":
+                    # 正常响应：调用LLM生成反应
                     npc_instruction = self._find_instruction(script, f"npc_{char_id}")
-                    # 如果没有专属指令，用通用剧情作为指导
                     if not npc_instruction and scene_summary:
                         npc_instruction = {
                             "target": f"npc_{char_id}",
@@ -278,18 +377,43 @@ class GameEngine:
                         }
                     reaction = npc.react(
                         player_input=player_input,
-                        scene_context={
-                            "location": self.player_location,
-                            "time": self.world_state.current_time,
-                            "mood": script.get("scene_theme", {}).get("mood", "平静"),
-                            "scene_summary": scene_summary
-                        },
+                        scene_context=scene_context,
                         director_instruction=npc_instruction
                     )
                     npc_reactions.append({
                         "npc": npc,
-                        "reaction": reaction
+                        "reaction": reaction,
+                        "mode": "respond"
                     })
+
+                elif response_mode == "observe":
+                    # 旁观模式：记录但不输出对话
+                    observation = npc.observe_scene(player_input, scene_context)
+                    # 旁观结果可选择性加入（如果should_interject）
+                    if observation.get("should_interject"):
+                        npc_reactions.append({
+                            "npc": npc,
+                            "reaction": observation,
+                            "mode": "observe"
+                        })
+
+                elif response_mode == "autonomous":
+                    # 自主行为：NPC做自己的事
+                    behavior = npc.decide_behavior(
+                        is_interaction_target=False,
+                        scene_context=scene_context,
+                        other_npcs=[c for c in self.os.world_context.present_characters if c != char_id and c != "user"]
+                    )
+                    # 自主行为一般不输出，除非有特别行动
+                    if behavior.get("mode") == "initiate":
+                        initiative = npc.take_initiative(scene_context, player_available=True)
+                        if initiative:
+                            npc_reactions.append({
+                                "npc": npc,
+                                "reaction": initiative,
+                                "mode": "initiate"
+                            })
+                # ignore模式：不做任何处理
             
             # Step 5: 输出审查（可选，避免过慢）
             # 为了性能，这里简化处理
@@ -314,10 +438,23 @@ class GameEngine:
                 "action": player_input,
                 "location": self.player_location
             })
-            
+
+            # 应用事件效果
+            for event in triggered_events:
+                self.conductor.apply_event_effects(event, game_state_for_events)
+
+            # 检查幕转换
+            if act_evaluation.get("should_advance"):
+                if act_evaluation.get("progress", 0) >= 1.0:
+                    self.conductor.advance_to_next_act("success")
+                elif self.conductor.current_act and \
+                     self.conductor.current_act.turns_in_act >= self.conductor.current_act.objective.max_turns:
+                    self.conductor.advance_to_next_act("timeout")
+                logger.info(f"🎬 幕转换: 进入 {self.conductor.current_act.act_name if self.conductor.current_act else '未知'}")
+
             logger.info("✅ 回合处理完成")
             logger.info("=" * 60)
-            
+
             return {
                 "success": True,
                 "text": output_text,
@@ -326,7 +463,7 @@ class GameEngine:
                 "atmosphere": atmosphere,
                 "npc_reactions": npc_reactions
             }
-            
+
         except Exception as e:
             logger.error(f"❌ 回合处理出错: {e}", exc_info=True)
             return {
@@ -337,212 +474,635 @@ class GameEngine:
 
     async def process_turn_async(self, player_input: str) -> Dict[str, Any]:
         """
-        异步版本的回合处理，使用并发方式生成 NPC 反应。
+        异步版本的回合处理 - 三模式分流优化版
+
+        模式：
+        - DIALOGUE: 普通对话，仅NPC响应（~1-2秒）
+        - PLOT_ADVANCE: 剧情推进，完整处理（~3-5秒）
+        - ACT_TRANSITION: 幕转换，同步所有状态
         """
         logger.info("=" * 60)
         logger.info(f"🎮 [async] 处理回合 #{self.os.turn_count + 1}")
         logger.info(f"玩家输入: {player_input[:50]}...")
-        logger.info("=" * 60)
 
         current_turn = self.os.turn_count + 1
 
         try:
-            # 先获取当前的world_context（上一回合状态），供Plot使用
-            pre_update_context = self.world_state.get_context_summary()
+            # 清理已完成的后台IO任务
+            self._cleanup_pending_tasks()
 
-            # 获取历史数据供Plot使用
-            story_history = self._get_story_history()
-            last_scene_dialogues = self._get_last_scene_dialogues()
+            # Step 1: Conductor决策（三层模型）
+            game_context = {
+                "player_location": self.player_location,
+                "present_npcs": self.os.world_context.present_characters if self.os.world_context else [],
+                "current_time": self.world_state.current_time,
+                "npc_states": self.npc_manager.get_state_snapshot() if hasattr(self.npc_manager, 'get_state_snapshot') else {},
+                "recent_dialogue": self.os.get_dialogue_history()[-6:] if hasattr(self.os, 'get_dialogue_history') else []
+            }
+            decision = self.conductor.decide_turn_mode(player_input, game_context)
+            turn_mode = decision.mode
 
-            # 根据开关决定并行任务
-            if self.enable_logic_check and self.logic:
-                # Logic开启：Logic + WS + Plot 全并行
-                logger.info("📍 Step 1-3: 验证 + 世界状态 + 剧情（全并行）")
-                logic_task = self._async_validate_input(player_input)
-                ws_task = self.world_state.async_update_world_state(
-                    player_action=player_input,
-                    player_location=self.player_location,
-                    time_cost=10
-                )
-                plot_task = self.plot.async_generate_scene_script(
-                    player_action=player_input,
-                    player_location=self.player_location,
-                    present_characters=self.os.world_context.present_characters,
-                    world_context=pre_update_context,
-                    story_history=story_history,
-                    last_scene_dialogues=last_scene_dialogues
-                )
-
-                validation_result, world_update, script = await asyncio.gather(
-                    logic_task, ws_task, plot_task
-                )
-
-                # 检查Logic验证结果
-                if not validation_result['is_valid']:
-                    logger.warning("❌ 输入被拒绝")
-                    return {
-                        "success": False,
-                        "error": validation_result['errors'][0] if validation_result['errors'] else "输入不符合世界观",
-                        "text": f"❌ {validation_result['errors'][0]}"
-                    }
-            else:
-                # Logic关闭：只执行 WS + Plot 并行
-                logger.info("📍 Step 1-2: 世界状态 + 剧情（并行，Logic跳过）")
-                ws_task = self.world_state.async_update_world_state(
-                    player_action=player_input,
-                    player_location=self.player_location,
-                    time_cost=10
-                )
-                plot_task = self.plot.async_generate_scene_script(
-                    player_action=player_input,
-                    player_location=self.player_location,
-                    present_characters=self.os.world_context.present_characters,
-                    world_context=pre_update_context,
-                    story_history=story_history,
-                    last_scene_dialogues=last_scene_dialogues
-                )
-
-                world_update, script = await asyncio.gather(ws_task, plot_task)
-
-            logger.info("✅ 世界状态 + 剧情决策完成")
-
-            # WS完成后更新NPC状态
-            self.npc_manager.update_npc_states(world_update.get("npc_updates", []))
-
-            # Step 3: 内容生成（Vibe可选 + NPC 并行）
-            vibe_status = "ON" if self.enable_vibe else "OFF"
-            logger.info(f"📍 Step 3: 内容生成（Vibe:{vibe_status} + NPC 并行）")
-            logger.info(f"   - 在场 NPC: {len(self.os.world_context.present_characters) - 1}")
-
-            # 收集所有并行任务
-            all_tasks = []
-            task_labels = []  # 用于标识任务类型
-
-            # Vibe 任务（仅在开启时执行）
-            if self.enable_vibe:
-                atmosphere_instruction = self._find_instruction(script, "vibe")
-                if not atmosphere_instruction:
-                    atmosphere_instruction = {
-                        "target": "vibe",
-                        "parameters": {
-                            "emotional_tone": script.get("scene_theme", {}).get("mood", "平静"),
-                            "focus": "环境变化与角色互动",
-                            "sensory_details": ["视觉", "听觉", "嗅觉"]
-                        }
-                    }
-                params = atmosphere_instruction.get("parameters", {})
-                if not params.get("sensory_details"):
-                    params["sensory_details"] = ["视觉", "听觉", "嗅觉", "触觉"]
-                    atmosphere_instruction["parameters"] = params
-
-                all_tasks.append(
-                    self.vibe.async_create_atmosphere(
-                        location_id=self.player_location,
-                        director_instruction=atmosphere_instruction,
-                        current_time=self.world_state.current_time,
-                        present_characters=self.os.world_context.present_characters
-                    )
-                )
-                task_labels.append(("vibe", None))
-
-            # NPC 任务
-            npc_objs = []
-            # 提取剧情推演作为场景摘要（关键：让NPC知道当前剧情发展）
-            scene_summary = script.get("director_notes", "")
-            for char_id in self.os.world_context.present_characters:
-                if char_id == "user":
-                    continue
-                npc = self.npc_manager.get_npc(char_id)
-                if npc:
-                    npc_instruction = self._find_instruction(script, f"npc_{char_id}")
-                    # 如果没有专属指令，用通用剧情作为指导
-                    if not npc_instruction and scene_summary:
-                        npc_instruction = {
-                            "target": f"npc_{char_id}",
-                            "parameters": {
-                                "scene_summary": scene_summary,
-                                "objective": "根据剧情推演自然反应"
-                            }
-                        }
-                    npc_objs.append((npc, npc_instruction))
-                    all_tasks.append(
-                        npc.async_react(
-                            player_input=player_input,
-                            scene_context={
-                                "location": self.player_location,
-                                "time": self.world_state.current_time,
-                                "mood": script.get("scene_theme", {}).get("mood", "平静"),
-                                "scene_summary": scene_summary  # 传递剧情摘要
-                            },
-                            director_instruction=npc_instruction
-                        )
-                    )
-                    task_labels.append(("npc", npc))
-
-            # 并行执行所有任务
-            atmosphere = None
-            npc_reactions: List[Dict[str, Any]] = []
-
-            if all_tasks:
-                results = await asyncio.gather(*all_tasks, return_exceptions=True)
-                for (label_type, label_data), res in zip(task_labels, results):
-                    if isinstance(res, Exception):
-                        if label_type == "vibe":
-                            logger.error("❌ Vibe 并行生成失败: %s", res)
-                        else:
-                            logger.error("❌ NPC[%s] 并行演绎失败: %s", label_data.character_id, res)
-                        continue
-
-                    if label_type == "vibe":
-                        atmosphere = res
-                    else:
-                        npc_reactions.append({
-                            "npc": label_data,
-                            "reaction": res
-                        })
-
-            # Step 5: 输出审查（可选，避免过慢） - 保持简化
-
-            # Step 6: 最终渲染
-            logger.info("📍 Step 6: 最终渲染")
-            output_text = self._render_output(atmosphere, npc_reactions, script)
-
-            self._record_turn_summary(
-                turn_number=current_turn,
-                player_input=player_input,
-                world_update=world_update,
-                script=script,
-                atmosphere=atmosphere,
-                npc_reactions=npc_reactions
-            )
-
-            # 更新OS状态
-            self.os.next_turn()
-            self.os.add_to_history({
-                "type": "player_action",
-                "action": player_input,
-                "location": self.player_location
-            })
-
-            logger.info("✅ 回合处理完成 [async]")
+            logger.info(f"📍 回合模式: {turn_mode.value} (Layer {decision.decision_layer})")
+            if decision.should_advance_reason:
+                logger.info(f"   原因: {decision.should_advance_reason}")
             logger.info("=" * 60)
 
-            return {
-                "success": True,
-                "text": output_text,
-                "world_state": world_update,
-                "script": script,
-                "atmosphere": atmosphere,
-                "npc_reactions": npc_reactions
-            }
+            # Step 2: 根据模式分流处理
+            if turn_mode == TurnMode.DIALOGUE:
+                # 快速路径：仅NPC响应
+                result = await self._process_dialogue_turn_fast(player_input, decision)
+            elif turn_mode == TurnMode.ACT_TRANSITION:
+                # 幕转换：完整同步 + 切换幕
+                result = await self._process_act_transition_turn(player_input, decision)
+            else:
+                # 剧情推进：完整处理
+                result = await self._process_plot_advance_turn(player_input, decision)
 
-        except Exception as e:  # noqa: BLE001
+            # Step 3: 更新Conductor状态
+            self.conductor.on_turn_complete(turn_mode, player_input, self.player_location)
+
+            # Step 4: 后台异步预判下一回合（不阻塞返回）
+            if result.get("success") and self.conductor.enable_async_predict:
+                turn_result = {
+                    "player_input": player_input,
+                    "npc_reactions": result.get("npc_reactions", []),
+                    "mode_used": turn_mode.value
+                }
+                asyncio.create_task(self.conductor.async_predict_next_turn(turn_result))
+
+            # Step 5: 后台异步IO（不阻塞返回）
+            if result.get("success"):
+                io_task = asyncio.create_task(
+                    self._async_persist_turn_data(result, turn_mode, current_turn)
+                )
+                self._pending_io_tasks.append(io_task)
+
+            return result
+
+        except Exception as e:
             logger.error(f"❌ 回合处理出错 [async]: {e}", exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
                 "text": f"❌ 系统错误: {e}"
             }
+
+    async def _process_dialogue_turn_fast(
+        self,
+        player_input: str,
+        decision: TurnDecision
+    ) -> Dict[str, Any]:
+        """
+        快速对话模式 - 仅调用NPC响应，跳过WS和Plot
+
+        预期延迟: ~1-2秒
+        """
+        triggered_events = decision.triggered_events
+        import time
+        start_time = time.time()
+
+        current_turn = self.os.turn_count + 1
+        logger.info("⚡ 快速对话模式启动")
+
+        # 使用累积器的缓存场景上下文
+        scene_context = self.in_act_accumulator.get_scene_context_for_npc()
+        scene_context["location"] = self.player_location
+
+        # 识别交互目标
+        present_chars = []
+        for char_id in self.os.world_context.present_characters:
+            if char_id == "user":
+                continue
+            char_data = self.os.get_character_data(char_id)
+            if char_data:
+                present_chars.append({
+                    "id": char_id,
+                    "name": char_data.get("name", char_id),
+                    "gender": char_data.get("gender", "")
+                })
+
+        interaction_info = identify_interaction_target(
+            player_input=player_input,
+            present_characters=present_chars,
+            dialogue_history=self.os.get_dialogue_history()[-10:] if hasattr(self.os, 'get_dialogue_history') else None
+        )
+        logger.info(f"🎯 交互目标: {interaction_info['target_names']}")
+
+        # 只调用需要响应的NPC
+        npc_tasks = []
+        npcs_responding = []
+
+        for char_id in self.os.world_context.present_characters:
+            if char_id == "user":
+                continue
+            npc = self.npc_manager.get_npc(char_id)
+            if not npc:
+                continue
+
+            decision = should_npc_respond(
+                npc_id=char_id,
+                npc_name=npc.character_name,
+                interaction_info=interaction_info,
+                npc_emotional_state=npc.emotional_state
+            )
+
+            if decision.get("response_mode") == "respond":
+                npcs_responding.append(npc)
+                npc_tasks.append(
+                    npc.async_react(
+                        player_input=player_input,
+                        scene_context=scene_context,
+                        director_instruction=None  # 无导演指令，NPC自由发挥
+                    )
+                )
+
+        # 并行执行NPC响应
+        npc_reactions = []
+        if npc_tasks:
+            results = await asyncio.gather(*npc_tasks, return_exceptions=True)
+            for npc, res in zip(npcs_responding, results):
+                if isinstance(res, Exception):
+                    logger.warning(f"NPC[{npc.character_name}]响应失败: {res}")
+                    continue
+                npc_reactions.append({
+                    "npc": npc,
+                    "reaction": res,
+                    "mode": "respond"
+                })
+
+        # 处理旁观NPC（同步，不调用LLM）
+        for char_id in self.os.world_context.present_characters:
+            if char_id == "user":
+                continue
+            npc = self.npc_manager.get_npc(char_id)
+            if npc and npc not in npcs_responding:
+                observation = npc.observe_scene(player_input, scene_context)
+                if observation.get("should_interject"):
+                    npc_reactions.append({
+                        "npc": npc,
+                        "reaction": observation,
+                        "mode": "observe"
+                    })
+
+        # 渲染输出（无氛围描写）
+        output_text = self._render_output(None, npc_reactions, {})
+
+        # 累积状态（不立即同步）
+        self.in_act_accumulator.record_dialogue_turn(
+            player_input=player_input,
+            npc_reactions=npc_reactions,
+            time_cost_minutes=3
+        )
+
+        # 记录触发的事件
+        for event in triggered_events:
+            self.in_act_accumulator.record_event({
+                "event_id": event.event_id,
+                "event_name": event.event_name
+            })
+
+        # 更新OS状态（本地）
+        self.os.next_turn()
+        self.os.add_to_history({
+            "type": "player_action",
+            "action": player_input,
+            "location": self.player_location
+        })
+
+        elapsed = time.time() - start_time
+        logger.info(f"⚡ 快速对话完成，耗时: {elapsed:.2f}秒")
+
+        # 记录对话历史（用于生成行动建议）
+        self._record_dialogue(player_input, npc_reactions)
+
+        return {
+            "success": True,
+            "text": output_text,
+            "mode": "dialogue",
+            "npc_reactions": npc_reactions,
+            "elapsed_time": elapsed,
+            "player_input": player_input
+        }
+
+    async def _process_plot_advance_turn(
+        self,
+        player_input: str,
+        decision: TurnDecision
+    ) -> Dict[str, Any]:
+        """
+        剧情推进模式 - 完整处理流程
+
+        预期延迟: ~3-5秒
+        """
+        triggered_events = decision.triggered_events
+        import time
+        start_time = time.time()
+
+        current_turn = self.os.turn_count + 1
+        logger.info("📖 剧情推进模式启动")
+
+        # 先获取当前的world_context（上一回合状态），供Plot使用
+        pre_update_context = self.world_state.get_context_summary()
+
+        # 获取历史数据供Plot使用
+        story_history = self._get_story_history()
+        last_scene_dialogues = self._get_last_scene_dialogues()
+
+        # 转换事件为Plot可用的格式
+        triggered_events_for_plot = [
+            {"event_id": e.event_id, "event_name": e.event_name, "description": e.description, "priority": e.priority}
+            for e in triggered_events
+        ] if triggered_events else None
+
+        # 获取幕目标上下文
+        act_context = self.conductor.get_plot_context()
+        act_evaluation = self.conductor.evaluate_progress({
+            "player_location": self.player_location,
+            "present_characters": self.os.world_context.present_characters,
+            "npc_interactions": [],
+            "triggered_events": [{"event_id": e.event_id} for e in triggered_events] if triggered_events else [],
+            "player_action": player_input
+        })
+        logger.info(f"📍 幕目标: {act_context.get('act_name')}, 紧迫度: {act_context.get('urgency', 0):.2f}")
+
+        # 根据开关决定并行任务
+        if self.enable_logic_check and self.logic:
+            # Logic开启：Logic + WS + Plot 全并行
+            logger.info("📍 Step 1-3: 验证 + 世界状态 + 剧情（全并行）")
+            logic_task = self._async_validate_input(player_input)
+            ws_task = self.world_state.async_update_world_state(
+                player_action=player_input,
+                player_location=self.player_location,
+                time_cost=10
+            )
+            plot_task = self.plot.async_generate_scene_script(
+                player_action=player_input,
+                player_location=self.player_location,
+                present_characters=self.os.world_context.present_characters,
+                world_context=pre_update_context,
+                story_history=story_history,
+                last_scene_dialogues=last_scene_dialogues,
+                act_context=act_context,
+                triggered_events=triggered_events_for_plot
+            )
+
+            validation_result, world_update, script = await asyncio.gather(
+                logic_task, ws_task, plot_task
+            )
+
+            # 检查Logic验证结果
+            if not validation_result['is_valid']:
+                logger.warning("❌ 输入被拒绝")
+                return {
+                    "success": False,
+                    "error": validation_result['errors'][0] if validation_result['errors'] else "输入不符合世界观",
+                    "text": f"❌ {validation_result['errors'][0]}"
+                }
+        else:
+            # Logic关闭：只执行 WS + Plot 并行
+            logger.info("📍 Step 1-2: 世界状态 + 剧情（并行，Logic跳过）")
+            ws_task = self.world_state.async_update_world_state(
+                player_action=player_input,
+                player_location=self.player_location,
+                time_cost=10
+            )
+            plot_task = self.plot.async_generate_scene_script(
+                player_action=player_input,
+                player_location=self.player_location,
+                present_characters=self.os.world_context.present_characters,
+                world_context=pre_update_context,
+                story_history=story_history,
+                last_scene_dialogues=last_scene_dialogues,
+                act_context=act_context,
+                triggered_events=triggered_events_for_plot
+            )
+
+            world_update, script = await asyncio.gather(ws_task, plot_task)
+
+        logger.info("✅ 世界状态 + 剧情决策完成")
+
+        # WS完成后更新NPC状态
+        self.npc_manager.update_npc_states(world_update.get("npc_updates", []))
+
+        # Step 3: 内容生成（Vibe可选 + NPC 并行）
+        vibe_status = "ON" if self.enable_vibe else "OFF"
+        logger.info(f"📍 Step 3: 内容生成（Vibe:{vibe_status} + NPC 并行）")
+        logger.info(f"   - 在场 NPC: {len(self.os.world_context.present_characters) - 1}")
+
+        # 收集所有并行任务
+        all_tasks = []
+        task_labels = []
+
+        # Vibe 任务（仅在开启时执行）
+        if self.enable_vibe:
+            atmosphere_instruction = self._find_instruction(script, "vibe")
+            if not atmosphere_instruction:
+                atmosphere_instruction = {
+                    "target": "vibe",
+                    "parameters": {
+                        "emotional_tone": script.get("scene_theme", {}).get("mood", "平静"),
+                        "focus": "环境变化与角色互动",
+                        "sensory_details": ["视觉", "听觉", "嗅觉"]
+                    }
+                }
+            params = atmosphere_instruction.get("parameters", {})
+            if not params.get("sensory_details"):
+                params["sensory_details"] = ["视觉", "听觉", "嗅觉", "触觉"]
+                atmosphere_instruction["parameters"] = params
+
+            all_tasks.append(
+                self.vibe.async_create_atmosphere(
+                    location_id=self.player_location,
+                    director_instruction=atmosphere_instruction,
+                    current_time=self.world_state.current_time,
+                    present_characters=self.os.world_context.present_characters
+                )
+            )
+            task_labels.append(("vibe", None))
+
+        # NPC 任务 - 智能响应版本
+        scene_summary = script.get("director_notes", "")
+        scene_context = {
+            "location": self.player_location,
+            "time": self.world_state.current_time,
+            "mood": script.get("scene_theme", {}).get("mood", "平静"),
+            "scene_summary": scene_summary
+        }
+
+        # 识别玩家交互目标
+        present_chars = []
+        for char_id in self.os.world_context.present_characters:
+            if char_id == "user":
+                continue
+            char_data = self.os.get_character_data(char_id)
+            if char_data:
+                present_chars.append({
+                    "id": char_id,
+                    "name": char_data.get("name", char_id),
+                    "gender": char_data.get("gender", "")
+                })
+
+        interaction_info = identify_interaction_target(
+            player_input=player_input,
+            present_characters=present_chars,
+            dialogue_history=self.os.get_dialogue_history()[-10:] if hasattr(self.os, 'get_dialogue_history') else None
+        )
+        logger.info(f"🎯 交互目标识别: {interaction_info['target_type']} -> {interaction_info['target_names']}")
+
+        # 根据交互目标决定每个NPC的响应模式
+        npcs_to_respond = []
+        npcs_to_observe = []
+        npcs_autonomous = []
+
+        for char_id in self.os.world_context.present_characters:
+            if char_id == "user":
+                continue
+            npc = self.npc_manager.get_npc(char_id)
+            if not npc:
+                continue
+
+            npc_response_decision = should_npc_respond(
+                npc_id=char_id,
+                npc_name=npc.character_name,
+                interaction_info=interaction_info,
+                npc_emotional_state=npc.emotional_state
+            )
+
+            response_mode = npc_response_decision.get("response_mode", "ignore")
+
+            if response_mode == "respond":
+                npcs_to_respond.append((char_id, npc))
+            elif response_mode == "observe":
+                npcs_to_observe.append((char_id, npc))
+            elif response_mode == "autonomous":
+                npcs_autonomous.append((char_id, npc))
+
+        # 为需要响应的NPC创建异步任务
+        for char_id, npc in npcs_to_respond:
+            npc_instruction = self._find_instruction(script, f"npc_{char_id}")
+            if not npc_instruction and scene_summary:
+                npc_instruction = {
+                    "target": f"npc_{char_id}",
+                    "parameters": {
+                        "scene_summary": scene_summary,
+                        "objective": "根据剧情推演自然反应"
+                    }
+                }
+            all_tasks.append(
+                npc.async_react(
+                    player_input=player_input,
+                    scene_context=scene_context,
+                    director_instruction=npc_instruction
+                )
+            )
+            task_labels.append(("npc_respond", npc))
+
+        # 并行执行所有任务
+        atmosphere = None
+        npc_reactions: List[Dict[str, Any]] = []
+
+        if all_tasks:
+            results = await asyncio.gather(*all_tasks, return_exceptions=True)
+            for (label_type, label_data), res in zip(task_labels, results):
+                if isinstance(res, Exception):
+                    if label_type == "vibe":
+                        logger.error("❌ Vibe 并行生成失败: %s", res)
+                    else:
+                        logger.error("❌ NPC[%s] 并行演绎失败: %s", label_data.character_id, res)
+                    continue
+
+                if label_type == "vibe":
+                    atmosphere = res
+                elif label_type == "npc_respond":
+                    npc_reactions.append({
+                        "npc": label_data,
+                        "reaction": res,
+                        "mode": "respond"
+                    })
+
+        # 处理旁观NPC
+        for char_id, npc in npcs_to_observe:
+            observation = npc.observe_scene(player_input, scene_context)
+            if observation.get("should_interject"):
+                npc_reactions.append({
+                    "npc": npc,
+                    "reaction": observation,
+                    "mode": "observe"
+                })
+
+        # 处理自主行为NPC
+        for char_id, npc in npcs_autonomous:
+            behavior = npc.decide_behavior(
+                is_interaction_target=False,
+                scene_context=scene_context,
+                other_npcs=[c for c in self.os.world_context.present_characters if c != char_id and c != "user"]
+            )
+            if behavior.get("mode") == "initiate":
+                initiative = npc.take_initiative(scene_context, player_available=True)
+                if initiative:
+                    npc_reactions.append({
+                        "npc": npc,
+                        "reaction": initiative,
+                        "mode": "initiate"
+                    })
+
+        # 渲染输出
+        logger.info("📍 Step 4: 最终渲染")
+        output_text = self._render_output(atmosphere, npc_reactions, script)
+
+        # 更新场景缓存（供后续DIALOGUE模式使用）
+        self.in_act_accumulator.update_scene_cache(scene_context, scene_summary)
+        self.in_act_accumulator.record_plot_turn(
+            player_input=player_input,
+            npc_reactions=npc_reactions,
+            world_update=world_update,
+            script=script
+        )
+
+        # 更新OS状态
+        self.os.next_turn()
+        self.os.add_to_history({
+            "type": "player_action",
+            "action": player_input,
+            "location": self.player_location
+        })
+
+        # 应用事件效果
+        game_state_for_events = {
+            "player_location": self.player_location,
+            "npc_states": self.npc_manager.get_state_snapshot() if hasattr(self.npc_manager, 'get_state_snapshot') else {},
+            "player_action": player_input
+        }
+        for event in triggered_events:
+            self.conductor.apply_event_effects(event, game_state_for_events)
+
+        elapsed = time.time() - start_time
+        logger.info(f"📖 剧情推进完成，耗时: {elapsed:.2f}秒")
+
+        # 记录对话历史（用于生成行动建议）
+        self._record_dialogue(player_input, npc_reactions)
+
+        return {
+            "success": True,
+            "text": output_text,
+            "mode": "plot_advance",
+            "world_state": world_update,
+            "script": script,
+            "atmosphere": atmosphere,
+            "npc_reactions": npc_reactions,
+            "elapsed_time": elapsed,
+            "player_input": player_input
+        }
+
+    async def _process_act_transition_turn(
+        self,
+        player_input: str,
+        decision: TurnDecision
+    ) -> Dict[str, Any]:
+        """
+        幕转换模式 - 完整同步 + 切换幕
+
+        预期延迟: ~5-8秒（包含状态同步）
+        """
+        triggered_events = decision.triggered_events
+        import time
+        start_time = time.time()
+
+        logger.info("🎬 幕转换模式启动")
+
+        # 先执行完整的剧情推进流程
+        result = await self._process_plot_advance_turn(player_input, decision)
+
+        if not result.get("success"):
+            return result
+
+        # 同步幕内累积状态到WS
+        logger.info("📤 同步幕内累积状态...")
+        sync_result = self.in_act_accumulator.flush_to_world_state(self.world_state)
+        logger.info(f"   - 时间同步: {sync_result.get('time_synced')}")
+        logger.info(f"   - NPC同步: {sync_result.get('npc_synced')}个")
+
+        # 执行幕转换
+        act_evaluation = self.conductor.evaluate_progress({
+            "player_location": self.player_location,
+            "present_characters": self.os.world_context.present_characters,
+            "npc_interactions": [],
+            "triggered_events": [{"event_id": e.event_id} for e in triggered_events] if triggered_events else [],
+            "player_action": player_input
+        })
+
+        if act_evaluation.get("should_advance"):
+            if act_evaluation.get("progress", 0) >= 1.0:
+                self.conductor.advance_to_next_act("success")
+            elif self.conductor.current_act and \
+                 self.conductor.current_act.turns_in_act >= self.conductor.current_act.objective.max_turns:
+                self.conductor.advance_to_next_act("timeout")
+
+            new_act_name = self.conductor.current_act.act_name if self.conductor.current_act else "未知"
+            logger.info(f"🎬 幕转换完成: 进入 {new_act_name}")
+
+            # 重置累积器
+            self.in_act_accumulator.reset()
+
+            # 添加幕转换提示到输出
+            result["text"] = f"\n{'='*50}\n🎬 {new_act_name}\n{'='*50}\n\n" + result.get("text", "")
+
+        result["mode"] = "act_transition"
+        elapsed = time.time() - start_time
+        result["elapsed_time"] = elapsed
+        logger.info(f"🎬 幕转换完成，耗时: {elapsed:.2f}秒")
+
+        return result
+
+    def _cleanup_pending_tasks(self):
+        """清理已完成的后台IO任务"""
+        self._pending_io_tasks = [
+            t for t in self._pending_io_tasks
+            if not t.done()
+        ]
+
+    async def _async_persist_turn_data(
+        self,
+        result: Dict[str, Any],
+        turn_mode: TurnMode,
+        turn_number: int
+    ):
+        """
+        后台异步持久化回合数据（不阻塞主流程）
+        """
+        try:
+            # 只在非DIALOGUE模式下记录完整数据
+            if turn_mode != TurnMode.DIALOGUE:
+                await asyncio.to_thread(
+                    self._record_turn_summary,
+                    turn_number,
+                    result.get("player_input", ""),
+                    result.get("world_state"),
+                    result.get("script"),
+                    result.get("atmosphere"),
+                    result.get("npc_reactions")
+                )
+
+                # 同步world_state.json
+                await asyncio.to_thread(
+                    self._sync_world_state_file,
+                    turn_number,
+                    result.get("world_state")
+                )
+            else:
+                # DIALOGUE模式：简化记录
+                await asyncio.to_thread(
+                    self._record_turn_summary,
+                    turn_number,
+                    result.get("player_input", ""),
+                    None,  # 无world_update
+                    None,  # 无script
+                    None,  # 无atmosphere
+                    result.get("npc_reactions")
+                )
+
+        except Exception as e:
+            logger.warning(f"后台IO任务失败: {e}")
     
     def _validate_input(self, user_input: str) -> Dict[str, Any]:
         """验证用户输入"""
@@ -567,13 +1127,48 @@ class GameEngine:
             if instruction.get("target") == target or instruction.get("target", "").startswith(target):
                 return instruction
         return None
+
+    def _record_dialogue(self, player_input: str, npc_reactions: List[Dict[str, Any]]):
+        """
+        记录对话历史（用于生成行动建议）
+
+        Args:
+            player_input: 玩家输入
+            npc_reactions: NPC反应列表
+        """
+        # 记录玩家输入
+        self.dialogue_history.append({
+            "speaker": "玩家",
+            "content": player_input
+        })
+
+        # 记录NPC响应
+        for reaction_data in npc_reactions:
+            npc = reaction_data.get("npc")
+            reaction = reaction_data.get("reaction", {})
+
+            if not npc:
+                continue
+
+            npc_name = getattr(npc, 'character_name', '未知NPC')
+            content = reaction.get("content", reaction.get("dialogue", ""))
+
+            if content:
+                self.dialogue_history.append({
+                    "speaker": npc_name,
+                    "content": content[:200]  # 限制长度
+                })
+
+        # 保持对话历史在合理范围（最近10条）
+        if len(self.dialogue_history) > 10:
+            self.dialogue_history = self.dialogue_history[-10:]
     
     def _format_opening(self, atmosphere: Dict[str, Any], script: Dict[str, Any]) -> str:
         """格式化开场文本"""
         lines = []
         
         lines.append("=" * 70)
-        lines.append(f"  🎭 {self.os.genesis_data['world']['title']}")
+        lines.append(f"  🎭 {self.os.genesis_data.get('world', {}).get('title', '未知世界')}")
         lines.append("=" * 70)
         lines.append("")
         
@@ -988,23 +1583,38 @@ class GameEngine:
             ]
             recent_events = self.os.recent_events[-3:] if hasattr(self.os, 'recent_events') else []
 
+            # 获取最近的对话历史（使用 self.dialogue_history）
+            dialogue_text = ""
+            if self.dialogue_history:
+                dialogue_lines = []
+                for entry in self.dialogue_history[-6:]:  # 最近3轮对话
+                    speaker = entry.get('speaker', '???')
+                    content = entry.get('content', '')
+                    dialogue_lines.append(f"{speaker}: {content}")
+                dialogue_text = "\n".join(dialogue_lines)
+
             prompt = ChatPromptTemplate.from_messages([
                 ("system", """你是一个互动叙事游戏的行动建议器。
-根据当前场景，为玩家生成2个有趣且合理的行动选项。
+根据当前场景和对话进展，为玩家生成2个有趣且合理的行动选项。
 
 要求：
 1. 每个选项应该是具体的行动描述，10-30字
-2. 两个选项应该代表不同的方向（如：探索vs对话，主动vs被动）
-3. 行动应符合当前场景和世界观
-4. 不要使用编号，直接输出两个选项，用换行分隔"""),
+2. 两个选项应该代表不同的方向（如：深入追问vs转换话题，直接行动vs继续观察）
+3. 建议必须基于当前对话进展，推动剧情向前发展
+4. 不要重复之前已经做过的行动
+5. 不要使用编号，直接输出两个选项，用换行分隔"""),
                 ("human", """当前场景信息：
 - 玩家: {player_name}
 - 位置: {location}
 - 在场角色: {present_characters}
-- 最近事件: {recent_events}
 - 当前时间: {current_time}
 
-请生成2个行动建议：""")
+最近对话记录：
+{dialogue_history}
+
+最近事件：{recent_events}
+
+请根据对话进展生成2个行动建议（不要重复之前的行动）：""")
             ])
 
             chain = prompt | llm | StrOutputParser()
@@ -1013,6 +1623,7 @@ class GameEngine:
                 "player_name": player_name,
                 "location": location_name,
                 "present_characters": "、".join(present_chars) if present_chars else "无其他角色",
+                "dialogue_history": dialogue_text if dialogue_text else "（尚无对话）",
                 "recent_events": " | ".join(recent_events) if recent_events else "游戏刚开始",
                 "current_time": self.world_state.current_time if self.world_state else "未知"
             })

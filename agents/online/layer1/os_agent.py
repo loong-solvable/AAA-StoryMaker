@@ -385,16 +385,29 @@ class OperatingSystem:
         Returns:
             Agent的响应消息（如果有）
         """
-        logger.info(f"📨 路由消息: {message.from_agent.value} → {message.to_agent.value} ({message.message_type.value})")
+        from_role = message.from_agent
+        to_role = message.to_agent
+        msg_type = message.message_type
+
+        from_name = getattr(from_role, "value", str(from_role))
+        to_name = getattr(to_role, "value", str(to_role))
+        type_name = getattr(msg_type, "value", str(msg_type))
+
+        logger.info(f"📨 路由消息: {from_name} → {to_name} ({type_name})")
         
         # 记录消息
         self.message_queue.append(message)
         
         # 查找目标Agent的处理器
-        target_role = message.to_agent
+        target_role = to_role
+        if not isinstance(target_role, AgentRole):
+            try:
+                target_role = AgentRole(str(target_role))
+            except ValueError:
+                target_role = None
         
-        if target_role not in self.message_handlers:
-            logger.warning(f"⚠️  未找到Agent处理器: {target_role.value}")
+        if target_role is None or target_role not in self.message_handlers:
+            logger.warning(f"⚠️  未找到Agent处理器: {to_name}")
             return None
         
         # 调用处理器
@@ -403,7 +416,11 @@ class OperatingSystem:
             response = handler(message)
             
             if response:
-                logger.info(f"✅ 收到响应: {response.from_agent.value} → {response.to_agent.value}")
+                resp_from = response.from_agent
+                resp_to = response.to_agent
+                resp_from_name = getattr(resp_from, "value", str(resp_from))
+                resp_to_name = getattr(resp_to, "value", str(resp_to))
+                logger.info(f"✅ 收到响应: {resp_from_name} → {resp_to_name}")
             
             return response
         except Exception as e:

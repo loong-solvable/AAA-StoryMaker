@@ -1,0 +1,53 @@
+分析当前对话状态，预测下一回合应该如何处理。
+
+## 当前幕信息
+- 幕名称: {act_name}
+- 幕目标: {act_objective}
+- 当前进度: {progress}
+- 已进行回合: {turns_in_act}/{max_turns}
+- 紧迫度: {urgency}
+
+## 玩家最后行动
+{player_input}
+
+## NPC反应摘要
+{npc_summary}
+
+## 连续对话轮数
+{dialogue_turns}
+
+## 在场角色
+{present_npcs}
+
+请判断下一回合的处理模式，输出JSON格式：
+```json
+{
+  "predicted_mode": "DIALOGUE" 或 "PLOT_ADVANCE" 或 "ACT_TRANSITION",
+  "confidence": 0.0-1.0,
+  "scene_mood": "平静/紧张/温馨/悬疑/激烈",
+  "tension_level": 0.0-1.0,
+  "dialogue_phase": "OPENING/RISING/CLIMAX/FALLING",
+  "phase_guidance": "给NPC的简短提示，如'保持神秘感'或'可以展现更多情感'",
+  "focal_npcs": ["应该重点响应的NPC名称"]
+}
+```
+
+## 判断依据
+
+### DIALOGUE（普通对话）
+- 玩家在进行日常闲聊、询问信息
+- 没有明显的剧情推进意图
+- 对话自然流畅，无需剧情干预
+
+### PLOT_ADVANCE（剧情推进）
+- 累积了较多轮对话，需要刷新剧情
+- 玩家做出了重要选择或发现
+- 需要推动剧情发展
+- 有事件需要触发
+
+### ACT_TRANSITION（幕转换）
+- 玩家表达了离开或结束的意向
+- 当前幕目标已基本完成
+- 剧情到了自然的转折点
+
+请根据以上信息做出判断：
