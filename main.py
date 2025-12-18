@@ -3,9 +3,11 @@
 游戏主入口 - 运行此文件即可开始游戏
 
 流程:
-1. 检测世界数据 (data/worlds/) → 无则引导创建
-2. 检测运行时数据 (data/runtime/) → 无则自动初始化
-3. 启动游戏引擎进入交互循环
+1. 显示主菜单，让用户选择:
+   - 📖 从小说创建新世界（运行创世组）
+   - 🎮 选择已有世界游玩
+2. 创建新世界: 选择小说 → 创世组三阶段处理 → 生成世界数据
+3. 游玩世界: 选择世界 → 初始化/继续游戏 → 进入交互循环
 
 使用方法:
     python main.py
@@ -400,26 +402,43 @@ def print_game_status_from_runtime(runtime_dir: Path):
     print("=" * 70 + "\n")
 
 
-def run_genesis_if_needed() -> bool:
-    """如果没有世界数据，引导用户运行创世组"""
-    from agents.offline.genesis_group import create_world
-    
-    print("📌 检测到没有可用的世界数据")
-    print()
-    print("需要先运行创世组（Genesis Group）从小说中提取世界数据。")
-    print()
-    
-    # 检查是否有小说文件
+def get_available_novels() -> List[Path]:
+    """获取所有可用的小说文件"""
     novels_dir = settings.DATA_DIR / "novels"
     if not novels_dir.exists():
         novels_dir.mkdir(parents=True, exist_ok=True)
+        return []
     
-    novels = list(novels_dir.glob("*.txt"))
+    return sorted(list(novels_dir.glob("*.txt")))
+
+
+def run_genesis_create_world() -> Optional[str]:
+    """
+    运行创世组从小说创建新世界
+    
+    Returns:
+        成功返回世界名称，失败返回 None
+    """
+    from agents.offline.genesis_group import create_world
+    
+    print()
+    print("=" * 70)
+    print("  📖 创世组 - 从小说创建新世界")
+    print("=" * 70)
+    print()
+    print("📌 CreatorGod 创世组三阶段构建流程:")
+    print("   1️⃣ 大中正 - 角色普查，识别所有角色并评估重要性")
+    print("   2️⃣ Demiurge - 提取世界观设定（物理法则、社会规则、地点）")
+    print("   3️⃣ 许劭 - 为每个角色创建详细档案（角色卡）")
+    print()
+    
+    # 检查是否有小说文件
+    novels = get_available_novels()
     
     if not novels:
         print("❌ 未找到小说文件")
-        print(f"\n请将小说文件(.txt)放入: {novels_dir}")
-        return False
+        print(f"\n请将小说文件(.txt)放入: {settings.DATA_DIR / 'novels'}")
+        return None
     
     print("📚 可用的小说文件:")
     for i, novel in enumerate(novels, 1):
@@ -427,15 +446,19 @@ def run_genesis_if_needed() -> bool:
     print()
     
     try:
-        choice = input("选择小说文件 (输入数字) > ").strip()
+        choice = input("选择小说文件 (输入数字，输入0返回) > ").strip()
         if not choice.isdigit():
             print("❌ 无效的选择")
-            return False
+            return None
         
-        idx = int(choice) - 1
+        idx = int(choice)
+        if idx == 0:
+            return None
+        
+        idx -= 1
         if not (0 <= idx < len(novels)):
             print("❌ 无效的选择")
-            return False
+            return None
         
         novel_file = novels[idx]
         
@@ -446,10 +469,6 @@ def run_genesis_if_needed() -> bool:
         print("   📍 阶段3: 许劭 - 角色档案制作")
         print()
         
-        # 验证配置
-        settings.validate()
-        settings.ensure_directories()
-        
         # 运行创世组
         world_dir = create_world(novel_file.name)
         
@@ -458,16 +477,68 @@ def run_genesis_if_needed() -> bool:
         print(f"   📁 世界数据: {world_dir}")
         print()
         
-        return True
+        # 返回世界名称
+        return world_dir.name
         
     except KeyboardInterrupt:
         print("\n取消操作")
-        return False
+        return None
     except Exception as e:
         logger.error(f"❌ 创世组运行失败: {e}", exc_info=True)
         print(f"\n❌ 创世组运行失败: {e}")
         print(f"\n请查看日志: {settings.LOGS_DIR}/genesis_group.log")
-        return False
+        return None
+
+
+def show_main_menu() -> Optional[str]:
+    """
+    显示主菜单，让用户选择操作
+    
+    Returns:
+        - "create": 用户选择创建新世界
+        - "play": 用户选择游玩已有世界
+        - None: 用户取消
+    """
+    available_worlds = get_available_worlds()
+    available_novels = get_available_novels()
+    
+    print("🎯 请选择操作:")
+    print()
+    print("   1. 📖 从小说创建新世界（运行创世组）")
+    if available_worlds:
+        print(f"   2. 🎮 选择已有世界游玩（共 {len(available_worlds)} 个世界）")
+    else:
+        print("   2. 🎮 选择已有世界游玩（暂无世界存档）")
+    print()
+    print("   0. 退出")
+    print()
+    
+    # 显示可用资源摘要
+    if available_novels:
+        print(f"   📚 可用小说: {len(available_novels)} 个")
+    if available_worlds:
+        print(f"   🌍 已有世界: {', '.join(available_worlds[:3])}{'...' if len(available_worlds) > 3 else ''}")
+    print()
+    
+    while True:
+        try:
+            choice = input("请选择 (输入数字) > ").strip()
+            
+            if choice == "0":
+                return None
+            elif choice == "1":
+                return "create"
+            elif choice == "2":
+                if not available_worlds:
+                    print("❌ 暂无世界存档，请先创建新世界")
+                    continue
+                return "play"
+            else:
+                print("❌ 无效的选择，请输入 0、1 或 2")
+                
+        except (KeyboardInterrupt, EOFError):
+            print("\n取消选择")
+            return None
 
 
 def main():
@@ -481,7 +552,7 @@ def main():
         print(f"❌ 配置验证失败: {e}")
         print()
         print("请按以下步骤配置：")
-        print("1. 复制 .env.example 为 .env")
+        print("1. 复制 template.env 为 .env")
         print("2. 编辑 .env 文件，填入你的API密钥")
         print("3. 保存后重新运行本脚本")
         return
@@ -489,22 +560,36 @@ def main():
     # 确保目录存在
     settings.ensure_directories()
     
-    # 检测可用的世界
-    available_worlds = get_available_worlds()
+    # 显示主菜单
+    menu_choice = show_main_menu()
     
-    if not available_worlds:
-        # 没有世界数据，引导创建
-        if not run_genesis_if_needed():
-            return
+    if menu_choice is None:
+        print("\n👋 再见!")
+        return
+    
+    world_name = None
+    
+    if menu_choice == "create":
+        # 用户选择创建新世界
+        world_name = run_genesis_create_world()
+        if not world_name:
+            print("\n❌ 未能创建世界，返回主菜单...")
+            return main()  # 递归回到主菜单
         
-        # 重新检测
-        available_worlds = get_available_worlds()
-        if not available_worlds:
-            print("❌ 创世组运行后仍未检测到世界数据")
+        # 询问是否立即游玩
+        print()
+        play_now = input("是否立即进入该世界游玩? (y/n，默认y) > ").strip().lower()
+        if play_now == 'n':
+            print("\n✅ 世界已创建，下次运行时可选择游玩")
             return
     
-    # 选择世界
-    world_name = select_world(available_worlds)
+    elif menu_choice == "play":
+        # 用户选择游玩已有世界
+        available_worlds = get_available_worlds()
+        world_name = select_world(available_worlds)
+        if not world_name:
+            return
+    
     if not world_name:
         return
     
@@ -518,7 +603,7 @@ def main():
     # 获取世界目录
     world_dir = settings.DATA_DIR / "worlds" / world_name
     
-    # 使用 OS Agent 流程运行游戏（照搬 test_three_scenes_flow.py）
+    # 使用 OS Agent 流程运行游戏
     run_game_with_os_agent(runtime_dir, world_dir)
 
 
