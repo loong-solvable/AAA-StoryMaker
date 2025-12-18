@@ -32,10 +32,10 @@ pip install -r requirements.txt
 1. 复制配置模板：
 ```bash
 # Windows
-copy .env.example .env
+copy template.env .env
 
 # Linux/Mac
-cp .env.example .env
+cp template.env .env
 ```
 
 2. 编辑 `.env` 文件，填入你的API密钥：
@@ -44,6 +44,11 @@ cp .env.example .env
 ZHIPU_API_KEY=your_zhipu_api_key_here
 LLM_PROVIDER=zhipu
 MODEL_NAME=glm-4
+
+# 或使用OpenRouter (Google Gemini等)
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+LLM_PROVIDER=openrouter
+OPENROUTER_MODEL=google/gemini-3-flash-preview
 
 # 或使用OpenAI
 # OPENAI_API_KEY=your_openai_api_key_here
