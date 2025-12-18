@@ -1832,7 +1832,8 @@ def create_agent() -> {class_name}:
         runtime_dir: Path,
         world_dir: Path,
         max_turns: int = 12,
-        user_input_callback = None
+        user_input_callback = None,
+        screen_callback = None
     ) -> Dict[str, Any]:
         """
         运行完整的场景对话循环
@@ -1849,6 +1850,8 @@ def create_agent() -> {class_name}:
             world_dir: 世界数据目录
             max_turns: 最大对话轮数
             user_input_callback: 获取玩家输入的回调函数，签名: (prompt: str) -> str
+            screen_callback: 屏幕渲染回调函数，签名: (event: str, data: dict) -> None
+                            event 可选值: "scene_start", "dialogue", "player_input", "scene_end"
         
         Returns:
             场景执行结果
@@ -1941,6 +1944,15 @@ def create_agent() -> {class_name}:
         
         logger.info(f"🎬 场景开始！第一位发言者: {active_npc_info[current_speaker_id]['name']}")
         
+        # 调用屏幕回调：场景开始
+        if screen_callback:
+            screen_callback("scene_start", {
+                "scene_id": current_scene_id,
+                "location": scene_data.get("location_name", ""),
+                "description": scene_data.get("scene_description", ""),
+                "characters": [active_npc_info[nid]['name'] for nid in active_npcs]
+            })
+        
         while turn_count < max_turns and not scene_finished:
             turn_count += 1
             logger.info(f"\n{'─' * 40}")
@@ -1969,6 +1981,16 @@ def create_agent() -> {class_name}:
                         "content": user_input
                     })
                     logger.info(f"👤 玩家: {user_input}")
+                    
+                    # 调用屏幕回调：玩家输入
+                    if screen_callback:
+                        screen_callback("player_input", {
+                            "speaker": "玩家",
+                            "speaker_id": "user",
+                            "content": user_input,
+                            "action": "",
+                            "emotion": ""
+                        })
                 
                 # 玩家发言后，选择下一个 NPC 发言
                 # 简单策略：选择第一个 NPC
@@ -2018,6 +2040,17 @@ def create_agent() -> {class_name}:
             logger.info(f"   💬 台词: {actor_response.get('content', '')[:60]}...")
             logger.info(f"   🎯 对象: {actor_response.get('addressing_target', 'everyone')}")
             logger.info(f"   🏁 结束: {actor_response.get('is_scene_finished', False)}")
+            
+            # 调用屏幕回调：NPC对话
+            if screen_callback:
+                screen_callback("dialogue", {
+                    "speaker": speaker_name,
+                    "speaker_id": current_speaker_id,
+                    "content": actor_response.get("content", ""),
+                    "action": actor_response.get("action", ""),
+                    "emotion": actor_response.get("emotion", ""),
+                    "target": actor_response.get("addressing_target", "everyone")
+                })
             
             # 检查场景是否结束
             if actor_response.get("is_scene_finished"):
@@ -2073,6 +2106,14 @@ def create_agent() -> {class_name}:
         
         if turn_count >= max_turns:
             logger.info(f"⏰ 达到最大轮数限制 ({max_turns})")
+        
+        # 调用屏幕回调：场景结束
+        if screen_callback:
+            screen_callback("scene_end", {
+                "scene_id": current_scene_id,
+                "total_turns": turn_count,
+                "dialogue_count": scene_memory.get_dialogue_count()
+            })
         
         # 设置场景状态
         scene_memory.set_scene_status("FINISHED")

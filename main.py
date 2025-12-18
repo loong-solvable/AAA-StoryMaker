@@ -208,13 +208,15 @@ def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
     
     流程（照搬 test_three_scenes_flow.py）：
     1. 初始化 OS Agent
-    2. 剧本拆分 (dispatch_script_to_actors)
-    3. 初始化首次出场角色 (initialize_first_appearance_characters)
-    4. 场景演绎循环 (run_scene_loop)
-    5. 幕间处理 (process_scene_transition)
+    2. 初始化 Screen Agent（荧幕层）
+    3. 剧本拆分 (dispatch_script_to_actors)
+    4. 初始化首次出场角色 (initialize_first_appearance_characters)
+    5. 场景演绎循环 (run_scene_loop)
+    6. 幕间处理 (process_scene_transition)
     """
     import importlib.util
     from utils.scene_memory import create_scene_memory
+    from agents.online.layer3.screen_agent import ScreenAgent
     
     PROJECT_ROOT = Path(__file__).parent
     
@@ -235,6 +237,11 @@ def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
         else:
             os_agent = os_module.OperatingSystem()
             print("⚠️ OS Agent 初始化完成（未找到 genesis.json）")
+        
+        # 初始化 Screen Agent（荧幕层）
+        world_name = world_dir.name if world_dir else ""
+        screen_agent = ScreenAgent(runtime_dir=runtime_dir, world_name=world_name)
+        print("✅ Screen Agent 初始化完成（荧幕层渲染器）")
         
         print_help()
         
@@ -278,6 +285,39 @@ def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
             print(f"\n🎬 开始第 {scene_num} 幕演绎...")
             print("-" * 50)
             
+            # 创建屏幕渲染回调函数
+            def screen_callback(event: str, data: dict):
+                """Screen Agent 渲染回调"""
+                if event == "scene_start":
+                    # 渲染场景头
+                    screen_agent.render_scene_header(
+                        scene_id=data.get("scene_id", scene_num),
+                        location_name=data.get("location", ""),
+                        description=data.get("description", "")
+                    )
+                elif event == "dialogue":
+                    # 渲染NPC对话
+                    screen_agent.render_single_dialogue(
+                        speaker=data.get("speaker", ""),
+                        content=data.get("content", ""),
+                        action=data.get("action", ""),
+                        emotion=data.get("emotion", ""),
+                        is_player=False
+                    )
+                elif event == "player_input":
+                    # 渲染玩家输入
+                    screen_agent.render_single_dialogue(
+                        speaker=data.get("speaker", "玩家"),
+                        content=data.get("content", ""),
+                        action=data.get("action", ""),
+                        emotion=data.get("emotion", ""),
+                        is_player=True
+                    )
+                elif event == "scene_end":
+                    # 场景结束
+                    print()
+                    print(f"{screen_agent.COLORS['CYAN']}--- 第 {data.get('scene_id', scene_num)} 幕结束 ---{screen_agent.COLORS['RESET']}")
+            
             # 创建玩家输入回调函数
             def real_user_input(prompt: str) -> str:
                 """真实玩家输入"""
@@ -308,7 +348,8 @@ def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
                     runtime_dir=runtime_dir,
                     world_dir=world_dir,
                     max_turns=15,  # 每幕最多15轮对话
-                    user_input_callback=real_user_input
+                    user_input_callback=real_user_input,
+                    screen_callback=screen_callback
                 )
                 
                 print(f"\n📊 第 {scene_num} 幕演绎结果:")
