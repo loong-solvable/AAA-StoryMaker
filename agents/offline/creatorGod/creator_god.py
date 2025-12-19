@@ -85,13 +85,28 @@ class CreatorGod:
         return get_llm(**kwargs)
 
     def _read_novel(self, novel_path: Path) -> str:
-        """读取小说文本"""
+        """读取小说文本，兼容多种常见中文编码"""
         if not novel_path.exists():
             self.logger.error(f"❌ 小说文件不存在: {novel_path}")
             raise FileNotFoundError(f"小说文件不存在: {novel_path}")
 
-        text = novel_path.read_text(encoding="utf-8")
-        self.logger.info(f"✅ 成功读取小说: {novel_path.name} ({len(text)}字)")
+        tried = []
+        for enc in ["utf-8-sig", "utf-8", "gb18030", "gbk", "big5"]:
+            try:
+                text = novel_path.read_text(encoding=enc)
+                self.logger.info(f"✅ 成功读取小说: {novel_path.name} ({len(text)}字) 使用编码: {enc}")
+                return text
+            except UnicodeDecodeError as e:
+                tried.append(f"{enc}: {e}")
+                continue
+            except Exception as e:
+                tried.append(f"{enc}: {e}")
+                continue
+
+        # 最后兜底：忽略非法字节读取，避免流程中断
+        self.logger.warning(f"⚠️ 所有候选编码解码失败，尝试忽略非法字节读取。尝试记录: {tried}")
+        text = novel_path.read_text(encoding="utf-8", errors="ignore")
+        self.logger.info(f"✅ 成功读取小说（忽略非法字节）: {novel_path.name} ({len(text)}字)")
         return text
 
     def run_pipeline(self, novel_text: str, world_dir: Optional[Path] = None):

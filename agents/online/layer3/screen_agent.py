@@ -284,6 +284,9 @@ class ScreenAgent:
             
             # 解析响应
             visual_data = self._parse_visual_response(response)
+            if not visual_data:
+                logger.warning("⚠️ 视觉解析为空，使用兜底模板")
+                return self._create_fallback_visual_data(input_data)
             
             # 添加元数据
             result = {
@@ -359,6 +362,8 @@ class ScreenAgent:
         ws = input_data.world_state
         location = ws.get("location", {})
         current_action = input_data.current_action or {}
+        dialogue_text = current_action.get("content", "")
+        action_text = current_action.get("action", "")
         
         return {
             "meta": {
@@ -368,18 +373,28 @@ class ScreenAgent:
                 "timestamp": datetime.now().isoformat()
             },
             "visual_render_data": {
-                "summary": f"Scene at {location.get('name', 'unknown location')}",
+                "summary": f"{location.get('name', '未知地点')} 的场景",
                 "environment": {
-                    "location": location.get("name", "Unknown"),
-                    "lighting": "Natural lighting",
-                    "weather": ws.get("weather", "Clear"),
-                    "composition": "Medium shot"
+                    "location": location.get("name", "未知"),
+                    "lighting": "自然光，基础布光",
+                    "weather": ws.get("weather", "晴朗"),
+                    "composition": "中景构图"
                 },
-                "characters_in_shot": [],
+                "characters_in_shot": [
+                    {
+                        "name": current_action.get("speaker", ""),
+                        "visual_tags": "",
+                        "pose": "",
+                        "expression": current_action.get("emotion", ""),
+                        "dialogue": dialogue_text,
+                        "action": action_text,
+                        "screen_position": "center"
+                    }
+                ] if current_action else [],
                 "media_prompts": {
-                    "image_gen_prompt": f"A scene at {location.get('name', 'a location')}, cinematic lighting, 8k, photorealistic",
-                    "video_gen_script": "Camera focuses on the scene.",
-                    "negative_prompt": "low quality, blurry, bad anatomy"
+                    "image_gen_prompt": f"{location.get('name', '一个场景')} 的镜头，电影质感，8k，写实",
+                    "video_gen_script": "镜头对准当前场景，缓慢推进。",
+                    "negative_prompt": "text, watermark, low quality, blurry, bad anatomy"
                 }
             }
         }
@@ -522,4 +537,3 @@ def create_screen_agent(runtime_dir: Path, world_name: str = "") -> ScreenAgent:
         ScreenAgent 实例
     """
     return ScreenAgent(runtime_dir=runtime_dir, world_name=world_name)
-

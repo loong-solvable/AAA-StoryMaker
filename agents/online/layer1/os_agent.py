@@ -20,6 +20,7 @@
         └─→ NPC-C 的小剧本 → NPC-C Agent
 """
 import json
+import os
 import re
 import importlib.util
 import shutil
@@ -86,6 +87,9 @@ class OperatingSystem:
     2. 消息分发：将小剧本分发给对应的 NPC Agent
     3. 状态管理：维护游戏全局状态
     """
+
+    SAVE_SCHEMA_VERSION = 1
+
     
     def __init__(self, genesis_path: Optional[Path] = None):
         """
@@ -97,6 +101,7 @@ class OperatingSystem:
         logger.info("🖥️  初始化信息中枢OS...")
         
         # 全局状态
+        self.genesis_path: Optional[Path] = Path(genesis_path) if genesis_path else None
         self.genesis_data: Optional[Dict[str, Any]] = None
         self.world_context: Optional[WorldContext] = None
         self.game_history: List[Dict[str, Any]] = []
@@ -517,32 +522,107 @@ class OperatingSystem:
             "history_count": len(self.game_history),
             "registered_agents": [role.value for role in self.registered_agents.keys()],
             "registered_npcs": list(self.npc_agents.keys()),
-            "message_count": len(self.message_queue)
+            "message_count": len(self.message_queue),
+            "genesis_path": str(self.genesis_path) if self.genesis_path else None
         }
-    
-    def save_game_state(self, save_path: Optional[Path] = None):
-        """
-        保存游戏状态
-        
-        Args:
-            save_path: 保存路径（可选）
-        """
+
+    def _atomic_write_json(self, target: Path, payload: Dict[str, Any]):
+        """Atomic JSON write to avoid partial files on interruption."""
+        tmp_path = target.with_suffix(target.suffix + ".tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        tmp_path.replace(target)
+
+    def _snapshot_runtime(self, runtime_dir: Optional[Path]) -> Optional[Dict[str, Any]]:
+        """Capture runtime world_state.json if available."""
+        if not runtime_dir:
+            return None
+        runtime_dir = Path(runtime_dir)
+        ws_file = runtime_dir / "ws" / "world_state.json"
+        if not ws_file.exists():
+            return {"runtime_dir": str(runtime_dir)}
+        try:
+            with open(ws_file, "r", encoding="utf-8") as f:
+                world_state = json.load(f)
+        except Exception as exc:
+            logger.warning(f"⚠️ 截回 world_state.json 失败: {exc}")
+            return {"runtime_dir": str(runtime_dir)}
+        return {
+            "runtime_dir": str(runtime_dir),
+            "world_state": world_state
+        }
+
+    def save_game_state(
+        self,
+        save_path: Optional[Path] = None,
+        runtime_dir: Optional[Path] = None,
+        extra_state: Optional[Dict[str, Any]] = None
+    ):
+        """保存游戏状态到磁盘。"""
         if not save_path:
             save_path = settings.DATA_DIR / "saves" / f"save_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        
+
+        save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         state = {
             "genesis_data": self.genesis_data,
             "world_context": self.world_context.dict() if self.world_context else None,
             "game_history": self.game_history,
             "turn_count": self.turn_count
         }
-        
-        with open(save_path, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False, indent=2)
-        
+
+        payload = {
+            "metadata": {
+                "schema_version": self.SAVE_SCHEMA_VERSION,
+                "saved_at": datetime.now().isoformat(),
+                "genesis_path": str(self.genesis_path) if self.genesis_path else None
+            },
+            "os_state": state,
+            "extra_state": extra_state or {}
+        }
+
+        runtime_snapshot = self._snapshot_runtime(runtime_dir)
+        if runtime_snapshot:
+            payload["runtime_snapshot"] = runtime_snapshot
+
+        self._atomic_write_json(save_path, payload)
         logger.info(f"💾 游戏状态已保存: {save_path}")
+
+    def load_game_state(
+        self,
+        save_path: Path,
+        runtime_dir: Optional[Path] = None,
+        restore_runtime_files: bool = True
+    ) -> Dict[str, Any]:
+        """加载游戏状态文件并注入 OS 内存。"""
+        save_path = Path(save_path)
+        if not save_path.exists():
+            raise FileNotFoundError(f"游戏档不存在: {save_path}")
+
+        with open(save_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        os_state = payload.get("os_state", {})
+        self.genesis_data = os_state.get("genesis_data")
+        self.world_context = WorldContext.parse_obj(os_state["world_context"]) if os_state.get("world_context") else None
+        self.game_history = os_state.get("game_history", [])
+        self.turn_count = os_state.get("turn_count", 0)
+
+        metadata = payload.get("metadata", {})
+        if not self.genesis_path and metadata.get("genesis_path"):
+            self.genesis_path = Path(metadata["genesis_path"])
+
+        runtime_snapshot = payload.get("runtime_snapshot", {})
+        if restore_runtime_files and runtime_dir and runtime_snapshot.get("world_state"):
+            ws_file = Path(runtime_dir) / "ws" / "world_state.json"
+            ws_file.parent.mkdir(parents=True, exist_ok=True)
+            self._atomic_write_json(ws_file, runtime_snapshot["world_state"])
+
+        return payload
+    
     
     def shutdown(self):
         """关闭系统"""
@@ -613,6 +693,16 @@ class OperatingSystem:
         for char_info in first_appearance_chars:
             char_id = char_info.get("id")
             char_name = char_info.get("name", char_id)
+            
+            # 跳过玩家（user），玩家不生成 NPC Agent
+            if char_id == "user":
+                logger.info("ℹ️ 跳过玩家角色（user），无需生成NPC Agent")
+                results["skipped"].append({
+                    "id": char_id,
+                    "name": char_name,
+                    "reason": "player_character"
+                })
+                continue
             
             logger.info(f"   🎭 初始化角色: {char_name} ({char_id})")
             
@@ -1891,6 +1981,8 @@ def create_agent() -> {class_name}:
                     char.get("id") if isinstance(char, dict) else char 
                     for char in present_chars
                 }
+                # 玩家永远视为在场，但不需要 NPC Agent
+                should_present_ids.add("user")
                 
                 # 清理不在场的NPC Agent
                 if should_present_ids:
@@ -1922,6 +2014,9 @@ def create_agent() -> {class_name}:
         
         # 为所有 NPC 绑定场景记忆板和加载小剧本
         for npc_id, agent in self.npc_agents.items():
+            # 跳过玩家
+            if npc_id == "user":
+                continue
             agent.bind_scene_memory(scene_memory)
             # 使用目录结构：npc/{npc_id}_{name}/script.json
             char_name = agent.CHARACTER_NAME

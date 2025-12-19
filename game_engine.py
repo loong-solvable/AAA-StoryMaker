@@ -2,6 +2,7 @@
 游戏引擎 - 完整的游戏回合逻辑
 整合所有Agent，实现完整的游戏循环
 """
+import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from uuid import uuid4
@@ -82,6 +83,9 @@ class GameEngine:
                 logger.info("✅ 世界状态同步器已初始化")
             except Exception as e:
                 logger.warning(f"⚠️ 世界状态同步器初始化失败: {e}")
+
+        # 将默认主角称谓替换为玩家自定义姓名（仅作用于当前 runtime）
+        self._normalize_player_aliases()
         
         self._bootstrap_character_cards()
         self._record_agent_snapshots(turn_number=0)
@@ -356,10 +360,83 @@ class GameEngine:
     
     def save_game(self, save_name: str = "quicksave"):
         """保存游戏"""
+        save_path = settings.DATA_DIR / "saves" / f"{save_name}.json"
+        extra_state = self._build_save_payload()
         self.os.save_game_state(
-            settings.DATA_DIR / "saves" / f"{save_name}.json"
+            save_path,
+            runtime_dir=self.runtime_dir,
+            extra_state=extra_state
         )
         logger.info(f"💾 游戏已保存: {save_name}")
+
+    @classmethod
+    def load_game(cls, save_path: Path) -> "GameEngine":
+        """从存档恢复游戏引擎"""
+        save_path = Path(save_path)
+        if not save_path.exists():
+            raise FileNotFoundError(f"存档不存在: {save_path}")
+
+        with open(save_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        metadata = payload.get("metadata", {})
+        genesis_path = metadata.get("genesis_path") or payload.get("os_state", {}).get("genesis_path")
+        if not genesis_path:
+            raise ValueError("存档缺少 genesis_path，无法恢复游戏")
+
+        engine = cls(Path(genesis_path))
+        loaded_payload = engine.os.load_game_state(save_path, runtime_dir=engine.runtime_dir)
+
+        extra_state = loaded_payload.get("extra_state", payload.get("extra_state", {}))
+        engine._restore_agent_state(extra_state.get("agents", {}))
+        engine._restore_player_state(extra_state.get("player_state", {}))
+        return engine
+
+    def _build_save_payload(self) -> Dict[str, Any]:
+        """整理需要额外持久化的引擎状态"""
+        return {
+            "game_id": self.game_id,
+            "player_state": {
+                "player_location": self.player_location,
+                "player_name": self.player_name
+            },
+            "agents": {
+                "world_state": self.world_state.get_state_snapshot(),
+                "plot": self.plot.get_state_snapshot(),
+                "vibe": self.vibe.get_state_snapshot(),
+                "npc": self.npc_manager.get_state_snapshot(),
+            },
+            "runtime": {"runtime_dir": str(self.runtime_dir) if self.runtime_dir else None},
+        }
+
+    def _restore_player_state(self, player_state: Dict[str, Any]) -> None:
+        """从存档恢复玩家相关状态"""
+        if not player_state:
+            return
+        location = player_state.get("player_location")
+        if location:
+            self.player_location = location
+            if self.os.world_context:
+                self.os.world_context.current_location = location
+        if player_state.get("player_name"):
+            self.player_name = player_state["player_name"]
+
+    def _restore_agent_state(self, agent_state: Dict[str, Any]) -> None:
+        """从存档恢复各 Agent 的快照"""
+        if not agent_state:
+            return
+        ws_snapshot = agent_state.get("world_state")
+        if ws_snapshot:
+            self.world_state.load_state_snapshot(ws_snapshot)
+        plot_snapshot = agent_state.get("plot")
+        if plot_snapshot:
+            self.plot.load_state_snapshot(plot_snapshot)
+        vibe_snapshot = agent_state.get("vibe")
+        if vibe_snapshot:
+            self.vibe.load_state_snapshot(vibe_snapshot)
+        npc_snapshot = agent_state.get("npc")
+        if npc_snapshot:
+            self.npc_manager.load_state_snapshot(npc_snapshot)
 
     def _bootstrap_character_cards(self):
         """将Genesis中的角色卡导入数据库系统"""
@@ -481,6 +558,42 @@ class GameEngine:
                 return char.get("name", "玩家")
         return "玩家"
     
+    def _normalize_player_aliases(self) -> None:
+        """
+        将默认主角称谓（如汪淼/小汪等）替换为玩家自定义姓名，避免 NPC 误称。
+        仅在当前 runtime 目录内就地替换 JSON/TXT 文本，不修改世界模板。
+        """
+        if not self.runtime_dir:
+            return
+        target_name = self.player_name
+        if not target_name:
+            return
+        
+        alias_list = [
+            "汪淼", "小汪", "汪教授", "汪老师", "汪院士", "汪先生", "汪博士", "老汪"
+        ]
+        
+        for path in self.runtime_dir.rglob("*"):
+            if not path.is_file():
+                continue
+            if path.suffix.lower() not in {".json", ".txt"}:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            
+            new_text = text
+            for alias in alias_list:
+                new_text = new_text.replace(alias, target_name)
+            
+            if new_text != text:
+                try:
+                    path.write_text(new_text, encoding="utf-8")
+                    logger.info(f"🔄 已替换玩家称谓为自定义姓名: {path}")
+                except Exception as e:
+                    logger.warning(f"⚠️ 替换玩家称谓失败 {path}: {e}")
+    
     def _get_character_mood(self, char_id: str) -> str:
         """获取角色心情"""
         npc = self.npc_manager.get_npc(char_id)
@@ -536,4 +649,3 @@ class GameEngine:
             )
         except Exception as exc:
             logger.warning(f"⚠️ 记录Agent状态失败: {exc}")
-

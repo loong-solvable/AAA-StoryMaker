@@ -62,36 +62,44 @@
 ---
 
 # Output Schema (输出格式)
-请输出严格的 JSON 格式：
+请输出严格的 **中文** JSON 对象，遵守以下硬性规则：
+- 只能输出 JSON 对象，禁止任何 Markdown、代码块标记、解释性文本或前后缀。
+- 所有字段必须存在；未知值用空字符串或空数组替代，绝不输出“未知”“N/A”字样。
+- 只使用双引号包裹键和值，确保是合法 JSON。
+- 角色需要包含动作与台词（中文），以便下游生图使用。
+- 如需保留英文版本，仅可作为可选的 `visual_render_data_en`（与中文同结构）；默认主输出为中文 `visual_render_data`。
 
 ```json
 {
   "visual_render_data": {
-    "summary": "一段用于生成封面的简短描述（英文）",
+    "summary": "一段用于生成封面的简短描述（中文）",
     
     "environment": {
-      "location": "具体的地点描述（英文）",
-      "lighting": "光影和色调描述（英文）",
-      "weather": "天气描述（英文）",
-      "composition": "镜头构图描述（英文）"
+      "location": "具体的地点描述（中文）",
+      "lighting": "光影和色调描述（中文）",
+      "weather": "天气描述（中文）",
+      "composition": "镜头构图描述（中文）"
     },
     
     "characters_in_shot": [
       {
         "name": "当前镜头焦点的角色名",
-        "visual_tags": "外貌特征Tag（英文）",
-        "pose": "具体姿势和动作（英文）",
-        "expression": "具体的面部表情（英文）",
-        "screen_position": "屏幕位置 (e.g., center, rule of thirds)"
+        "visual_tags": "外貌特征Tag（中文）",
+        "pose": "具体姿势和动作（中文）",
+        "expression": "具体的面部表情（中文）",
+        "dialogue": "该角色的台词（中文，结合 current_action 或导演意图）",
+        "action": "该角色正在做的动作（中文）",
+        "screen_position": "屏幕位置 (例如 center, rule_of_thirds)"
       }
     ],
     
     "media_prompts": {
-      "image_gen_prompt": "完整的生图Prompt，包含主体+环境+光影+风格+画质词（英文）",
-      "video_gen_script": "简短的分镜脚本，描述镜头运动和主体动作（英文）",
+      "image_gen_prompt": "完整的生图Prompt，包含主体/环境+光影+风格+画质词（中文，便于国内模型理解）",
+      "video_gen_script": "简短的分镜脚本，描述镜头运动和主体动作（中文）",
       "negative_prompt": "text, watermark, low quality, blurry, bad anatomy, deformed hands, extra limbs"
     }
-  }
+  },
+  "visual_render_data_en": {}
 }
 ```
 
@@ -140,4 +148,3 @@
   }
 }
 ```
-

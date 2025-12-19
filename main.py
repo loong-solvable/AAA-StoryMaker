@@ -13,6 +13,8 @@
     python main.py
 """
 import sys
+import json
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 
@@ -167,6 +169,71 @@ def prompt_player_profile() -> dict:
     return profile
 
 
+def _safe_scene_id(value, default: int = 1) -> int:
+    """将值转换为正整数场次 ID，失败则返回默认值"""
+    try:
+        scene_id = int(value)
+        return scene_id if scene_id > 0 else default
+    except Exception:
+        return default
+
+
+def load_resume_scene_id(runtime_dir: Path) -> int:
+    """
+    从进度/当前剧本/全剧记事板中推断下一幕的场次 ID，避免重置到第一幕
+    优先级：progress.json > current_script.json > all_scene_memory.json(meta.current_scene_id+1)
+    """
+    candidates = []
+    progress_file = runtime_dir / "plot" / "progress.json"
+    if progress_file.exists():
+        try:
+            with open(progress_file, "r", encoding="utf-8") as f:
+                progress = json.load(f)
+                candidates.append(progress.get("next_scene_id"))
+        except Exception as e:
+            logger.warning(f"⚠️ 读取 progress.json 失败: {e}")
+
+    script_file = runtime_dir / "plot" / "current_script.json"
+    if script_file.exists():
+        try:
+            with open(script_file, "r", encoding="utf-8") as f:
+                script_data = json.load(f)
+                candidates.append(script_data.get("scene_id"))
+        except Exception as e:
+            logger.warning(f"⚠️ 读取 current_script.json 失败: {e}")
+
+    all_memory_file = runtime_dir / "all_scene_memory.json"
+    if all_memory_file.exists():
+        try:
+            with open(all_memory_file, "r", encoding="utf-8") as f:
+                all_memory = json.load(f)
+                meta_id = all_memory.get("meta", {}).get("current_scene_id", 0)
+                candidates.append(meta_id + 1)
+        except Exception as e:
+            logger.warning(f"⚠️ 读取 all_scene_memory.json 失败: {e}")
+
+    valid = [_safe_scene_id(c) for c in candidates if c is not None]
+    return max(valid) if valid else 1
+
+
+def save_progress(runtime_dir: Path, current_scene_id: int, next_scene_id: int):
+    """记录当前/下一幕的指针，供下次启动时恢复"""
+    progress = {
+        "current_scene_id": _safe_scene_id(current_scene_id),
+        "next_scene_id": _safe_scene_id(next_scene_id),
+        "updated_at": datetime.now().isoformat(),
+        "current_script": str((runtime_dir / "plot" / "current_script.json").resolve()),
+        "current_scene": str((runtime_dir / "plot" / "current_scene.json").resolve()),
+    }
+    progress_file = runtime_dir / "plot" / "progress.json"
+    try:
+        progress_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(progress_file, "w", encoding="utf-8") as f:
+            json.dump(progress, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"⚠️ 保存 progress.json 失败: {e}")
+
+
 def initialize_new_game(world_name: str) -> Optional[Path]:
     """创建新的运行时（调用 IlluminatiInitializer）"""
     from initial_Illuminati import IlluminatiInitializer
@@ -244,15 +311,29 @@ def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
         print("✅ Screen Agent 初始化完成（荧幕层渲染器）")
         
         print_help()
-        
-        scene_num = 1
-        max_scenes = 10  # 最多运行10幕
-        
+
+        current_scene_id = load_resume_scene_id(runtime_dir)
+        if current_scene_id > 1:
+            print(f"➡️  检测到已有进度，将从第 {current_scene_id} 幕继续")
+
+        max_loops = 10  # 本次运行最多演绎多少幕
+        loop_count = 0
+
         # 游戏主循环（按幕进行）
-        while scene_num <= max_scenes:
+        while loop_count < max_loops:
+            # 与当前剧本文件同步场次，避免使用过期的 scene_id
+            script_data = {}
+            script_path = runtime_dir / "plot" / "current_script.json"
+            try:
+                if script_path.exists():
+                    with open(script_path, "r", encoding="utf-8") as f:
+                        script_data = json.load(f)
+                        current_scene_id = script_data.get("scene_id", current_scene_id)
+            except Exception as e:
+                logger.warning(f"⚠️ 读取 current_script.json 失败: {e}")
             print()
             print("=" * 70)
-            print(f"  🎬 第 {scene_num} 幕")
+            print(f"  🎬 第 {current_scene_id} 幕")
             print("=" * 70)
             
             # === 1. 剧本拆分 ===
@@ -282,42 +363,115 @@ def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
                 print(f"   ℹ️ 无新角色需要初始化")
             
             # === 3. 场景演绎（使用真实玩家输入） ===
-            print(f"\n🎬 开始第 {scene_num} 幕演绎...")
+            print(f"\n🎬 开始第 {current_scene_id} 幕演绎...")
             print("-" * 50)
             
-            # 创建屏幕渲染回调函数
+            # 创建屏幕渲染回调函数（强制生成并落盘 JSON）
             def screen_callback(event: str, data: dict):
-                """Screen Agent 渲染回调"""
+                """Screen Agent 渲染回调：终端渲染 + 必写 screen JSON"""
+                from agents.online.layer3.screen_agent import ScreenInput
+                import json
+
+                scene_id = data.get("scene_id", current_scene_id)
+                turn_id = data.get("turn_id", 0)
+
+                # 读取当前 world_state 与 current_script，确保荧幕层上下文与剧本对齐
+                ws_data = {}
+                script_data = {}
+                ws_path = runtime_dir / "ws" / "world_state.json"
+                script_path = runtime_dir / "plot" / "current_script.json"
+                scene_path = runtime_dir / "plot" / "current_scene.json"
+                try:
+                    if ws_path.exists():
+                        ws_data = json.load(open(ws_path, "r", encoding="utf-8"))
+                except Exception as e:
+                    logger.warning(f"⚠️ 读取 world_state.json 失败: {e}")
+                try:
+                    if script_path.exists():
+                        script_data = json.load(open(script_path, "r", encoding="utf-8"))
+                except Exception as e:
+                    logger.warning(f"⚠️ 读取 current_script.json 失败: {e}")
+
+                # 组装当前动作
+                current_action = None
+                if event in {"dialogue", "player_input"}:
+                    current_action = {
+                        "speaker": data.get("speaker", data.get("character_name", "")),
+                        "speaker_id": data.get("speaker_id", data.get("character_id", "")),
+                        "content": data.get("content", data.get("dialogue", "")),
+                        "action": data.get("action", ""),
+                        "emotion": data.get("emotion", ""),
+                    }
+
+                # 规范化在场角色为字典（含玩家）
+                raw_characters = script_data.get("characters", []) or data.get("characters", [])
+                characters_in_scene = []
+                for item in raw_characters:
+                    if isinstance(item, dict):
+                        characters_in_scene.append(item)
+                    else:
+                        characters_in_scene.append({"id": str(item), "name": str(item)})
+                if not any(c.get("id") == "user" for c in characters_in_scene):
+                    characters_in_scene.append({"id": "user", "name": player_profile.get("name", "玩家") if 'player_profile' in locals() else "玩家"})
+
+                # 场景摘要
+                scene_summary = script_data.get("scene_description") or script_data.get("scene_analysis", {}).get("current_scene") or ""
+                if not scene_summary and scene_path.exists():
+                    try:
+                        scene_json = json.load(open(scene_path, "r", encoding="utf-8"))
+                        scene_summary = scene_json.get("scene_description", "")
+                    except Exception:
+                        pass
+
+                # world_state 合并补全
+                world_state = ws_data or {}
+                if "location" not in world_state:
+                    world_state["location"] = {
+                        "name": script_data.get("location_name", ""),
+                        "description": script_data.get("location_description", "")
+                    }
+                world_state.setdefault("time_of_day", "")
+                world_state.setdefault("weather", "")
+                if scene_summary:
+                    world_state["scene_summary"] = scene_summary
+
+                # ScreenInput 数据
+                screen_input = ScreenInput(
+                    scene_id=scene_id,
+                    turn_id=turn_id,
+                    world_state=world_state,
+                    current_action=current_action,
+                    dialogue_log=data.get("dialogue_log", []),
+                    characters_in_scene=characters_in_scene,
+                )
+
+                # 终端渲染
                 if event == "scene_start":
-                    # 渲染场景头
                     screen_agent.render_scene_header(
-                        scene_id=data.get("scene_id", scene_num),
+                        scene_id=scene_id,
                         location_name=data.get("location", ""),
                         description=data.get("description", "")
                     )
-                elif event == "dialogue":
-                    # 渲染NPC对话
+                elif event in {"dialogue", "player_input"}:
                     screen_agent.render_single_dialogue(
-                        speaker=data.get("speaker", ""),
-                        content=data.get("content", ""),
-                        action=data.get("action", ""),
-                        emotion=data.get("emotion", ""),
-                        is_player=False
-                    )
-                elif event == "player_input":
-                    # 渲染玩家输入
-                    screen_agent.render_single_dialogue(
-                        speaker=data.get("speaker", "玩家"),
-                        content=data.get("content", ""),
-                        action=data.get("action", ""),
-                        emotion=data.get("emotion", ""),
-                        is_player=True
+                        speaker=current_action.get("speaker", "") if current_action else "",
+                        content=current_action.get("content", "") if current_action else "",
+                        action=current_action.get("action", "") if current_action else "",
+                        emotion=current_action.get("emotion", "") if current_action else "",
+                        is_player=(event == "player_input"),
                     )
                 elif event == "scene_end":
-                    # 场景结束
                     print()
-                    print(f"{screen_agent.COLORS['CYAN']}--- 第 {data.get('scene_id', scene_num)} 幕结束 ---{screen_agent.COLORS['RESET']}")
-            
+                    print(f"{screen_agent.COLORS['CYAN']}--- 第 {scene_id} 幕结束 ---{screen_agent.COLORS['RESET']}")
+
+                # 始终生成视觉 JSON
+                screen_agent.render(
+                    input_data=screen_input,
+                    render_terminal=False,  # 终端输出已处理
+                    generate_visual=True,
+                    save_json=True
+                )
+
             # 创建玩家输入回调函数
             def real_user_input(prompt: str) -> str:
                 """真实玩家输入"""
@@ -352,7 +506,7 @@ def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
                     screen_callback=screen_callback
                 )
                 
-                print(f"\n📊 第 {scene_num} 幕演绎结果:")
+                print(f"\n📊 第 {current_scene_id} 幕演绎结果:")
                 print(f"   - 成功: {loop_result.get('success', False)}")
                 print(f"   - 总轮数: {loop_result.get('total_turns', 0)}")
                 print(f"   - 对话数: {loop_result.get('dialogue_count', 0)}")
@@ -369,24 +523,29 @@ def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
             # === 4. 幕间处理 ===
             print()
             print("-" * 70)
-            print(f"  🔄 幕间处理: 第{scene_num}幕 → 第{scene_num+1}幕")
+            next_scene_display_id = current_scene_id + 1
+            print(f"  🔄 幕间处理: 第{current_scene_id}幕 → 第{next_scene_display_id}幕")
             print("-" * 70)
             
-            scene_memory = create_scene_memory(runtime_dir, scene_id=scene_num)
+            # 使用本幕的真实 scene_id，避免归档错误
+            scene_memory = create_scene_memory(runtime_dir, scene_id=current_scene_id)
             
             transition_result = os_agent.process_scene_transition(
                 runtime_dir=runtime_dir,
                 world_dir=world_dir,
                 scene_memory=scene_memory,
-                scene_summary=f"第{scene_num}幕剧情演绎完成。"
+                scene_summary=f"第{current_scene_id}幕剧情演绎完成。"
             )
             
             print(f"\n📊 幕间处理结果:")
             print(f"   - 场景归档: {transition_result.get('scene_archived')}")
             print(f"   - WS更新: {transition_result.get('world_state_updated')}")
             print(f"   - 剧本生成: {transition_result.get('next_script_generated')}")
-            
-            scene_num += 1
+
+            next_scene_id = transition_result.get("next_scene_id") or (current_scene_id + 1)
+            save_progress(runtime_dir, current_scene_id=current_scene_id, next_scene_id=next_scene_id)
+            current_scene_id = next_scene_id
+            loop_count += 1
             
             # 询问是否继续
             print()
