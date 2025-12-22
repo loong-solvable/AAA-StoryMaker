@@ -1,0 +1,122 @@
+{
+  "meta": {
+    "world_name": "都市迷局 (江城市)",
+    "genre_type": "REALISTIC",
+    "description": "2024年现代都市背景下，围绕AI技术、大数据泄露与商业阴谋展开的现实主义社会博弈。"
+  },
+  "physics_logic": {
+    "mode": "STANDARD_REALITY",
+    "hard_constraints": [
+      "人类无法飞行",
+      "无法凭空造物",
+      "遵循现代物理定律",
+      "技术操作受限于现实硬件与网络协议",
+      "物理伤害具有真实致死性"
+    ],
+    "supernatural_system": null
+  },
+  "social_logic": [
+    {
+      "rule_name": "商业巨头影响力",
+      "trigger_condition": "个人挑战大型科技公司（如鸿图科技）",
+      "consequence": "遭受非法监视、人身威胁、法律诉讼威胁及对家人的骚扰",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "数据价值法则",
+      "trigger_condition": "持有高价值敏感数据",
+      "consequence": "成为各方势力追踪的目标，面临被收买或被灭口的风险",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "舆论制衡",
+      "trigger_condition": "通过主流媒体公开关键证据",
+      "consequence": "触发社会舆论风暴，迫使官方司法力量介入，抵消商业巨头的私权压制",
+      "is_rigid": true
+    },
+    {
+      "rule_name": "职场技术等级",
+      "trigger_condition": "顶尖AI工程师进行网络渗透",
+      "consequence": "可突破普通商业加密，但会触发对方专业安全团队的防御与反击",
+      "is_rigid": true
+    }
+  ],
+  "geography": {
+    "locations": [
+      {
+        "id": "JIANG_CITY_CENTER",
+        "name": "江城市中心咖啡馆",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "暖色调灯光，繁华街景作为背景",
+          "auditory": "舒缓的音乐，低沉的交谈声，偶尔的咖啡机运作声",
+          "olfactory": "浓郁的咖啡豆香气",
+          "atmosphere": "表面平静但潜藏转折的重逢之地"
+        },
+        "connected_to": [
+          "LIN_APARTMENT",
+          "HIDDEN_TEA_HOUSE"
+        ]
+      },
+      {
+        "id": "LIN_APARTMENT",
+        "name": "郊区老旧公寓",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "杂乱，堆满电脑设备和技术书籍，屏幕荧光闪烁",
+          "auditory": "主机风扇的嗡嗡声，键盘敲击声",
+          "olfactory": "陈旧的纸张味，电子元件发热的味道",
+          "atmosphere": "孤独、专注且带有被监视的压抑感"
+        },
+        "connected_to": [
+          "JIANG_CITY_CENTER",
+          "HIDDEN_TEA_HOUSE"
+        ]
+      },
+      {
+        "id": "HIDDEN_TEA_HOUSE",
+        "name": "隐蔽茶馆",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "光线昏暗，中式屏风遮挡，视野受限",
+          "auditory": "茶杯碰撞声，压低的声音",
+          "olfactory": "清淡的茶香",
+          "atmosphere": "极度紧绷，危机四伏"
+        },
+        "connected_to": [
+          "LIN_APARTMENT",
+          "OLD_INTERNET_CAFE"
+        ]
+      },
+      {
+        "id": "OLD_INTERNET_CAFE",
+        "name": "老旧网吧",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "昏暗多烟雾，闪烁的旧显示器，混乱的布线",
+          "auditory": "嘈杂的游戏声，机械键盘声",
+          "olfactory": "烟味，泡面味，污浊的空气",
+          "atmosphere": "混乱、易于藏匿的临时避难所"
+        },
+        "connected_to": [
+          "HIDDEN_TEA_HOUSE",
+          "HIGH_END_HOTEL"
+        ]
+      },
+      {
+        "id": "HIGH_END_HOTEL",
+        "name": "市中心高档酒店会客厅",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "明亮、奢华、极简主义装修",
+          "auditory": "寂静，只有皮鞋走在厚地毯上的闷响",
+          "olfactory": "高级香水味，冷淡的空气清新剂",
+          "atmosphere": "冷酷、充满权力压迫感的谈判场所"
+        },
+        "connected_to": [
+          "OLD_INTERNET_CAFE"
+        ]
+      }
+    ]
+  }
+}

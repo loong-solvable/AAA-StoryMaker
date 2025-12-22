@@ -1,0 +1,105 @@
+{
+  "meta": {
+    "world_name": "白鹿原",
+    "genre_type": "REALISTIC",
+    "description": "以20世纪初关中平原白鹿村为缩影，展现宗法制社会在时代变革、政治更迭与自然灾厄冲击下的兴衰更替与人性挣扎。"
+  },
+  "physics_logic": {
+    "mode": "STANDARD_REALITY",
+    "hard_constraints": [
+      "遵循标准物理法则，无超自然力量",
+      "生命受自然衰老、饥荒、瘟疫（霍乱）威胁",
+      "医疗水平局限于传统中医针灸与汤药"
+    ],
+    "supernatural_system": null
+  },
+  "social_logic": [
+    {
+      "rule_name": "宗法族权至上",
+      "trigger_condition": "族人违背伦理道德（如通奸、卖产、不孝）",
+      "consequence": "由族长主持在祠堂执行族规，包括刺刷抽打、驱逐出村、剥夺入祠堂祭祖权力",
+      "is_rigid": true
+    },
+    {
+      "rule_name": "仁义庄名望",
+      "trigger_condition": "处理两姓或邻里纠纷",
+      "consequence": "以谦让和仁义为最高准则，违背者虽不触法但在社会舆论中无法立足",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "男尊女卑与节烈观",
+      "trigger_condition": "女性出现越轨行为或丈夫去世",
+      "consequence": "女性受严苛道德审视，不洁者受极刑或社会唾弃，守节者受牌坊褒奖",
+      "is_rigid": true
+    },
+    {
+      "rule_name": "保甲连坐制",
+      "trigger_condition": "辖区内出现壮丁逃亡或通共行为",
+      "consequence": "对家属进行抓捕扣押作为人质，实行层层追责",
+      "is_rigid": true
+    }
+  ],
+  "geography": {
+    "locations": [
+      {
+        "id": "bailu_village",
+        "name": "白鹿村",
+        "region_type": "村落",
+        "sensory_profile": {
+          "visual": "黄土围墙，青砖门楼，挺拔的白鹤白鹿雕刻，密集的槐树与香椿树",
+          "auditory": "纺车嗡嗡声，织布机呱哒声，祠堂里的锣鼓声，偶尔的秦腔吼唱",
+          "olfactory": "旱烟味，牛马粪尿味，熬炼鸦片的幽香，瘟疫时的腐臭",
+          "atmosphere": "肃穆庄严的宗法氛围，灾荒时的死寂与惊恐"
+        },
+        "connected_to": [
+          "bailu_academy",
+          "bailu_town",
+          "east_cave"
+        ]
+      },
+      {
+        "id": "bailu_ancestral_hall",
+        "name": "白鹿村祠堂",
+        "region_type": "室内/仪式场所",
+        "sensory_profile": {
+          "visual": "密密麻麻的神位神轴，断裂修复的石碑，青砖铺地",
+          "auditory": "诵读乡约的合诵声，沉闷的鞭炮声，受刑者的惨叫",
+          "olfactory": "浓重的紫香烟气，燃烧的纸灰味",
+          "atmosphere": "神圣、压抑、威严"
+        },
+        "connected_to": [
+          "bailu_village"
+        ]
+      },
+      {
+        "id": "bailu_academy",
+        "name": "白鹿书院",
+        "region_type": "建筑群/坡地",
+        "sensory_profile": {
+          "visual": "青苍苍的柏树，银杏树，红色的明柱，整齐的书架",
+          "auditory": "悠长的诵读经书声，清冷的风声",
+          "olfactory": "清幽的书纸气息，湿漉漉的黄土味",
+          "atmosphere": "清净、高洁、超脱世俗"
+        },
+        "connected_to": [
+          "bailu_village",
+          "zishui_river"
+        ]
+      },
+      {
+        "id": "east_cave",
+        "name": "村东烂窑",
+        "region_type": "居所/荒野",
+        "sensory_profile": {
+          "visual": "低矮残破的窑洞，杂草丛生的平场，后期的六棱镇妖塔",
+          "auditory": "夜间的狼嚎狐哭，私密的低语",
+          "olfactory": "霉味，鸦片烟味，腐尸的恶臭",
+          "atmosphere": "阴森、暧昧、被排斥的孤独感"
+        },
+        "connected_to": [
+          "bailu_village"
+        ]
+      }
+    ]
+  }
+}

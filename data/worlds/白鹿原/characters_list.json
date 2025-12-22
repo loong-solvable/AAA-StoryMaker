@@ -1,0 +1,232 @@
+[
+  {
+    "id": "npc_001",
+    "name": "白嘉轩",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_002",
+    "name": "鹿子霖",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_003",
+    "name": "鹿兆鹏",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_004",
+    "name": "黑娃",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_005",
+    "name": "白孝文",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_006",
+    "name": "朱先生",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_007",
+    "name": "田小娥",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_008",
+    "name": "白灵",
+    "importance": 1.0
+  },
+  {
+    "id": "npc_009",
+    "name": "鹿三",
+    "importance": 0.9
+  },
+  {
+    "id": "npc_010",
+    "name": "仙草",
+    "importance": 0.9
+  },
+  {
+    "id": "npc_011",
+    "name": "田福贤",
+    "importance": 0.9
+  },
+  {
+    "id": "npc_012",
+    "name": "冷先生",
+    "importance": 0.8
+  },
+  {
+    "id": "npc_013",
+    "name": "白赵氏",
+    "importance": 0.7
+  },
+  {
+    "id": "npc_014",
+    "name": "白秉德",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_015",
+    "name": "白孝武",
+    "importance": 0.7
+  },
+  {
+    "id": "npc_016",
+    "name": "鹿兆海",
+    "importance": 0.8
+  },
+  {
+    "id": "npc_017",
+    "name": "岳维山",
+    "importance": 0.7
+  },
+  {
+    "id": "npc_018",
+    "name": "大拇指",
+    "importance": 0.6
+  },
+  {
+    "id": "npc_019",
+    "name": "高玉凤",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_020",
+    "name": "韩裁缝",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_021",
+    "name": "徐秀才",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_022",
+    "name": "鹿泰恒",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_023",
+    "name": "鹿贺氏",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_024",
+    "name": "兆鹏媳妇",
+    "importance": 0.5
+  },
+  {
+    "id": "npc_025",
+    "name": "白孝义",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_026",
+    "name": "吴长贵",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_027",
+    "name": "杨排长",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_028",
+    "name": "李相",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_029",
+    "name": "王相",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_030",
+    "name": "郭举人",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_031",
+    "name": "白兴儿",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_032",
+    "name": "狗蛋",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_033",
+    "name": "兔娃",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_034",
+    "name": "郝县长",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_035",
+    "name": "廖军长",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_036",
+    "name": "皮匠",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_037",
+    "name": "白二姐",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_038",
+    "name": "魏老太太",
+    "importance": 0.3
+  },
+  {
+    "id": "npc_039",
+    "name": "巩增荣",
+    "importance": 0.1
+  },
+  {
+    "id": "npc_040",
+    "name": "庞修瑞",
+    "importance": 0.1
+  },
+  {
+    "id": "npc_041",
+    "name": "卫老三",
+    "importance": 0.1
+  },
+  {
+    "id": "npc_042",
+    "name": "方升",
+    "importance": 0.1
+  },
+  {
+    "id": "npc_043",
+    "name": "张总督",
+    "importance": 0.1
+  },
+  {
+    "id": "npc_044",
+    "name": "刘军长",
+    "importance": 0.1
+  },
+  {
+    "id": "npc_045",
+    "name": "贺老大",
+    "importance": 0.1
+  },
+  {
+    "id": "npc_046",
+    "name": "碗客",
+    "importance": 0.1
+  }
+]
