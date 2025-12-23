@@ -39,6 +39,11 @@ class Settings:
     MODEL_NAME = os.getenv("MODEL_NAME", "glm-4")
     TEMPERATURE = float(os.getenv("TEMPERATURE", "0.7"))
     MAX_TOKENS = None  # 不限制，让模型自己决定需要多少tokens
+
+    # LangSmith 追踪配置
+    LANGCHAIN_TRACING = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
+    LANGCHAIN_PROJECT = os.getenv("LANGCHAIN_PROJECT", "AAA-StoryMaker")
+    LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY", "")
     
     # 项目路径
     DATA_DIR = PROJECT_ROOT / "data"
@@ -46,6 +51,11 @@ class Settings:
     GENESIS_DIR = DATA_DIR / "genesis"
     LOGS_DIR = PROJECT_ROOT / "logs"
     PROMPTS_DIR = PROJECT_ROOT / "prompts"
+
+    # 长期记忆存储（可选）
+    MEMORY_MONGO_URI = os.getenv("MEMORY_MONGO_URI", "")
+    MEMORY_MONGO_DB = os.getenv("MEMORY_MONGO_DB", "aaa_story")
+    MEMORY_MONGO_COLLECTION = os.getenv("MEMORY_MONGO_COLLECTION", "long_term_memory")
     
     @classmethod
     def validate(cls):
@@ -77,4 +87,3 @@ class Settings:
 
 # 全局配置实例
 settings = Settings()
-

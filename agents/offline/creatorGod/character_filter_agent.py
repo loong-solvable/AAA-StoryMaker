@@ -42,5 +42,10 @@ class CharacterFilterAgent:
         response = chain.invoke({"novel_text": novel_text}, config={"timeout": 600})
         characters_list = parse_json_response(response)
 
+        # 容错处理：如果LLM返回单个对象而非数组，包装成列表
+        if isinstance(characters_list, dict):
+            self.logger.warning("⚠️  LLM返回了单个对象，已自动包装为列表")
+            characters_list = [characters_list]
+
         self.logger.info(f"✅ 角色普查完成，发现 {len(characters_list)} 个角色")
         return characters_list
