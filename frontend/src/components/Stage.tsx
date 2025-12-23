@@ -1,23 +1,31 @@
 import { useState, useEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { DialogueBox } from './DialogueBox';
-import { ArrowRight, Loader2, Mic, Sparkles } from 'lucide-react';
+import { ArrowRight, Loader2, Mic, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { parseBackendText } from '../utils/textParser';
+import { generateImage } from '../services/imageService';
 
 export const Stage = () => {
-  const { 
-    location, 
-    time, 
-    lastText, 
-    npcReactions, 
+  const {
+    location,
+    time,
+    lastText,
+    npcReactions,
     suggestions,
+    visualData,  // 新增：视觉数据
     sendAction,
-    isLoading 
+    isLoading
   } = useGameStore();
 
   const [textQueue, setTextQueue] = useState<string[]>([]);
   const [currentLineIndex, setCurrentLineIndex] = useState(0);
+  const [input, setInput] = useState('');
+
+  // 生图相关状态
+  const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState<string | null>(null);
 
   // Parse text when lastText changes
   useEffect(() => {
@@ -26,7 +34,26 @@ export const Stage = () => {
     setCurrentLineIndex(0);
   }, [lastText]);
 
-  const [input, setInput] = useState('');
+  // 当 visualData 变化时生成背景图
+  useEffect(() => {
+    const prompt = visualData?.media_prompts?.image_gen_prompt;
+    if (prompt && prompt !== imagePrompt) {
+      setImagePrompt(prompt);
+      setIsGeneratingImage(true);
+
+      generateImage(prompt, visualData?.media_prompts?.negative_prompt)
+        .then(result => {
+          setBackgroundImage(result.imageUrl);
+          console.log('🎨 背景图生成完成', result.cached ? '(缓存)' : '(新生成)');
+        })
+        .catch(err => {
+          console.error('生成背景图失败:', err);
+        })
+        .finally(() => {
+          setIsGeneratingImage(false);
+        });
+    }
+  }, [visualData, imagePrompt]);
 
   const handleAdvance = () => {
     if (currentLineIndex < textQueue.length - 1) {
@@ -56,16 +83,54 @@ export const Stage = () => {
     >
       
       {/* Background Layer */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/40 via-slate-900 to-black z-0 pointer-events-none">
-        <div className="absolute inset-0 flex items-center justify-center opacity-10">
-           {/* Abstract Background Grid */}
-           <div className="w-[200%] h-[200%] bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px] transform rotate-12" />
-        </div>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <h1 className="text-9xl font-black text-white/5 uppercase tracking-[0.2em] blur-sm scale-150">
-            {location}
-          </h1>
-        </div>
+      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+        {/* 生成的背景图 */}
+        <AnimatePresence mode="wait">
+          {backgroundImage && (
+            <motion.div
+              key={backgroundImage}
+              initial={{ opacity: 0, scale: 1.1 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 1.2, ease: "easeOut" }}
+              className="absolute inset-0"
+            >
+              <img
+                src={backgroundImage}
+                alt="Scene"
+                className="w-full h-full object-cover"
+              />
+              {/* 渐变叠加层 - 确保文字可读 */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* 默认抽象背景（无图片时显示） */}
+        {!backgroundImage && (
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/40 via-slate-900 to-black">
+            <div className="absolute inset-0 flex items-center justify-center opacity-10">
+              <div className="w-[200%] h-[200%] bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px] transform rotate-12" />
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <h1 className="text-9xl font-black text-white/5 uppercase tracking-[0.2em] blur-sm scale-150">
+                {location}
+              </h1>
+            </div>
+          </div>
+        )}
+
+        {/* 生图加载指示器 */}
+        {isGeneratingImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="absolute top-6 right-6 flex items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10"
+          >
+            <ImageIcon size={16} className="text-blue-400 animate-pulse" />
+            <span className="text-slate-300 text-sm">生成场景中...</span>
+          </motion.div>
+        )}
       </div>
 
       {/* Characters Layer */}

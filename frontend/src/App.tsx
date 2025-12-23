@@ -41,8 +41,6 @@ function App() {
     }
   };
 
-// ... (imports)
-
   if (isStarted) {
     return (
       <ErrorBoundary>
