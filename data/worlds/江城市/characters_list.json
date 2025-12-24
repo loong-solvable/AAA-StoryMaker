@@ -11,27 +11,42 @@
   },
   {
     "id": "npc_003",
-    "name": "传话人",
+    "name": "张瑞峰",
     "importance": 0.5
   },
   {
     "id": "npc_004",
-    "name": "张瑞峰",
-    "importance": 1.0
+    "name": "李婉",
+    "importance": 0.5
   },
   {
     "id": "npc_005",
-    "name": "李婉",
-    "importance": 0.7
+    "name": "老记者",
+    "importance": 0.5
   },
   {
     "id": "npc_006",
-    "name": "林晨的母亲",
+    "name": "匿名线人",
     "importance": 0.1
   },
   {
     "id": "npc_007",
-    "name": "老记者",
-    "importance": 0.5
+    "name": "传话的陌生男性",
+    "importance": 0.1
+  },
+  {
+    "id": "npc_008",
+    "name": "穿着黑色西装的人",
+    "importance": 0.1
+  },
+  {
+    "id": "npc_009",
+    "name": "林晨的母亲",
+    "importance": 0.1
+  },
+  {
+    "id": "npc_010",
+    "name": "政府官员",
+    "importance": 0.1
   }
 ]

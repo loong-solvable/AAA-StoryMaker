@@ -2,119 +2,136 @@
   "meta": {
     "world_name": "江城市",
     "genre_type": "REALISTIC",
-    "description": "2024年现代都市江城，科技公司数据泄露阴谋与正义调查的现实商业惊悚世界。"
+    "description": "一个充满现代科技与都市暗流的现实世界，围绕数据隐私、商业阴谋与技术对抗展开。"
   },
   "physics_logic": {
     "mode": "STANDARD_REALITY",
     "hard_constraints": [
       "人类无法飞行",
       "无法凭空造物",
-      "技术操作需设备和时间",
-      "远程黑客需网络接入和技能"
+      "技术手段需遵循现实物理与计算机原理"
     ],
     "supernatural_system": null
   },
   "social_logic": [
     {
-      "rule_name": "商业阴谋保密",
-      "trigger_condition": "发现公司数据交易证据",
-      "consequence": "公司派人监视、威胁或追杀涉事者",
+      "rule_name": "职场技术权威",
+      "trigger_condition": "技术能力出众者被需要解决技术难题",
+      "consequence": "获得信任与依赖，但可能卷入相关事件",
       "is_rigid": false
     },
     {
-      "rule_name": "证据不足报警无效",
-      "trigger_condition": "报警无实质证据",
-      "consequence": "警方不介入，涉事者需自行收集更多证据",
+      "rule_name": "商业阴谋威胁",
+      "trigger_condition": "个人发现并试图揭露大型公司的非法商业行为",
+      "consequence": "面临人身安全威胁、监控、法律威胁及亲友被波及的风险",
+      "is_rigid": false
+    },
+    {
+      "rule_name": "数据安全铁律",
+      "trigger_condition": "获取并试图公开加密的敏感商业数据",
+      "consequence": "可能遭遇黑客攻击、数据被删除、法律追诉（如律师函）",
       "is_rigid": true
     },
     {
-      "rule_name": "媒体公开引发风暴",
-      "trigger_condition": "将证据交给可靠媒体",
-      "consequence": "报道刷屏，警方介入，高管被捕",
-      "is_rigid": false
-    },
-    {
-      "rule_name": "公司金钱威胁",
-      "trigger_condition": "谈判时拒绝合作",
-      "consequence": "发出律师函或威胁家人安全",
+      "rule_name": "记者调查风险",
+      "trigger_condition": "独立记者深入调查涉及权贵的案件",
+      "consequence": "被监视、住所被搜查、生命受到潜在威胁",
       "is_rigid": false
     }
   ],
   "geography": {
     "locations": [
       {
-        "id": "coffee_shop_center",
+        "id": "loc_cafe_downtown",
         "name": "市中心咖啡馆",
-        "region_type": "室内/商业区",
+        "region_type": "室内",
         "sensory_profile": {
-          "visual": "繁华车水马龙，温暖灯光",
-          "auditory": "人声喧闹，咖啡机嗡鸣",
-          "olfactory": "咖啡香气",
-          "atmosphere": "热闹随意"
-        },
-        "connected_to": []
-      },
-      {
-        "id": "rental_apartment",
-        "name": "江城郊区老旧公寓出租屋",
-        "region_type": "室内/住宅",
-        "sensory_profile": {
-          "visual": "堆满电脑和技术书籍，昏暗灯光",
-          "auditory": "安静，偶尔键盘敲击",
-          "olfactory": "电子设备味",
-          "atmosphere": "孤寂技术宅"
-        },
-        "connected_to": []
-      },
-      {
-        "id": "hidden_teahouse",
-        "name": "隐蔽茶馆",
-        "region_type": "室内/商业区",
-        "sensory_profile": {
-          "visual": "低调昏暗，木质装饰",
-          "auditory": "低声交谈，茶水声",
-          "olfactory": "茶叶清香",
-          "atmosphere": "紧张隐秘"
+          "visual": "暖色调灯光，窗外车水马龙",
+          "auditory": "咖啡机运作声，轻柔的背景音乐，低声交谈",
+          "olfactory": "咖啡与甜点的香气",
+          "atmosphere": "公共、开放、偶遇的氛围"
         },
         "connected_to": [
-          "old_netbar"
+          "loc_lin_apartment",
+          "loc_hidden_teahouse"
         ]
       },
       {
-        "id": "old_netbar",
+        "id": "loc_lin_apartment",
+        "name": "林晨的出租屋",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "堆满电脑设备和书籍的凌乱房间，老旧家具，屏幕光",
+          "auditory": "电脑风扇声，键盘敲击声，郊区偶尔传来的车声",
+          "olfactory": "电子设备与旧书纸张的气味",
+          "atmosphere": "私密、技术宅、紧张工作"
+        },
+        "connected_to": [
+          "loc_cafe_downtown"
+        ]
+      },
+      {
+        "id": "loc_hidden_teahouse",
+        "name": "隐蔽的茶馆",
+        "region_type": "室内",
+        "sensory_profile": {
+          "visual": "光线柔和，传统中式装饰，相对私密的卡座",
+          "auditory": "古典音乐，低声交谈，泡茶的水声",
+          "olfactory": "茶叶的清香",
+          "atmosphere": "隐蔽、紧张、适合密谈"
+        },
+        "connected_to": [
+          "loc_cafe_downtown",
+          "loc_old_cybercafe"
+        ]
+      },
+      {
+        "id": "loc_old_cybercafe",
         "name": "老旧网吧",
-        "region_type": "室内/娱乐区",
+        "region_type": "室内",
         "sensory_profile": {
-          "visual": "烟雾缭绕，旧电脑屏幕闪烁",
-          "auditory": "键盘敲击，风扇嗡鸣",
-          "olfactory": "烟味汗臭",
-          "atmosphere": "压抑躲藏"
+          "visual": "光线昏暗，成排的旧电脑屏幕闪烁，烟雾缭绕",
+          "auditory": "键盘鼠标声，游戏音效，低声交谈",
+          "olfactory": "烟味、汗味与电子设备散发的混合气味",
+          "atmosphere": "嘈杂、混乱、适合临时藏身"
         },
         "connected_to": [
-          "hidden_teahouse"
+          "loc_hidden_teahouse"
         ]
       },
       {
-        "id": "cheap_motel",
+        "id": "loc_cheap_hotel",
         "name": "便宜小旅馆",
-        "region_type": "室内/住宅",
+        "region_type": "室内",
         "sensory_profile": {
-          "visual": "简陋陈旧，荧光灯",
-          "auditory": "远处车声，空调嗡鸣",
-          "olfactory": "潮湿霉味",
-          "atmosphere": "暂住不安"
+          "visual": "简单陈旧的家具，昏暗的灯光，窗帘紧闭",
+          "auditory": "隔壁房间的模糊声音，走廊偶尔的脚步声",
+          "olfactory": "消毒水与潮湿的霉味",
+          "atmosphere": "压抑、不安、临时避难所"
         },
         "connected_to": []
       },
       {
-        "id": "luxury_hotel",
+        "id": "loc_luxury_hotel",
         "name": "市中心高档酒店",
-        "region_type": "室内/商业区",
+        "region_type": "室内",
         "sensory_profile": {
-          "visual": "奢华大堂，水晶灯璀璨",
-          "auditory": "轻柔背景音乐",
-          "olfactory": "高级香氛",
-          "atmosphere": "优雅锐利"
+          "visual": "奢华装潢，明亮灯光，商务会客室",
+          "auditory": "安静，仅有细微的背景音乐",
+          "olfactory": "香薰与清洁剂的气味",
+          "atmosphere": "正式、压迫、充满交易与威胁"
+        },
+        "connected_to": []
+      },
+      {
+        "id": "loc_street_night",
+        "name": "江城市夜晚街道",
+        "region_type": "室外",
+        "sensory_profile": {
+          "visual": "城市灯火通明，车流灯光形成光带，高楼轮廓",
+          "auditory": "远处车流声，城市背景噪音",
+          "olfactory": "都市夜晚的混合空气",
+          "atmosphere": "繁华、平静（危机解除后）、充满可能"
         },
         "connected_to": []
       }
