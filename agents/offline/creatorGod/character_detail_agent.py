@@ -70,6 +70,14 @@ class CharacterDetailAgent:
         char_name = char_info.get("name")
         importance = char_info.get("importance")
 
+        # 估算 Token 数
+        estimated_tokens = len(novel_text) / 1.5
+        MAX_TOKENS = 100000
+        
+        if estimated_tokens > MAX_TOKENS:
+            self.logger.warning(f"⚠️ 小说过长 (约 {int(estimated_tokens)} tokens)，将进行分块处理...")
+            return self._create_one_chunked(novel_text, char_info, characters_list)
+
         prompt_text = self._build_prompt(char_name, char_id, characters_list)
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -83,6 +91,85 @@ class CharacterDetailAgent:
         char_data = parse_json_response(response)
         char_data["importance"] = importance
         return char_data
+
+    def _create_one_chunked(
+        self,
+        novel_text: str,
+        char_info: Dict[str, Any],
+        characters_list: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """分块生成角色档案"""
+        CHUNK_SIZE = 50000
+        OVERLAP = 2000
+        
+        chunks = []
+        start = 0
+        while start < len(novel_text):
+            end = min(start + CHUNK_SIZE, len(novel_text))
+            chunks.append(novel_text[start:end])
+            if end == len(novel_text):
+                break
+            start = end - OVERLAP
+            
+        self.logger.info(f"📚 将小说切分为 {len(chunks)} 个片段进行处理")
+        
+        merged_data = {
+            "id": char_info.get("id"),
+            "name": char_info.get("name"),
+            "importance": char_info.get("importance"),
+            "age": "",
+            "gender": "",
+            "appearance": "",
+            "personality": "",
+            "background": "",
+            "relationships": []
+        }
+        
+        prompt_text = self._build_prompt(char_info.get("name"), char_info.get("id"), characters_list)
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", prompt_text),
+                ("human", "{novel_text}"),
+            ]
+        )
+        chain = prompt | self.llm | StrOutputParser()
+        
+        for i, chunk in enumerate(chunks, 1):
+            # 简单过滤：如果片段中不包含角色名，大概率可以跳过（优化速度）
+            if char_info.get("name") not in chunk:
+                continue
+                
+            self.logger.info(f"🤖 处理片段 {i}/{len(chunks)}...")
+            try:
+                response = chain.invoke({"novel_text": chunk}, config={"timeout": 600})
+                chunk_data = parse_json_response(response)
+                
+                # 合并逻辑
+                if not merged_data["age"] and chunk_data.get("age"):
+                    merged_data["age"] = chunk_data["age"]
+                if not merged_data["gender"] and chunk_data.get("gender"):
+                    merged_data["gender"] = chunk_data["gender"]
+                    
+                if chunk_data.get("appearance"):
+                    merged_data["appearance"] += f"\n{chunk_data['appearance']}"
+                if chunk_data.get("personality"):
+                    merged_data["personality"] += f"\n{chunk_data['personality']}"
+                if chunk_data.get("background"):
+                    merged_data["background"] += f"\n{chunk_data['background']}"
+                    
+                if chunk_data.get("relationships"):
+                    # 合并关系（简单追加，后续可能需要去重或LLM整理，这里先保留所有线索）
+                    existing_rels = {(r.get("target_id"), r.get("relationship")) for r in merged_data["relationships"]}
+                    for rel in chunk_data["relationships"]:
+                        key = (rel.get("target_id"), rel.get("relationship"))
+                        if key not in existing_rels:
+                            merged_data["relationships"].append(rel)
+                            existing_rels.add(key)
+                            
+            except Exception as e:
+                self.logger.warning(f"⚠️ 片段 {i} 处理失败: {e}")
+        
+        return merged_data
 
     def _save_character(
         self, 

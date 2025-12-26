@@ -655,30 +655,26 @@ class OperatingSystem:
     # 角色动态初始化功能
     # ==========================================
     
-    def initialize_first_appearance_characters(
+    def ensure_scene_characters_initialized(
         self,
         runtime_dir: Path,
         world_dir: Path
     ) -> Dict[str, Any]:
         """
-        初始化首次出场的角色
+        确保场景中的所有在场角色都已初始化
         
-        读取 current_scene.json 中 first_appearance=true 的角色，
-        为每个角色生成专属提示词文件和 agent.py 文件，并初始化 Agent 实例。
+        读取 current_scene.json 中 present_characters，
+        检查哪些角色尚未在 self.npc_agents 中注册，
+        为这些缺失的角色生成/加载 Agent。
         
         Args:
-            runtime_dir: 运行时目录路径，如 data/runtime/江城市_20251128_183246
-            world_dir: 世界数据目录路径，如 data/worlds/江城市
+            runtime_dir: 运行时目录路径
+            world_dir: 世界数据目录路径
         
         Returns:
             Dict: 初始化结果
-            {
-                "initialized": [{"id": "npc_001", "name": "林晨", "agent_file": "...", "prompt_file": "..."}],
-                "failed": [{"id": "npc_003", "error": "..."}],
-                "skipped": [{"id": "npc_002", "reason": "already initialized"}]
-            }
         """
-        logger.info("🎭 开始初始化首次出场角色...")
+        logger.info("🎭 检查并初始化在场角色...")
         
         results = {
             "initialized": [],
@@ -698,28 +694,19 @@ class OperatingSystem:
         # 支持 characters 和 present_characters 两种字段名
         present_characters = scene_data.get("characters", scene_data.get("present_characters", []))
         
-        # 2. 筛选 first_appearance=true 的角色
-        first_appearance_chars = [
-            char for char in present_characters 
-            if char.get("first_appearance", False)
-        ]
+        # 2. 筛选需要初始化的角色（在场但未加载 Agent）
+        chars_to_init = []
+        for char in present_characters:
+            char_id = char.get("id")
+            if char_id and char_id != "user" and char_id not in self.npc_agents:
+                chars_to_init.append(char)
         
-        logger.info(f"📋 发现 {len(first_appearance_chars)} 个首次出场角色")
+        logger.info(f"📋 发现 {len(chars_to_init)} 个未初始化的在场角色")
         
         # 3. 为每个角色进行初始化
-        for char_info in first_appearance_chars:
+        for char_info in chars_to_init:
             char_id = char_info.get("id")
             char_name = char_info.get("name", char_id)
-            
-            # 跳过玩家（user），玩家不生成 NPC Agent
-            if char_id == "user":
-                logger.info("ℹ️ 跳过玩家角色（user），无需生成NPC Agent")
-                results["skipped"].append({
-                    "id": char_id,
-                    "name": char_name,
-                    "reason": "player_character"
-                })
-                continue
             
             logger.info(f"   🎭 初始化角色: {char_name} ({char_id})")
             
@@ -754,8 +741,11 @@ class OperatingSystem:
                 })
                 logger.error(f"   ❌ {char_name} 初始化异常: {e}", exc_info=True)
         
-        logger.info(f"✅ 角色初始化完成: 成功 {len(results['initialized'])}, 失败 {len(results['failed'])}")
+        logger.info(f"✅ 角色初始化检查完成: 新增 {len(results['initialized'])}, 失败 {len(results['failed'])}")
         return results
+
+    # 向后兼容的别名
+    initialize_first_appearance_characters = ensure_scene_characters_initialized
     
     def _initialize_single_character(
         self,
@@ -1037,6 +1027,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from utils.llm_factory import get_llm
 from utils.logger import setup_logger
+from utils.json_parser import safe_parse_npc_response
 from config.settings import settings
 
 logger = setup_logger("{char_id}", "{char_id}.log")
@@ -1152,7 +1143,9 @@ class {class_name}:
         current_input: str = "",
         scene_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """对输入做出反应"""
+        """对输入做出反应（带重试逻辑）"""
+        import time
+        
         logger.info(f"🎭 {{self.CHARACTER_NAME}} 正在演绎...")
         
         if scene_context:
@@ -1171,63 +1164,75 @@ class {class_name}:
         
         chain = prompt | self.llm | StrOutputParser()
         
-        try:
-            response = chain.invoke({{}})
-            result = self._parse_response(response)
-            
-            # 写入场景记忆板
-            if self.scene_memory and result.get("content"):
-                self.scene_memory.add_dialogue(
-                    speaker_id=self.CHARACTER_ID,
-                    speaker_name=self.CHARACTER_NAME,
-                    content=result.get("content", ""),
-                    action=result.get("action", ""),
-                    emotion=result.get("emotion", ""),
-                    addressing_target=result.get("addressing_target", "everyone")
-                )
-            
-            if result.get("emotion"):
-                self.current_mood = result["emotion"]
-            
-            if result.get("is_scene_finished") and self.scene_memory:
-                self.scene_memory.set_scene_status("FINISHED")
-            
-            logger.info(f"✅ {{self.CHARACTER_NAME}} 演绎完成")
-            logger.info(f"   对话对象: {{result.get('addressing_target', 'everyone')}}")
-            return result
-        except Exception as e:
-            logger.error(f"❌ {{self.CHARACTER_NAME}} 演绎失败: {{e}}", exc_info=True)
-            return self._create_fallback_response()
+        # 重试配置
+        max_retries = 2
+        min_expected_time = 3.0  # 少于3秒认为是异常响应
+        
+        for attempt in range(max_retries + 1):
+            try:
+                start_time = time.time()
+                response = chain.invoke({{}})
+                elapsed_time = time.time() - start_time
+                
+                result = self._parse_response(response)
+                
+                # 检查是否是有效响应
+                is_valid = True
+                thought = result.get("thought", "")
+                content = result.get("content", "")
+                
+                # 如果响应太快 且 (思考包含"解析失败" 或 内容太短)，认为无效
+                if elapsed_time < min_expected_time:
+                    if "解析失败" in thought or len(content.strip()) < 5:
+                        is_valid = False
+                
+                if not is_valid and attempt < max_retries:
+                    logger.warning(f"🔄 响应异常（耗时 {{elapsed_time:.1f}}s），正在重试 ({{attempt + 1}}/{{max_retries}})...")
+                    time.sleep(1)  # 等待1秒后重试
+                    continue
+                
+                # 写入场景记忆板
+                if self.scene_memory and result.get("content"):
+                    self.scene_memory.add_dialogue(
+                        speaker_id=self.CHARACTER_ID,
+                        speaker_name=self.CHARACTER_NAME,
+                        content=result.get("content", ""),
+                        action=result.get("action", ""),
+                        emotion=result.get("emotion", ""),
+                        addressing_target=result.get("addressing_target", "everyone")
+                    )
+                
+                if result.get("emotion"):
+                    self.current_mood = result["emotion"]
+                
+                if result.get("is_scene_finished") and self.scene_memory:
+                    self.scene_memory.set_scene_status("FINISHED")
+                
+                logger.info(f"✅ {{self.CHARACTER_NAME}} 演绎完成")
+                logger.info(f"   对话对象: {{result.get('addressing_target', 'everyone')}}")
+                return result
+                
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(f"🔄 调用失败，正在重试 ({{attempt + 1}}/{{max_retries}}): {{e}}")
+                    time.sleep(1)
+                    continue
+                logger.error(f"❌ {{self.CHARACTER_NAME}} 演绎失败: {{e}}", exc_info=True)
+                return self._create_fallback_response()
     
     def _parse_response(self, response: str) -> Dict[str, Any]:
-        """解析LLM响应"""
-        result = response.strip()
-        if result.startswith("```json"):
-            result = result[7:]
-        if result.startswith("```"):
-            result = result[3:]
-        if result.endswith("```"):
-            result = result[:-3]
-        result = result.strip()
-        
-        try:
-            data = json.loads(result)
-            data["character_id"] = self.CHARACTER_ID
-            data["character_name"] = self.CHARACTER_NAME
-            data.setdefault("addressing_target", "everyone")
-            data.setdefault("is_scene_finished", False)
-            return data
-        except json.JSONDecodeError:
-            return {{
+        """解析LLM响应 (使用健壮解析器)"""
+        result = safe_parse_npc_response(
+            response, 
+            default_values={{
                 "character_id": self.CHARACTER_ID,
                 "character_name": self.CHARACTER_NAME,
-                "thought": "（解析失败）",
-                "emotion": self.current_mood,
-                "action": "",
-                "content": result[:200] if result else "...",
-                "addressing_target": "everyone",
-                "is_scene_finished": False
+                "emotion": self.current_mood
             }}
+        )
+        result["character_id"] = self.CHARACTER_ID
+        result["character_name"] = self.CHARACTER_NAME
+        return result
     
     def _create_fallback_response(self) -> Dict[str, Any]:
         """创建后备响应"""
@@ -1375,7 +1380,9 @@ def create_agent() -> {class_name}:
                 world_state=world_state
             )
             
-            if not llm_result:
+            if not llm_result or not llm_result.strip():
+                logger.warning(f"⚠️ LLM 返回结果为空或仅包含空白字符")
+                logger.warning(f"   llm_result type: {type(llm_result)}, repr: {repr(llm_result)[:200]}")
                 results["error"] = "LLM 返回结果为空"
                 return results
             
@@ -1437,17 +1444,9 @@ def create_agent() -> {class_name}:
         return results
     
     def _read_json_file(self, file_path: Path) -> Optional[Dict[str, Any]]:
-        """读取 JSON 文件"""
-        if not file_path.exists():
-            logger.error(f"❌ 文件不存在: {file_path}")
-            return None
-        
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"❌ 读取文件失败 {file_path}: {e}")
-            return None
+        """读取 JSON 文件（使用健壮的编码处理）"""
+        from utils.file_utils import safe_read_json
+        return safe_read_json(file_path, default=None)
     
     def _load_script_divider_prompt(self) -> Optional[str]:
         """加载剧本拆分提示词模板"""
@@ -1753,19 +1752,14 @@ def create_agent() -> {class_name}:
             logger.info(f"   🎲 OS 裁决: {next_speaker}")
             
         else:
-            # 未知的对话对象，尝试匹配
-            if addressing_target in active_npcs:
-                result["next_speaker_id"] = addressing_target
-            else:
-                # 默认找一个非当前发言者的 NPC
-                candidates = [nid for nid in active_npcs if nid != current_speaker]
-                if candidates:
-                    result["next_speaker_id"] = candidates[0]
-                else:
-                    result["should_pause_for_user"] = True
-                    result["next_speaker_id"] = "user"
-            result["routing_reason"] = f"未知对话对象 {addressing_target}，使用默认逻辑"
-            logger.info(f"   ⚠️ 未知对话对象，使用默认: {result['next_speaker_id']}")
+            # 未知的对话对象（不在场、从未登场等）
+            # 不强制玩家发言，而是让玩家选择：1.结束本幕 2.补充发言
+            result["needs_user_decision"] = True
+            result["unknown_target"] = addressing_target
+            result["should_pause_for_user"] = True
+            result["next_speaker_id"] = "user"
+            result["routing_reason"] = f"未知对话对象 {addressing_target}，需玩家决策"
+            logger.info(f"   ⚠️ 未知对话对象 {addressing_target}，等待玩家决策")
         
         return result
     
@@ -1821,6 +1815,7 @@ def create_agent() -> {class_name}:
         
         # 如果不是 everyone，使用简单路由
         if addressing_target != "everyone":
+            logger.debug(f"🧠 简单路由: 演员指定对象 '{addressing_target}'")
             return self.route_dialogue(
                 actor_response,
                 list(active_npcs.keys()),
@@ -1887,6 +1882,10 @@ def create_agent() -> {class_name}:
             result = self._parse_routing_response(response, list(active_npcs.keys()))
             
             logger.info(f"✅ LLM 路由决策: {result.get('next_speaker_id')}")
+            
+            # 记录路由思考过程（仅在 debug 模式下显示，不干扰终端输出）
+            logger.debug(f"🧠 路由思考: {result.get('routing_reason')}")
+            
             return result
             
         except Exception as e:
@@ -1903,7 +1902,17 @@ def create_agent() -> {class_name}:
         response: str,
         active_npcs: List[str]
     ) -> Dict[str, Any]:
-        """解析 LLM 路由响应"""
+        """
+        解析 LLM 路由响应
+        
+        Args:
+            response: LLM 返回的原始响应
+            active_npcs: 在场 NPC 的 ID 列表
+            
+        Returns:
+            路由决策结果
+        """
+        # 清理响应中的代码块标记
         result = response.strip()
         if result.startswith("```json"):
             result = result[7:]
@@ -1915,13 +1924,33 @@ def create_agent() -> {class_name}:
         
         try:
             data = json.loads(result)
+            next_speaker = data.get("next_speaker_id", "")
+            
+            # 验证 next_speaker_id 是否有效
+            # 有效的ID必须是：1) 在场NPC之一，或 2) 特殊值"user"
+            valid_speakers = set(active_npcs) | {"user"}
+            
+            if next_speaker not in valid_speakers:
+                logger.warning(
+                    f"⚠️ LLM 返回无效的发言者 '{next_speaker}'，"
+                    f"不在有效列表 {valid_speakers} 中，使用默认"
+                )
+                next_speaker = active_npcs[0] if active_npcs else "user"
+            
+            # 如果next_speaker为空，使用默认值
+            if not next_speaker:
+                next_speaker = active_npcs[0] if active_npcs else "user"
+            
             return {
-                "next_speaker_id": data.get("next_speaker_id", active_npcs[0] if active_npcs else "user"),
+                "next_speaker_id": next_speaker,
                 "should_pause_for_user": data.get("should_pause_for_user", False),
                 "is_scene_finished": data.get("is_scene_finished", False),
                 "routing_reason": data.get("analysis", "LLM 裁决")
             }
-        except json.JSONDecodeError:
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ LLM 路由响应解析失败: {e}")
+            logger.debug(f"原始响应: {result}")
             # 解析失败，使用默认
             return {
                 "next_speaker_id": active_npcs[0] if active_npcs else "user",
@@ -2044,6 +2073,27 @@ def create_agent() -> {class_name}:
         
         logger.info(f"👥 在场角色: {[active_npc_info[nid]['name'] for nid in active_npcs]}")
         
+        # 读取玩家信息（从 genesis.json）
+        player_info = None
+        genesis_file = runtime_dir / "genesis.json"
+        if genesis_file.exists():
+            try:
+                with open(genesis_file, "r", encoding="utf-8") as f:
+                    genesis_data = json.load(f)
+                for char in genesis_data.get("characters", []):
+                    if char.get("is_player"):
+                        player_info = {
+                            "id": char.get("id", "user"),
+                            "name": char.get("name", "玩家"),
+                            "is_player": True
+                        }
+                        break
+            except Exception as e:
+                logger.warning(f"⚠️ 读取genesis.json获取玩家信息失败: {e}")
+        
+        if player_info:
+            logger.info(f"👤 玩家角色: {player_info['name']} ({player_info['id']})")
+        
         # 选择第一个发言者
         current_speaker_id = active_npcs[0]
         
@@ -2051,18 +2101,33 @@ def create_agent() -> {class_name}:
         scene_finished = False
         dialogue_history = []
         
+        # 重置未知对象决策标志
+        self._pending_unknown_target_decision = False
+        
         # 记录每个角色在当前场景中的发言次数
         actor_turn_counts: Dict[str, int] = {npc_id: 0 for npc_id in active_npcs}
         
         logger.info(f"🎬 场景开始！第一位发言者: {active_npc_info[current_speaker_id]['name']}")
         
+        # 读取当前剧本内容
+        script_content = ""
+        script_file = runtime_dir / "plot" / "current_script.json"
+        if script_file.exists():
+            try:
+                with open(script_file, "r", encoding="utf-8") as f:
+                    script_data_json = json.load(f)
+                    script_content = script_data_json.get("content", "")
+            except Exception as e:
+                logger.warning(f"⚠️ 读取剧本文件失败: {e}")
+
         # 调用屏幕回调：场景开始
         if screen_callback:
             screen_callback("scene_start", {
                 "scene_id": current_scene_id,
                 "location": scene_data.get("location_name", ""),
                 "description": scene_data.get("scene_description", ""),
-                "characters": [active_npc_info[nid]['name'] for nid in active_npcs]
+                "characters": [active_npc_info[nid]['name'] for nid in active_npcs],
+                "script_content": script_content
             })
         
         while turn_count < max_turns and not scene_finished:
@@ -2072,6 +2137,30 @@ def create_agent() -> {class_name}:
             
             # 处理玩家输入
             if current_speaker_id == "user":
+                # 检查是否是因为未知对象需要玩家决策
+                if self._pending_unknown_target_decision:
+                    self._pending_unknown_target_decision = False
+                    logger.info("⚠️ 检测到未知对话对象，需玩家选择...")
+                    
+                    if user_input_callback:
+                        choice_prompt = (
+                            "\n─────────────────────────────────────────────\n"
+                            "⚠️ 角色尝试与未知/不在场对象对话\n"
+                            "请选择：\n"
+                            "  1. 结束本幕，开启下一幕\n"
+                            "  2. 玩家补充发言\n"
+                            "─────────────────────────────────────────────\n"
+                            "请输入 1 或 2: "
+                        )
+                        user_choice = user_input_callback(choice_prompt)
+                        
+                        if user_choice.strip() == "1":
+                            # 用户选择结束本幕
+                            scene_finished = True
+                            logger.info("🏁 玩家选择结束本幕")
+                            break
+                        # 否则继续原有逻辑，让玩家补充发言
+                
                 logger.info("⏸️ 等待玩家输入...")
                 
                 if user_input_callback:
@@ -2120,8 +2209,31 @@ def create_agent() -> {class_name}:
             
             logger.info(f"🎭 {speaker_name} ({current_speaker_id}) 正在演绎...")
             
+            # 构建场景上下文，包含在场角色
+            # 先添加玩家信息（并标记为玩家角色）
+            present_chars_for_ctx = []
+            if player_info:
+                present_chars_for_ctx.append({
+                    "id": player_info["id"],
+                    "name": player_info["name"],
+                    "is_player": True
+                })
+            # 再添加 NPC
+            for nid in active_npcs:
+                present_chars_for_ctx.append({
+                    "id": nid,
+                    "name": active_npc_info[nid]["name"],
+                    "is_player": False
+                })
+            
+            scene_ctx = {
+                "script": current_agent.current_script,
+                "scene_memory": scene_memory,
+                "present_characters": present_chars_for_ctx
+            }
+            
             # 调用 NPC 演绎
-            actor_response = current_agent.react()
+            actor_response = current_agent.react(scene_context=scene_ctx)
             
             # 记录对话历史
             dialogue_history.append({
@@ -2204,6 +2316,9 @@ def create_agent() -> {class_name}:
             
             if routing_result.get("should_pause_for_user"):
                 current_speaker_id = "user"
+                # 如果是因为未知对象需要决策，设置标志
+                if routing_result.get("needs_user_decision"):
+                    self._pending_unknown_target_decision = True
             elif next_speaker:
                 current_speaker_id = next_speaker
             else:
@@ -2735,15 +2850,27 @@ def create_agent() -> {class_name}:
         # 获取已初始化的角色列表（用于判断首次登场）
         initialized_chars = set(self.get_initialized_characters())
         
-        # 从 genesis.json 获取角色名称映射
+        # 从 genesis.json 获取角色名称映射和玩家信息
         genesis_file = runtime_dir / "genesis.json"
         char_name_map = {}  # {npc_id: name}
+        player_info = None  # 玩家信息
+        
         if genesis_file.exists():
             try:
                 with open(genesis_file, "r", encoding="utf-8") as f:
                     genesis_data = json.load(f)
                 for char in genesis_data.get("characters", []):
-                    char_name_map[char.get("id")] = char.get("name", char.get("id"))
+                    char_id = char.get("id")
+                    char_name = char.get("name", char_id)
+                    char_name_map[char_id] = char_name
+                    
+                    # 识别玩家
+                    if char.get("is_player"):
+                        player_info = {
+                            "id": char_id,
+                            "name": char_name,
+                            "first_appearance": False  # 玩家始终视为非首次登场
+                        }
             except Exception as e:
                 logger.warning(f"⚠️ 读取genesis.json失败: {e}")
         
@@ -2798,6 +2925,20 @@ def create_agent() -> {class_name}:
                     "first_appearance": is_first
                 })
                 logger.info(f"      🔍 发现角色: {char_name} ({char_id}) [首次: {is_first}]")
+        
+        # ========== 策略3：强制注入玩家信息 ==========
+        if player_info:
+            player_id = player_info["id"]
+            # 检查玩家是否已在列表中
+            existing_player = next((c for c in present_characters if c["id"] == player_id), None)
+            
+            if existing_player:
+                # 如果已存在，强制更新 first_appearance 为 False
+                existing_player["first_appearance"] = False
+            else:
+                # 如果不存在，追加玩家信息
+                present_characters.append(player_info)
+                logger.info(f"      👤 注入玩家: {player_info['name']} ({player_id})")
         
         # 更新 current_scene.json
         current_scene = world_state.get("current_scene", {})

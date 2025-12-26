@@ -21,7 +21,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from config.settings import settings
 from utils.logger import setup_logger
 from utils.llm_factory import get_llm
-from agents.offline.creatorGod.utils import parse_json_response
+from utils.json_parser import parse_json_response
 
 # 尝试导入记忆管理器（可选依赖）
 try:
@@ -206,6 +206,44 @@ class NPCAgent:
             lines.append(line)
         return "\n".join(lines)
 
+    def _format_present_characters(self, scene_context: Optional[Dict[str, Any]] = None) -> str:
+        """
+        格式化在场角色列表
+        
+        Args:
+            scene_context: 场景上下文，应包含 present_characters 字段
+            
+        Returns:
+            格式化的在场角色列表字符串
+        """
+        if not scene_context:
+            logger.warning(f"[{self.character_name}] 未接收到 scene_context，无法显示在场角色")
+            return "（未读取到scene_context）"
+        
+        present_chars = scene_context.get("present_characters", [])
+        if not present_chars:
+            logger.warning(f"[{self.character_name}] scene_context 中缺少 present_characters")
+            return "（未读取到从scene_context中解析出的present_characters）"
+        
+        # 格式化为清晰的列表
+        lines = []
+        for char in present_chars:
+            if isinstance(char, dict):
+                char_id = char.get("id", "")
+                char_name = char.get("name", char_id)
+                is_player = char.get("is_player", False)
+                
+                if is_player:
+                    # 特别标记玩家，帮助 NPC 理解玩家身份
+                    lines.append(f"- {char_id}: {char_name} (玩家角色) ← 当你需要对玩家说话时，请使用 \"{char_id}\" 作为 addressing_target")
+                else:
+                    lines.append(f"- {char_id}: {char_name}")
+            else:
+                # 兼容性处理：如果只是字符串ID
+                lines.append(f"- {char}")
+        
+        return "\n".join(lines) if lines else "（在场角色列表为空）"
+
     def _build_prompt(
         self,
         player_input: str,
@@ -282,6 +320,7 @@ class NPCAgent:
             .replace("{outcome_direction}", outcome_direction)
             .replace("{special_notes}", special_notes)
             .replace("{dialogue_history}", self._format_dialogue_history())
+            .replace("{present_characters}", self._format_present_characters(scene_context))
         )
 
         return filled

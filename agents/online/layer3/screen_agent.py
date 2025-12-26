@@ -55,6 +55,9 @@ class ScreenInput(BaseModel):
     
     # 角色外观数据
     characters_in_scene: List[Dict[str, Any]] = []
+    
+    # 完整剧本内容 (用于整幕视觉翻译)
+    script_content: Optional[str] = None
 
 
 class ScreenAgent:
@@ -97,6 +100,7 @@ class ScreenAgent:
         
         # 构建处理链
         self.chain = self._build_chain()
+        self.script_chain = self._build_script_chain()
         
         # 确保 screen 输出目录存在
         if runtime_dir:
@@ -150,6 +154,35 @@ class ScreenAgent:
 {characters_info}
 
 请输出符合 JSON Schema 的视觉渲染数据。""")
+        ])
+        
+        return prompt | self.llm | StrOutputParser()
+
+    def _build_script_chain(self):
+        """构建剧本视觉翻译链"""
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", self.system_prompt),
+            ("human", """请将以下完整剧本转化为该幕的视觉渲染数据：
+
+【场景概要】
+{scene_summary}
+
+【环境信息】
+地点：{location}
+时间：{time_of_day}
+天气：{weather}
+
+【完整剧本】
+{script_content}
+
+【在场角色】
+{characters_info}
+
+请输出符合 JSON Schema 的视觉渲染数据。重点关注：
+1. 场景的整体视觉基调和氛围。
+2. 关键的视觉画面和镜头调度建议。
+3. 环境细节的丰富描述。
+""")
         ])
         
         return prompt | self.llm | StrOutputParser()
@@ -300,6 +333,64 @@ class ScreenAgent:
             }
             
             logger.info("✅ 视觉翻译完成")
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ 视觉翻译失败: {e}", exc_info=True)
+            return self._create_fallback_visual_data(input_data)
+    
+    def translate_script_to_visual(self, input_data: ScreenInput) -> Dict[str, Any]:
+        """
+        将完整剧本翻译为视觉渲染数据（机流输出）
+        
+        Args:
+            input_data: ScreenInput 数据 (必须包含 script_content)
+            
+        Returns:
+            视觉渲染数据 JSON
+        """
+        if not input_data.script_content:
+            logger.warning("⚠️ 缺少 script_content，回退到单轮翻译")
+            return self.translate_to_visual(input_data)
+            
+        logger.info("🎨 执行全剧本视觉翻译...")
+        
+        # 准备输入参数
+        ws = input_data.world_state
+        location = ws.get("location", {})
+        
+        # 格式化角色信息
+        characters_info = self._format_characters_info(input_data.characters_in_scene)
+        
+        try:
+            response = self.script_chain.invoke({
+                "scene_summary": f"{location.get('name', '未知地点')} 的完整一幕",
+                "location": location.get("name", "未知地点") + " - " + location.get("description", ""),
+                "time_of_day": ws.get("time_of_day", ""),
+                "weather": ws.get("weather", ""),
+                "script_content": input_data.script_content,
+                "characters_info": characters_info
+            })
+            
+            # 解析响应
+            visual_data = self._parse_visual_response(response)
+            if not visual_data:
+                logger.warning("⚠️ 视觉解析为空，使用兜底模板")
+                return self._create_fallback_visual_data(input_data)
+            
+            # 添加元数据
+            result = {
+                "meta": {
+                    "world_name": self.world_name,
+                    "scene_id": input_data.scene_id,
+                    "turn_id": 0, # 全剧本翻译通常对应 turn 0
+                    "timestamp": input_data.timestamp or datetime.now().isoformat(),
+                    "source": "full_script"
+                },
+                "visual_render_data": visual_data
+            }
+            
+            logger.info("✅ 全剧本视觉翻译完成")
             return result
             
         except Exception as e:
@@ -482,7 +573,10 @@ class ScreenAgent:
         
         # 2. 视觉翻译（可选）
         if generate_visual:
-            visual_data = self.translate_to_visual(input_data)
+            if input_data.script_content:
+                visual_data = self.translate_script_to_visual(input_data)
+            else:
+                visual_data = self.translate_to_visual(input_data)
             
             # 3. 数据持久化（可选）
             if save_json and visual_data:

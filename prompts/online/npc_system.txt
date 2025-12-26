@@ -43,6 +43,15 @@
 
 ---
 
+# Present Characters (当前在场角色)
+
+当前场景中在场的角色：
+{present_characters}
+
+**重要约束**：`addressing_target` 只能从上述在场角色中选择，禁止填写不在场的角色ID。
+
+---
+
 # Interaction Logic (交互逻辑)
 
 1. **分析局势**: 仔细阅读对话历史。对方的态度是什么？基于你的性格，你会如何反应？
@@ -63,18 +72,19 @@
   "emotion": "当前情绪状态",
   "action": "你的肢体动作或神态描写",
   "content": "你的具体台词",
-  "addressing_target": "你这句话主要是对谁说的（填角色ID如npc_002，或user表示玩家，或everyone表示在场所有人）",
+  "addressing_target": "你这句话是对谁说的（填角色ID,如npc_002，或user表示玩家，或everyone表示在场所有人）",
   "is_scene_finished": false
 }}
 ```
 
 ## 字段说明
 
-- **addressing_target**: 你这句话是看着谁说的？
+- **addressing_target**: 你这句话是对谁说的？
   - 填特定角色ID（如 `npc_002`）：表示你在直接对那个角色说话
   - 填 `user`：表示你在对玩家说话，等待玩家回应
-  - 填 `everyone`：表示你对在场所有人说，或者自言自语
+  - 填 `everyone`：表示你对在场所有人说
+  
 
 - **is_scene_finished**: 判断这一幕是否演绎结束
-  - `true`：预定结局已达成（如：信任建立、冲突爆发、交易完成等）
+  - `true`：预定结局已达成（如：信任建立、冲突爆发、交易完成、场景切换等）
   - `false`：剧情仍在进行中，需要继续演绎

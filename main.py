@@ -349,7 +349,7 @@ def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
             
             # === 2. 初始化首次出场角色 ===
             print(f"\n🎭 初始化出场角色...")
-            init_result = os_agent.initialize_first_appearance_characters(
+            init_result = os_agent.ensure_scene_characters_initialized(
                 runtime_dir=runtime_dir,
                 world_dir=world_dir
             )
@@ -443,6 +443,7 @@ def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
                     current_action=current_action,
                     dialogue_log=data.get("dialogue_log", []),
                     characters_in_scene=characters_in_scene,
+                    script_content=data.get("script_content")
                 )
 
                 # 终端渲染
@@ -464,18 +465,23 @@ def run_game_with_os_agent(runtime_dir: Path, world_dir: Path):
                     print()
                     print(f"{screen_agent.COLORS['CYAN']}--- 第 {scene_id} 幕结束 ---{screen_agent.COLORS['RESET']}")
 
-                # 始终生成视觉 JSON
-                screen_agent.render(
-                    input_data=screen_input,
-                    render_terminal=False,  # 终端输出已处理
-                    generate_visual=True,
-                    save_json=True
-                )
+                # 仅在 scene_start 时生成视觉 JSON
+                if event == "scene_start":
+                    screen_agent.render(
+                        input_data=screen_input,
+                        render_terminal=False,  # 终端输出已处理
+                        generate_visual=True,
+                        save_json=True
+                    )
 
             # 创建玩家输入回调函数
             def real_user_input(prompt: str) -> str:
                 """真实玩家输入"""
                 try:
+                    # 如果提示词包含换行符（说明是菜单或长文本），先打印
+                    if prompt and "\n" in prompt:
+                        print(prompt)
+                    
                     user_input = input(f"\n👤 你的行动 > ").strip()
                     
                     # 处理命令
