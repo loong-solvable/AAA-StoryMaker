@@ -1,88 +1,33 @@
+#!/usr/bin/env python3
 """
-运行创世组 CreatorGod 的入口脚本
-三阶段世界构建流程：大中正 → Demiurge → 许劭
-"""
-from agents.offline.genesis_group import create_world
-from config.settings import settings
-from utils.logger import default_logger as logger
+⚠️ 此入口已弃用，请使用 dev.py 替代。
+将在 v1.0.0 版本移除。
 
+旧功能已移动到:
+- dev.py --stage genesis: 创世组
+
+原始实现已备份到 run_creator_god_old.py
+"""
+import sys
 
 def main():
-    """主函数"""
-    print("\n" + "=" * 70)
-    print("🎭 欢迎使用 Infinite Story - 无限故事机")
-    print("=" * 70)
-    print()
-    print("📌 CreatorGod 创世组三阶段构建流程:")
-    print("   1️⃣ 大中正 - 角色普查，识别所有角色并评估重要性")
-    print("   2️⃣ Demiurge - 提取世界观设定（物理法则、社会规则、地点）")
-    print("   3️⃣ 许劭 - 为每个角色创建详细档案（角色卡）")
-    print()
-    print("=" * 70)
-    print()
+    # 直接输出到 stderr 确保用户可见
+    print(
+        "\n"
+        "=" * 60 + "\n"
+        "⚠️  run_creator_god.py 已弃用\n"
+        "   请使用 python dev.py --stage genesis 替代\n"
+        "   此入口将在 v1.0.0 版本移除\n"
+        "=" * 60 + "\n",
+        file=sys.stderr
+    )
     
-    # 验证配置
-    try:
-        logger.info("🔍 正在验证配置...")
-        settings.validate()
-        logger.info("✅ 配置验证通过")
-    except ValueError as e:
-        logger.error(str(e))
-        print("\n" + "=" * 70)
-        print("❌ 配置验证失败！")
-        print("=" * 70)
-        print()
-        print("请按以下步骤配置：")
-        print("1. 复制 .env.example 为 .env")
-        print("2. 编辑 .env 文件，填入你的API密钥")
-        print("3. 保存后重新运行本脚本")
-        print()
-        return
+    # 转换参数并调用 dev.py
+    args = ["--stage", "genesis"] + sys.argv[1:]
     
-    # 确保目录存在
-    settings.ensure_directories()
-    
-    # 运行创世组
-    try:
-        world_dir = create_world("example_novel.txt")
-        
-        print("\n" + "=" * 70)
-        print("🎉 世界构建成功！")
-        print("=" * 70)
-        print()
-        print(f"📁 世界数据已生成: {world_dir}")
-        print()
-        print("📖 生成的文件：")
-        print(f"   - world_setting.json      # Demiurge生成的世界观设定")
-        print(f"   - characters_list.json    # 大中正生成的角色列表")
-        print(f"   - characters/             # 许劭生成的角色详细档案")
-        print()
-        print(f"📋 运行日志: {settings.LOGS_DIR}/genesis_group.log")
-        print()
-        print("=" * 70)
-        
-    except FileNotFoundError as e:
-        logger.error(f"❌ 文件未找到: {e}")
-        print("\n" + "=" * 70)
-        print("❌ 运行失败：找不到示例小说文件")
-        print("=" * 70)
-        print()
-        print(f"请确保文件存在: {settings.NOVELS_DIR}/example_novel.txt")
-        print()
-        
-    except Exception as e:
-        logger.error(f"❌ 运行过程中发生错误: {e}", exc_info=True)
-        print("\n" + "=" * 70)
-        print("❌ 运行失败")
-        print("=" * 70)
-        print()
-        print(f"错误信息: {e}")
-        print()
-        print("请查看日志文件获取详细信息:")
-        print(f"   {settings.LOGS_DIR}/genesis_group.log")
-        print()
+    from dev import main as dev_main
+    dev_main(args)
 
 
 if __name__ == "__main__":
     main()
-

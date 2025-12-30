@@ -1,0 +1,22 @@
+{
+  "stage1_done": true,
+  "stage2_done": true,
+  "stage3_done": true,
+  "stage3_completed_characters": [
+    "npc_001",
+    "npc_002",
+    "npc_003",
+    "npc_004",
+    "npc_005",
+    "npc_006",
+    "npc_007",
+    "npc_008",
+    "npc_009",
+    "npc_010",
+    "npc_011"
+  ],
+  "stage3_failed_characters": [],
+  "last_updated": "2025-12-29T10:20:15.333157",
+  "novel_filename": "example_novel.txt",
+  "world_name": "江城市"
+}
