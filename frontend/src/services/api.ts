@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000';
+// 支持环境变量配置API地址，默认localhost:8000
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export interface GameState {
   turn: number;
