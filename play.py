@@ -57,12 +57,15 @@ def print_main_menu():
 
 def print_help():
     """打印帮助信息"""
-    print("\n可用命令:")
-    print("  /help    - 显示此帮助")
-    print("  /status  - 查看游戏状态")
-    print("  /save    - 保存游戏")
-    print("  /quit    - 退出游戏")
-    print("  其他输入 - 作为游戏中的行动\n")
+    print()
+    print("  ┌─────────────────────────────────┐")
+    print("  │  /help   - 显示帮助             │")
+    print("  │  /status - 查看状态             │")
+    print("  │  /save   - 保存进度             │")
+    print("  │  /quit   - 退出游戏             │")
+    print("  │  直接输入 - 进行行动            │")
+    print("  └─────────────────────────────────┘")
+    print()
 
 
 def select_world(world_manager: WorldManager) -> Optional[WorldInfo]:
@@ -70,10 +73,10 @@ def select_world(world_manager: WorldManager) -> Optional[WorldInfo]:
     worlds = world_manager.list_available_worlds()
     
     if not worlds:
-        print("[ERROR] No world data found")
+        print("  暂无可用的故事世界")
         print()
-        print("Please run Genesis Group first:")
-        print("  python dev.py --stage genesis --novel <novel_file>")
+        print("  请先运行创世组构建世界:")
+        print("  python dev.py --stage genesis --novel <小说文件>")
         return None
     
     print("-" * 64)
@@ -104,7 +107,7 @@ def select_world(world_manager: WorldManager) -> Optional[WorldInfo]:
                 if 0 <= idx < len(worlds):
                     return worlds[idx]
             
-            print("  [ERROR] Invalid choice, please try again")
+            print("  (请输入有效的数字)")
             
         except (KeyboardInterrupt, EOFError):
             print("\n  Cancelled")
@@ -146,7 +149,7 @@ def select_runtime(world_manager: WorldManager, world_name: str) -> Optional[Run
                 if 0 <= idx < len(runtimes[:5]):
                     return runtimes[idx]
             
-            print("  [ERROR] Invalid choice")
+            print("  (请输入有效的数字)")
             
         except (KeyboardInterrupt, EOFError):
             print("\n  Cancelled")
@@ -158,8 +161,8 @@ def initialize_new_game(world_name: str, player_profile: PlayerProfile) -> Optio
     from initial_Illuminati import IlluminatiInitializer
     
     print()
-    print("  [LOADING] Initializing game world...")
-    print("     This may take a few minutes (LLM generating initial plot)...")
+    print("  ⏳ 正在构建故事世界...")
+    print("     (首次加载可能需要几分钟)")
     print()
     
     try:
@@ -172,14 +175,12 @@ def initialize_new_game(world_name: str, player_profile: PlayerProfile) -> Optio
         with open(genesis_path, "w", encoding="utf-8") as f:
             json.dump(initializer.genesis_data, f, ensure_ascii=False, indent=2)
         
-        print()
-        print("  [OK] Game world initialized!")
-        print(f"     Runtime directory: {runtime_dir}")
+        print("  ✓ 世界构建完成")
         
         return runtime_dir
         
     except Exception as e:
-        print(f"\n  {handle_exception(e, 'Initialize game')}")
+        print(f"\n  ✗ 初始化失败: {e}")
         return None
 
 
@@ -197,7 +198,7 @@ def run_game(runtime_dir: Path, world_dir: Path):
     from utils.progress_tracker import ProgressTracker
     
     print()
-    print("  [LOADING] Loading game...")
+    print("  ⏳ 载入存档...")
     
     try:
         # 初始化 OS Agent
@@ -255,9 +256,7 @@ def run_game(runtime_dir: Path, world_dir: Path):
                             print_help()
                             continue  # 重新获取输入
                         elif command == "/status":
-                            print(f"\n  [STATUS]")
-                            print(f"     Scene: {current_scene_id}")
-                            print(f"     Location: {world_name}")
+                            print(f"\n  📍 第 {current_scene_id} 幕 · {world_name}")
                             continue
                         elif command == "/save":
                             progress_tracker.save_progress(
@@ -268,14 +267,14 @@ def run_game(runtime_dir: Path, world_dir: Path):
                                 engine_type="osagent",
                                 can_switch_engine=False
                             )
-                            print(f"\n  [SAVED] Game saved")
+                            print(f"\n  💾 进度已保存")
                             continue
                         elif command == "/quit":
                             raise KeyboardInterrupt("用户退出")
                         elif command == "/skip":
                             return "__SKIP_SCENE__"  # 跳过当前幕
                         else:
-                            print(f"  [ERROR] Unknown command: {command}")
+                            print(f"  (未知命令，输入 /help 查看帮助)")
                             continue
                     
                     return user_input
@@ -283,7 +282,7 @@ def run_game(runtime_dir: Path, world_dir: Path):
                 except EOFError:
                     raise KeyboardInterrupt("EOF")
         
-        print("  [OK] Game loaded!")
+        print("  ✓ 载入完成\n")
         print_help()
         
         # === 主游戏循环（按幕循环） ===
@@ -291,17 +290,17 @@ def run_game(runtime_dir: Path, world_dir: Path):
         max_loops = 10  # 最多 10 幕
         
         while loop_count < max_loops:
-            # 1. 初始化 NPC
+            # 1. 初始化 NPC（静默）
             os_agent.ensure_scene_characters_initialized(
                 runtime_dir=runtime_dir,
                 world_dir=world_dir
             )
             
-            # 2. 分发剧本给 NPC
+            # 2. 分发剧本给 NPC（静默）
             try:
                 os_agent.dispatch_script_to_actors(runtime_dir)
-            except Exception as e:
-                print(f"  [WARNING] Script dispatch: {e}")
+            except Exception:
+                pass  # 静默处理，不打扰玩家
             
             # 3. 运行场景循环（NPC 先说，然后玩家）
             try:
@@ -313,12 +312,11 @@ def run_game(runtime_dir: Path, world_dir: Path):
                     screen_callback=screen_callback
                 )
                 
-                print(f"\n  [INFO] Scene {current_scene_id} completed")
-                print(f"     Turns: {loop_result.get('total_turns', 0)}")
+                # 场景完成时不显示技术信息
                 
             except KeyboardInterrupt:
-                print("\n\n  [WARNING] Exit requested")
-                confirm = input("  Save and quit? (y/n) > ").lower()
+                print("\n")
+                confirm = input("  退出游戏？(y/n) > ").lower()
                 if confirm == 'y':
                     progress_tracker.save_progress(
                         runtime_dir=runtime_dir,
@@ -328,17 +326,17 @@ def run_game(runtime_dir: Path, world_dir: Path):
                         engine_type="osagent",
                         can_switch_engine=False
                     )
-                    print("\n  [SAVED] Game auto-saved")
-                    print("  Goodbye!")
+                    print("\n  💾 进度已自动保存")
+                    print("  再见！")
                     return
                 continue
             
             # 4. 幕间处理
             if loop_result.get("scene_finished", False):
                 print()
-                print("-" * 60)
-                print(f"  Scene transition: Act {current_scene_id} -> Act {current_scene_id + 1}")
-                print("-" * 60)
+                print("  " + "═" * 50)
+                print(f"         ✨ 第 {current_scene_id} 幕 结束 ✨")
+                print("  " + "═" * 50)
                 
                 scene_memory = create_scene_memory(runtime_dir, scene_id=current_scene_id)
                 
@@ -357,27 +355,29 @@ def run_game(runtime_dir: Path, world_dir: Path):
                         next_scene_id=next_scene_id,
                         turn_count=0,
                         engine_type="osagent",
-                        can_switch_engine=True  # 幕间允许切换引擎
+                        can_switch_engine=True
                     )
                     current_scene_id = next_scene_id
                     
-                except Exception as e:
-                    print(f"  [WARNING] Scene transition error: {e}")
-                    current_scene_id += 1
+                except Exception:
+                    current_scene_id += 1  # 静默处理错误
                 
                 # 询问是否继续
                 print()
-                choice = input("  Continue to next scene? (y/n, default y) > ").strip().lower()
+                choice = input("  继续下一幕？(回车继续 / n退出) > ").strip().lower()
                 if choice == 'n':
-                    print("\n  Goodbye!")
+                    print("\n  再见！")
                     return
             
             loop_count += 1
         
-        print("\n  [END] Story completed!")
+        print()
+        print("  " + "═" * 50)
+        print("         🎭 故事结束 🎭")
+        print("  " + "═" * 50)
         
     except Exception as e:
-        print(f"\n  {handle_exception(e, 'Game run')}")
+        print(f"\n  ✗ 发生错误: {e}")
 
 
 def main(argv: List[str] = None):
@@ -396,7 +396,7 @@ def main(argv: List[str] = None):
             choice = input("  > ").strip()
             
             if choice == "0":
-                print("\n  Goodbye!")
+                print("\n  再见！")
                 break
             
             elif choice == "1":
@@ -428,8 +428,7 @@ def main(argv: List[str] = None):
                 
                 runtimes = world_manager.list_runtimes(world.name)
                 if not runtimes:
-                    print("\n  [ERROR] No save files found for this world")
-                    print("     Please start a new game first")
+                    print("\n  该世界暂无存档，请先开始新游戏")
                     continue
                 
                 runtime = select_runtime(world_manager, world.name)
@@ -446,13 +445,13 @@ def main(argv: List[str] = None):
                 run_game(runtime_dir, world.world_dir)
             
             else:
-                print("\n  [ERROR] Invalid choice")
+                print("\n  (请输入有效的选项)")
                 
         except (KeyboardInterrupt, EOFError):
-            print("\n\n  Goodbye!")
+            print("\n\n  再见！")
             break
         except Exception as e:
-            print(f"\n  {handle_exception(e, '主菜单')}")
+            print(f"\n  ✗ 发生错误: {e}")
 
 
 if __name__ == "__main__":
