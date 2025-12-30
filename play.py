@@ -184,84 +184,198 @@ def initialize_new_game(world_name: str, player_profile: PlayerProfile) -> Optio
 
 
 def run_game(runtime_dir: Path, world_dir: Path):
-    """运行游戏主循环"""
-    from cli.osagent_session import OSAgentSession
+    """
+    运行游戏主循环
+    
+    重要：使用 run_scene_loop 的原生回调机制，而不是分离的 process_turn
+    这样 NPC 会先建立场景，然后等待玩家输入
+    """
+    import importlib.util
+    from pathlib import Path
+    from utils.scene_memory import create_scene_memory
+    from agents.online.layer3.screen_agent import ScreenAgent
+    from utils.progress_tracker import ProgressTracker
     
     print()
     print("  [LOADING] Loading game...")
     
     try:
-        # play.py 固定使用 OS Agent
-        session = OSAgentSession(runtime_dir, world_dir)
+        # 初始化 OS Agent
+        os_file = Path(__file__).parent / "agents" / "online" / "layer1" / "os_agent.py"
+        spec = importlib.util.spec_from_file_location("os_agent", os_file)
+        os_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(os_module)
         
-        # 检查是否可以续玩
-        if session.can_resume():
-            print(session.resume())
+        genesis_path = runtime_dir / "genesis.json"
+        if genesis_path.exists():
+            os_agent = os_module.OperatingSystem(genesis_path)
         else:
-            print(session.start())
+            os_agent = os_module.OperatingSystem()
         
+        # 初始化 Screen Agent
+        world_name = world_dir.name if world_dir else ""
+        screen_agent = ScreenAgent(runtime_dir=runtime_dir, world_name=world_name)
+        
+        # 初始化进度追踪
+        progress_tracker = ProgressTracker()
+        progress = progress_tracker.load_progress(runtime_dir)
+        current_scene_id = progress.current_scene_id
+        
+        # Screen 回调
+        def screen_callback(event: str, data: dict):
+            if event == "scene_start":
+                screen_agent.render_scene_header(
+                    scene_id=data.get("scene_id", current_scene_id),
+                    location_name=data.get("location", ""),
+                    description=data.get("description", "")
+                )
+            elif event in {"dialogue", "player_input"}:
+                screen_agent.render_single_dialogue(
+                    speaker=data.get("speaker", ""),
+                    content=data.get("content", ""),
+                    action=data.get("action", ""),
+                    emotion=data.get("emotion", ""),
+                    is_player=(event == "player_input"),
+                )
+        
+        # 玩家输入回调（关键！处理命令 + 返回输入）
+        def get_user_input(prompt: str) -> str:
+            """获取玩家输入，处理命令"""
+            while True:
+                try:
+                    user_input = input(f"\n  Your action > ").strip()
+                    
+                    if not user_input:
+                        return "look around"  # 默认动作
+                    
+                    # 处理命令
+                    if user_input.startswith("/"):
+                        command = user_input.lower()
+                        if command == "/help":
+                            print_help()
+                            continue  # 重新获取输入
+                        elif command == "/status":
+                            print(f"\n  [STATUS]")
+                            print(f"     Scene: {current_scene_id}")
+                            print(f"     Location: {world_name}")
+                            continue
+                        elif command == "/save":
+                            progress_tracker.save_progress(
+                                runtime_dir=runtime_dir,
+                                current_scene_id=current_scene_id,
+                                next_scene_id=current_scene_id + 1,
+                                turn_count=0,
+                                engine_type="osagent",
+                                can_switch_engine=False
+                            )
+                            print(f"\n  [SAVED] Game saved")
+                            continue
+                        elif command == "/quit":
+                            raise KeyboardInterrupt("用户退出")
+                        elif command == "/skip":
+                            return "__SKIP_SCENE__"  # 跳过当前幕
+                        else:
+                            print(f"  [ERROR] Unknown command: {command}")
+                            continue
+                    
+                    return user_input
+                    
+                except EOFError:
+                    raise KeyboardInterrupt("EOF")
+        
+        print("  [OK] Game loaded!")
         print_help()
         
-        # 游戏主循环
-        while True:
+        # === 主游戏循环（按幕循环） ===
+        loop_count = 0
+        max_loops = 10  # 最多 10 幕
+        
+        while loop_count < max_loops:
+            # 1. 初始化 NPC
+            os_agent.ensure_scene_characters_initialized(
+                runtime_dir=runtime_dir,
+                world_dir=world_dir
+            )
+            
+            # 2. 分发剧本给 NPC
             try:
-                user_input = input("\n  Your action > ").strip()
+                os_agent.dispatch_script_to_actors(runtime_dir)
+            except Exception as e:
+                print(f"  [WARNING] Script dispatch: {e}")
+            
+            # 3. 运行场景循环（NPC 先说，然后玩家）
+            try:
+                loop_result = os_agent.run_scene_loop(
+                    runtime_dir=runtime_dir,
+                    world_dir=world_dir,
+                    max_turns=15,
+                    user_input_callback=get_user_input,
+                    screen_callback=screen_callback
+                )
                 
-                if not user_input:
-                    continue
-                
-                # 处理命令
-                if user_input.startswith("/"):
-                    command = user_input.lower()
-                    if command == "/help":
-                        print_help()
-                        continue
-                    elif command == "/status":
-                        status = session.get_status()
-                        print(f"\n  [STATUS]")
-                        print(f"     Scene: {status.scene_id}")
-                        print(f"     Turn: {status.turn_id}")
-                        print(f"     Location: {status.location}")
-                        continue
-                    elif command == "/save":
-                        save_path = session.save("manual_save", at_boundary=False)
-                        print(f"\n  [SAVED] Game saved to: {save_path}")
-                        continue
-                    elif command == "/quit":
-                        session.save("autosave", at_boundary=False)
-                        print("\n  [SAVED] Game auto-saved")
-                        print("  Goodbye!")
-                        return
-                    else:
-                        print(f"  [ERROR] Unknown command: {command}")
-                        continue
-                
-                # 处理游戏回合
-                result = session.process_turn(user_input)
-                
-                if result.text:
-                    print(f"\n{result.text}")
-                
-                if result.error:
-                    print(f"\n  [WARNING] {result.error}")
-                
-                # 显示行动建议
-                suggestions = session.get_action_suggestions()
-                if suggestions:
-                    print("\n  [SUGGESTIONS]:")
-                    for i, suggestion in enumerate(suggestions, 1):
-                        print(f"     [{i}] {suggestion}")
+                print(f"\n  [INFO] Scene {current_scene_id} completed")
+                print(f"     Turns: {loop_result.get('total_turns', 0)}")
                 
             except KeyboardInterrupt:
                 print("\n\n  [WARNING] Exit requested")
-                confirm = input("  Are you sure? (y/n) > ").lower()
+                confirm = input("  Save and quit? (y/n) > ").lower()
                 if confirm == 'y':
-                    session.save("autosave", at_boundary=False)
+                    progress_tracker.save_progress(
+                        runtime_dir=runtime_dir,
+                        current_scene_id=current_scene_id,
+                        next_scene_id=current_scene_id + 1,
+                        turn_count=0,
+                        engine_type="osagent",
+                        can_switch_engine=False
+                    )
                     print("\n  [SAVED] Game auto-saved")
                     print("  Goodbye!")
                     return
                 continue
+            
+            # 4. 幕间处理
+            if loop_result.get("scene_finished", False):
+                print()
+                print("-" * 60)
+                print(f"  Scene transition: Act {current_scene_id} -> Act {current_scene_id + 1}")
+                print("-" * 60)
                 
+                scene_memory = create_scene_memory(runtime_dir, scene_id=current_scene_id)
+                
+                try:
+                    transition_result = os_agent.process_scene_transition(
+                        runtime_dir=runtime_dir,
+                        world_dir=world_dir,
+                        scene_memory=scene_memory,
+                        scene_summary=f"Scene {current_scene_id} completed."
+                    )
+                    
+                    next_scene_id = transition_result.get("next_scene_id") or (current_scene_id + 1)
+                    progress_tracker.save_progress(
+                        runtime_dir=runtime_dir,
+                        current_scene_id=current_scene_id,
+                        next_scene_id=next_scene_id,
+                        turn_count=0,
+                        engine_type="osagent",
+                        can_switch_engine=True  # 幕间允许切换引擎
+                    )
+                    current_scene_id = next_scene_id
+                    
+                except Exception as e:
+                    print(f"  [WARNING] Scene transition error: {e}")
+                    current_scene_id += 1
+                
+                # 询问是否继续
+                print()
+                choice = input("  Continue to next scene? (y/n, default y) > ").strip().lower()
+                if choice == 'n':
+                    print("\n  Goodbye!")
+                    return
+            
+            loop_count += 1
+        
+        print("\n  [END] Story completed!")
+        
     except Exception as e:
         print(f"\n  {handle_exception(e, 'Game run')}")
 
