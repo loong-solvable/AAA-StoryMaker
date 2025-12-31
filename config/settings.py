@@ -3,14 +3,26 @@
 负责加载环境变量和项目配置
 """
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-# 项目根目录
-PROJECT_ROOT = Path(__file__).parent.parent
+# Determine if running in a frozen state (PyInstaller)
+if getattr(sys, 'frozen', False):
+    # Bundled resources (code, prompts) are in _MEIPASS
+    RESOURCE_ROOT = Path(sys._MEIPASS)
+    # User data (logs, .env, saves) should be next to the executable
+    USER_DATA_ROOT = Path(sys.executable).parent
+else:
+    # Normal development mode
+    RESOURCE_ROOT = Path(__file__).parent.parent
+    USER_DATA_ROOT = RESOURCE_ROOT
 
-# 加载环境变量
-load_dotenv(PROJECT_ROOT / ".env")
+# 项目根目录 (保持兼容性，指向资源目录)
+PROJECT_ROOT = RESOURCE_ROOT
+
+# 加载环境变量 (从用户数据目录加载)
+load_dotenv(USER_DATA_ROOT / ".env")
 
 
 class Settings:
@@ -46,11 +58,12 @@ class Settings:
     LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY", "")
     
     # 项目路径
-    DATA_DIR = PROJECT_ROOT / "data"
+    # 项目路径
+    DATA_DIR = USER_DATA_ROOT / "data"
     NOVELS_DIR = DATA_DIR / "novels"
     GENESIS_DIR = DATA_DIR / "genesis"
-    LOGS_DIR = PROJECT_ROOT / "logs"
-    PROMPTS_DIR = PROJECT_ROOT / "prompts"
+    LOGS_DIR = USER_DATA_ROOT / "logs"
+    PROMPTS_DIR = RESOURCE_ROOT / "prompts"
 
     # 长期记忆存储（可选）
     MEMORY_MONGO_URI = os.getenv("MEMORY_MONGO_URI", "")

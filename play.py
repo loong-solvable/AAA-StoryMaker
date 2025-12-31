@@ -51,6 +51,7 @@ def print_main_menu():
     print()
     print("    [1] New Story")
     print("    [2] Continue Story")
+    print("    [3] Build New World from Novel")
     print("    [0] Exit")
     print()
 
@@ -75,8 +76,7 @@ def select_world(world_manager: WorldManager) -> Optional[WorldInfo]:
     if not worlds:
         print("  暂无可用的故事世界")
         print()
-        print("  请先运行创世组构建世界:")
-        print("  python dev.py --stage genesis --novel <小说文件>")
+        print("  请返回主菜单选择 [3] 从小说构建新世界")
         return None
     
     print("-" * 64)
@@ -380,6 +380,90 @@ def run_game(runtime_dir: Path, world_dir: Path):
         print(f"\n  ✗ 发生错误: {e}")
 
 
+def list_novels() -> list:
+    """列出所有小说文件"""
+    novels_dir = settings.DATA_DIR / "novels"
+    if not novels_dir.exists():
+        novels_dir.mkdir(parents=True, exist_ok=True)
+        print(f"  [提示] 已创建小说目录: {novels_dir}")
+        print(f"  请将 .txt 小说文件放入此目录")
+        return []
+    
+    novels = list(novels_dir.glob("*.txt"))
+    if not novels:
+        print("  暂无小说文件")
+        print(f"  请将 .txt 小说文件放入: {novels_dir}")
+        return []
+    
+    print("-" * 64)
+    print("  Available Novels")
+    print("-" * 64)
+    print()
+    for i, novel in enumerate(novels, 1):
+        size = novel.stat().st_size / 1024  # KB
+        print(f"    [{i}] {novel.name} ({size:.1f} KB)")
+    print()
+    print("  [0] <- Back to main menu")
+    print()
+    
+    return novels
+
+
+def build_world_from_novel() -> bool:
+    """从小说构建新世界"""
+    novels = list_novels()
+    if not novels:
+        return False
+    
+    while True:
+        try:
+            choice = input("  Select novel > ").strip()
+            
+            if choice == "0":
+                return False
+            
+            if choice.isdigit():
+                idx = int(choice) - 1
+                if 0 <= idx < len(novels):
+                    selected_novel = novels[idx]
+                    break
+            
+            print("  (请输入有效的数字)")
+            
+        except (KeyboardInterrupt, EOFError):
+            print("\n  Cancelled")
+            return False
+    
+    print()
+    print(f"  已选择: {selected_novel.name}")
+    print()
+    print("  ⏳ 正在构建世界...")
+    print("     (这可能需要几分钟，请耐心等待)")
+    print()
+    
+    try:
+        # Import WorldBuilder from run_world_builder_old
+        from run_world_builder_old import WorldBuilder
+        
+        builder = WorldBuilder(
+            novel_filename=selected_novel.name,
+            world_name=None,  # Auto-generate from novel name
+            parallel=True
+        )
+        world_dir = builder.run()
+        
+        print()
+        print(f"  ✓ 世界构建完成！")
+        print(f"     路径: {world_dir}")
+        print()
+        print("  现在可以返回主菜单选择 [1] New Story 开始游戏")
+        return True
+        
+    except Exception as e:
+        print(f"\n  ✗ 构建失败: {e}")
+        return False
+
+
 def main(argv: List[str] = None):
     """主函数"""
     # 设置玩家模式日志
@@ -443,6 +527,10 @@ def main(argv: List[str] = None):
                 
                 # 运行游戏
                 run_game(runtime_dir, world.world_dir)
+            
+            elif choice == "3":
+                # 从小说构建新世界
+                build_world_from_novel()
             
             else:
                 print("\n  (请输入有效的选项)")
