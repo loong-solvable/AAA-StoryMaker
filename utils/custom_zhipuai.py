@@ -27,9 +27,9 @@ class CustomChatZhipuAI(ChatZhipuAI):
     """
     
     # 新增字段：自定义超时配置（秒）
-    request_timeout: float = 600.0  # 默认10分钟
-    
-    def __init__(self, *args, request_timeout: float = 600.0, **kwargs):
+    request_timeout: float = 7200.0  # 默认2小时（支持超长文本处理）
+
+    def __init__(self, *args, request_timeout: float = 7200.0, **kwargs):
         """
         初始化自定义ChatZhipuAI
         
@@ -173,6 +173,8 @@ class CustomChatZhipuAI(ChatZhipuAI):
         except Exception as e:
             logger.error(f"解析流式数据失败: {e}")
             return None
+
+
 
 
 

@@ -87,7 +87,7 @@ class CharacterDetailAgent:
         )
         chain = prompt | self.llm | StrOutputParser()
 
-        response = chain.invoke({"novel_text": novel_text}, config={"timeout": 600})
+        response = chain.invoke({"novel_text": novel_text}, config={"timeout": 7200})
         char_data = parse_json_response(response)
         char_data["importance"] = importance
         return char_data
@@ -141,7 +141,7 @@ class CharacterDetailAgent:
                 
             self.logger.info(f"🤖 处理片段 {i}/{len(chunks)}...")
             try:
-                response = chain.invoke({"novel_text": chunk}, config={"timeout": 600})
+                response = chain.invoke({"novel_text": chunk}, config={"timeout": 7200})
                 chunk_data = parse_json_response(response)
                 
                 # 合并逻辑

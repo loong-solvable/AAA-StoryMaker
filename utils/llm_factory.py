@@ -79,14 +79,14 @@ class LLMFactory:
         # 原始ChatZhipuAI在_generate方法中硬编码: httpx.Client(timeout=60)
         # 导致无法配置更长的超时时间
         
-        logger.info(f"⏱️  使用自定义ChatZhipuAI，配置超时: 600秒 (10分钟)")
+        logger.info(f"⏱️  使用自定义ChatZhipuAI，配置超时: 7200秒 (2小时)")
         
         # 构建参数字典
         params = {
             "model": model_name,
             "temperature": temperature,
             "api_key": settings.ZHIPU_API_KEY,
-            "request_timeout": 600.0,  # 10分钟超时
+            "request_timeout": 7200.0,  # 2小时超时
         }
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
@@ -135,7 +135,7 @@ class LLMFactory:
                 "HTTP-Referer": "https://github.com/AAA-StoryMaker",  # 可选：用于OpenRouter统计
                 "X-Title": "AAA-StoryMaker"  # 可选：应用名称
             },
-            "timeout": 600,  # 10分钟超时
+            "timeout": 7200,  # 2小时超时
         }
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
