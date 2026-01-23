@@ -37,7 +37,7 @@ class TestWorldStateDynamicUpdate:
     
     def log_result(self, test_name: str, passed: bool, message: str = ""):
         """记录测试结果"""
-        status = "✅ PASS" if passed else "❌ FAIL"
+        status = "PASS PASS" if passed else "FAIL FAIL"
         self.results["tests"].append({
             "name": test_name,
             "passed": passed,
@@ -55,23 +55,35 @@ class TestWorldStateDynamicUpdate:
         """测试前准备"""
         try:
             from config.settings import settings
+            import os
+
+            os.environ.setdefault("LLM_PROVIDER", "mock")
             
             # 查找现有的运行时目录
             runtime_base = settings.DATA_DIR / "runtime"
             if runtime_base.exists():
-                for rt_dir in runtime_base.iterdir():
-                    if rt_dir.is_dir() and (rt_dir / "ws" / "world_state.json").exists():
-                        self.runtime_dir = rt_dir
-                        print(f"📂 使用运行时目录: {rt_dir.name}")
-                        break
+                rts = sorted([d for d in runtime_base.iterdir() if d.is_dir() and (d / "ws" / "world_state.json").exists()], key=lambda x: x.stat().st_mtime, reverse=True)
+                if rts:
+                    self.runtime_dir = rts[0]
+                    print(f"[Dir] 使用运行时目录: {self.runtime_dir.name}")
             
             if not self.runtime_dir:
-                print("⚠️ 未找到运行时目录，部分测试将跳过")
-                print("   请先运行: python initial_Illuminati.py")
+                # 自动生成一个新的 runtime，避免依赖手工步骤
+                from initial_Illuminati import get_available_worlds, IlluminatiInitializer
+
+                worlds = get_available_worlds()
+                if worlds:
+                    world_name = worlds[0]
+                    suffix = f"test_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                    initializer = IlluminatiInitializer(world_name, runtime_name=suffix, overwrite_runtime=False)
+                    self.runtime_dir = initializer.run()
+                    print(f"[Dir] 已自动生成运行时目录: {self.runtime_dir.name}")
+                else:
+                    print("WARNING 未找到可用世界数据，跳过 runtime 相关测试")
             
             return True
         except Exception as e:
-            print(f"❌ 准备阶段失败: {e}")
+            print(f"FAIL 准备阶段失败: {e}")
             return False
     
     # ===========================================
@@ -137,9 +149,9 @@ class TestWorldStateDynamicUpdate:
                 scene = ws_data.get("current_scene", {})
                 meta = ws_data.get("meta", {})
                 chars = ws_data.get("characters_present", [])
-                print(f"         📍 当前场景: {scene.get('location_name', 'N/A')}")
-                print(f"         ⏰ 游戏回合: {meta.get('game_turn', 0)}")
-                print(f"         👥 在场角色: {len(chars)}人")
+                print(f"         [Loc] 当前场景: {scene.get('location_name', 'N/A')}")
+                print(f"         [Time] 游戏回合: {meta.get('game_turn', 0)}")
+                print(f"         [Chars] 在场角色: {len(chars)}人")
             
             return has_all
         except Exception as e:
@@ -223,7 +235,7 @@ class TestWorldStateDynamicUpdate:
                 import inspect
                 sig = inspect.signature(WorldStateManager.update_world_state)
                 params = list(sig.parameters.keys())
-                print(f"         📝 方法参数: {params}")
+                print(f"         [Note] 方法参数: {params}")
             
             return has_method
         except Exception as e:
@@ -309,52 +321,24 @@ class TestWorldStateDynamicUpdate:
         """
         测试9: world_state.json 是否有回写机制
         
-        ⚠️ 重要测试：检查代码中是否有更新后回写world_state.json的逻辑
+        检查游戏引擎是否具备回写机制（通过 WorldStateSync 或显式写文件）。
         """
         try:
-            import re
-            
-            # 检查关键文件中是否有回写逻辑
-            files_to_check = [
-                PROJECT_ROOT / "agents" / "online" / "layer2" / "ws_agent.py",
-                PROJECT_ROOT / "agents" / "online" / "layer1" / "os_agent.py",
-                PROJECT_ROOT / "game_engine.py",
-            ]
-            
-            writeback_patterns = [
-                r'ws.*world_state\.json.*write',
-                r'world_state\.json.*open.*w',
-                r'json\.dump.*world_state',
-            ]
-            
-            has_writeback = False
-            
-            for file_path in files_to_check:
-                if not file_path.exists():
-                    continue
-                
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                
-                for pattern in writeback_patterns:
-                    if re.search(pattern, content, re.IGNORECASE):
-                        has_writeback = True
-                        break
-                
-                if has_writeback:
-                    break
-            
-            # 这是一个已知问题
+            game_engine_file = PROJECT_ROOT / "game_engine.py"
+            if not game_engine_file.exists():
+                self.log_result("world_state.json回写机制", False, "game_engine.py 不存在")
+                return False
+
+            content = game_engine_file.read_text(encoding="utf-8")
+            has_sync = ("WorldStateSync" in content) and ("_sync_world_state_file" in content)
+
             self.log_result(
                 "world_state.json回写机制",
-                False,  # 预期会失败
-                "⚠️ 当前没有在游戏运行时更新world_state.json的机制"
+                has_sync,
+                "检测到 WorldStateSync + _sync_world_state_file" if has_sync else "未检测到回写机制"
             )
-            
-            print(f"\n         💡 建议: 应该添加在每回合结束后更新ws/world_state.json的功能")
-            print(f"            这样可以保持运行时目录中的状态文件与游戏进度同步")
-            
-            return False  # 这是一个需要修复的问题
+
+            return has_sync
         except Exception as e:
             self.log_result("world_state.json回写", False, f"检查失败: {e}")
             return False
@@ -379,7 +363,7 @@ class TestWorldStateDynamicUpdate:
                 f"状态保存到 data/saves/ 目录 ({len(save_files)}个文件)"
             )
             
-            print(f"\n         📋 当前持久化机制说明:")
+            print(f"\n         [List] 当前持久化机制说明:")
             print(f"            1. WorldStateManager 在内存中维护状态")
             print(f"            2. 状态快照保存到 data/saves/ 目录")
             print(f"            3. ws/world_state.json 仅在初始化时创建")
@@ -506,43 +490,43 @@ class TestWorldStateDynamicUpdate:
     def run_all_tests(self):
         """运行所有测试"""
         print("=" * 70)
-        print("🧪 世界状态动态更新测试")
+        print("[Test] 世界状态动态更新测试")
         print("=" * 70)
         print()
         
         # 准备阶段
         if not self.setup():
-            print("❌ 测试准备失败")
+            print("FAIL 测试准备失败")
             return False
         
         print()
-        print("📋 第一部分：world_state.json 结构测试")
+        print("[List] 第一部分：world_state.json 结构测试")
         print("-" * 50)
         self.test_world_state_file_exists()
         self.test_world_state_structure()
         self.test_meta_fields_for_update_tracking()
         
         print()
-        print("📋 第二部分：WorldStateManager 内存更新测试")
+        print("[List] 第二部分：WorldStateManager 内存更新测试")
         print("-" * 50)
         self.test_world_state_manager_exists()
         self.test_update_world_state_method()
         self.test_get_state_snapshot_method()
         
         print()
-        print("📋 第三部分：状态持久化测试")
+        print("[List] 第三部分：状态持久化测试")
         print("-" * 50)
         self.test_save_mechanism_exists()
         self.test_state_manager_record()
         
         print()
-        print("📋 第四部分：动态更新回写测试（⚠️ 关键）")
+        print("[List] 第四部分：动态更新回写测试（WARNING 关键）")
         print("-" * 50)
         self.test_world_state_file_writeback()
         self.test_current_persistence_method()
         
         print()
-        print("📋 第五部分：改进方案测试")
+        print("[List] 第五部分：改进方案测试")
         print("-" * 50)
         self.test_proposed_update_function()
         self.test_world_state_sync_characters()
@@ -550,7 +534,7 @@ class TestWorldStateDynamicUpdate:
         # 打印总结
         print()
         print("=" * 70)
-        print("📊 测试结果总结")
+        print("[Stats] 测试结果总结")
         print("=" * 70)
         print(f"   通过: {self.results['passed']}")
         print(f"   失败: {self.results['failed']}")
@@ -559,26 +543,19 @@ class TestWorldStateDynamicUpdate:
         
         # 特别说明
         print("=" * 70)
-        print("💡 关于 world_state.json 动态更新的说明")
+        print("HINT 关于 world_state.json 动态更新的说明")
         print("=" * 70)
         print("""
-   【当前状态】
-   - WorldStateManager 在内存中维护和更新世界状态 ✅
-   - 每回合调用 update_world_state() 更新内存状态 ✅
-   - 状态快照保存到 data/saves/ 目录 ✅
-   - ws/world_state.json 仅在初始化时创建，不会动态更新 ❌
+    【当前状态】
+    - WorldStateManager 在内存中维护和更新世界状态 PASS
+    - 状态快照保存到 data/saves/ 目录 PASS
+    - GameEngine 通过 WorldStateSync 具备 world_state.json 回写能力 PASS
 
-   【建议改进】
-   - 在每回合结束后，将内存中的状态回写到 ws/world_state.json
-   - 这样可以保持运行时目录中的状态文件与游戏进度同步
-   - 便于调试和状态检查
-
-   【实现方式】
-   - 在 GameEngine._record_turn_summary() 中添加文件更新
-   - 或在 WorldStateManager 中添加 save_to_file() 方法
+    【备注】
+    - 本测试仅验证“回写机制存在”。是否在每个模式/每个回合都执行回写，需要结合实际游戏回路进一步覆盖。
 """)
         
-        return self.results["failed"] <= 1  # 允许一个预期的失败
+        return self.results["failed"] == 0
 
 
 def main():
@@ -587,9 +564,9 @@ def main():
     success = tester.run_all_tests()
     
     if success:
-        print("✅ 测试完成！发现了world_state.json动态更新的问题")
+        print("PASS 世界状态动态更新测试通过")
     else:
-        print("❌ 部分测试失败")
+        print("FAIL 部分测试失败")
     
     return 0 if success else 1
 

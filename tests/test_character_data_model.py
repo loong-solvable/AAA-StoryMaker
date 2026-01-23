@@ -62,7 +62,7 @@ class TestCharacterDataModel:
     
     def log_result(self, test_name: str, passed: bool, message: str = ""):
         """记录测试结果"""
-        status = "✅ PASS" if passed else "❌ FAIL"
+        status = "PASS PASS" if passed else "FAIL FAIL"
         self.results["tests"].append({
             "name": test_name,
             "passed": passed,
@@ -529,7 +529,7 @@ class TestCharacterDataModel:
     def run_all_tests(self):
         """运行所有测试"""
         print("=" * 60)
-        print("🧪 角色数据模型测试")
+        print("[Test] 角色数据模型测试")
         print("=" * 60)
         print()
         
@@ -548,7 +548,7 @@ class TestCharacterDataModel:
         # 打印总结
         print()
         print("=" * 60)
-        print("📊 测试结果总结")
+        print("[Stats] 测试结果总结")
         print("=" * 60)
         print(f"   通过: {self.results['passed']}")
         print(f"   失败: {self.results['failed']}")
@@ -564,9 +564,9 @@ def main():
     success = tester.run_all_tests()
     
     if success:
-        print("✅ 所有角色数据模型测试通过！")
+        print("PASS 所有角色数据模型测试通过！")
     else:
-        print("❌ 部分测试失败，请检查代码")
+        print("FAIL 部分测试失败，请检查代码")
     
     return 0 if success else 1
 

@@ -36,7 +36,7 @@ class TestWorldDataLoading:
     
     def log_result(self, test_name: str, passed: bool, message: str = ""):
         """记录测试结果"""
-        status = "✅ PASS" if passed else "❌ FAIL"
+        status = "PASS PASS" if passed else "FAIL FAIL"
         self.results["tests"].append({
             "name": test_name,
             "passed": passed,
@@ -60,13 +60,13 @@ class TestWorldDataLoading:
             for world in worlds_dir.iterdir():
                 if world.is_dir() and (world / "world_setting.json").exists():
                     self.world_dir = world
-                    print(f"📂 使用测试世界: {world.name}")
+                    print(f"[Dir] 使用测试世界: {world.name}")
                     return True
             
-            print("❌ 未找到有效的世界数据")
+            print("FAIL 未找到有效的世界数据")
             return False
         except Exception as e:
-            print(f"❌ 准备阶段失败: {e}")
+            print(f"FAIL 准备阶段失败: {e}")
             return False
     
     def test_list_available_worlds(self):
@@ -319,9 +319,9 @@ class TestWorldDataLoading:
                 cl = world_data.get("characters_list", [])
                 chars = world_data.get("characters", {})
                 
-                print(f"         📊 世界名称: {ws.get('meta', {}).get('world_name', 'N/A')}")
-                print(f"         📊 角色列表: {len(cl)} 个角色")
-                print(f"         📊 角色档案: {len(chars)} 个")
+                print(f"         [Stats] 世界名称: {ws.get('meta', {}).get('world_name', 'N/A')}")
+                print(f"         [Stats] 角色列表: {len(cl)} 个角色")
+                print(f"         [Stats] 角色档案: {len(chars)} 个")
             
             return has_all_keys
         except Exception as e:
@@ -467,13 +467,13 @@ class TestWorldDataLoading:
     def run_all_tests(self):
         """运行所有测试"""
         print("=" * 60)
-        print("🧪 世界数据加载测试")
+        print("[Test] 世界数据加载测试")
         print("=" * 60)
         print()
         
         # 准备阶段
         if not self.setup():
-            print("❌ 测试准备失败，无法继续")
+            print("FAIL 测试准备失败，无法继续")
             return False
         
         print()
@@ -491,7 +491,7 @@ class TestWorldDataLoading:
         # 打印总结
         print()
         print("=" * 60)
-        print("📊 测试结果总结")
+        print("[Stats] 测试结果总结")
         print("=" * 60)
         print(f"   通过: {self.results['passed']}")
         print(f"   失败: {self.results['failed']}")
@@ -507,9 +507,9 @@ def main():
     success = tester.run_all_tests()
     
     if success:
-        print("✅ 所有世界数据加载测试通过！")
+        print("PASS 所有世界数据加载测试通过！")
     else:
-        print("❌ 部分测试失败，请检查数据完整性")
+        print("FAIL 部分测试失败，请检查数据完整性")
     
     return 0 if success else 1
 

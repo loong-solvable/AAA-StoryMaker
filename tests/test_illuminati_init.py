@@ -18,6 +18,7 @@ import sys
 import json
 from pathlib import Path
 from typing import Dict, Any
+from datetime import datetime
 
 # 添加项目根目录到路径
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -40,7 +41,7 @@ class TestIlluminatiInit:
     
     def log_result(self, test_name: str, passed: bool, message: str = ""):
         """记录测试结果"""
-        status = "✅ PASS" if passed else "❌ FAIL"
+        status = "PASS PASS" if passed else "FAIL FAIL"
         self.results["tests"].append({
             "name": test_name,
             "passed": passed,
@@ -58,6 +59,10 @@ class TestIlluminatiInit:
         """测试前准备"""
         try:
             from config.settings import settings
+            import os
+
+            # 默认使用 mock LLM，避免初始化时触发真实网络
+            os.environ.setdefault("LLM_PROVIDER", "mock")
             
             # 找到可用的世界
             worlds_dir = settings.DATA_DIR / "worlds"
@@ -65,21 +70,44 @@ class TestIlluminatiInit:
                 if world.is_dir() and (world / "world_setting.json").exists():
                     self.world_name = world.name
                     self.world_dir = world
-                    print(f"📂 使用测试世界: {world.name}")
+                    print(f"[Dir] 使用测试世界: {world.name}")
                     break
             
             # 找到现有的运行时目录（如果有）
             runtime_base = settings.DATA_DIR / "runtime"
             if runtime_base.exists():
-                for rt_dir in runtime_base.iterdir():
-                    if rt_dir.is_dir() and rt_dir.name.startswith(self.world_name):
-                        self.runtime_dir = rt_dir
-                        print(f"📂 发现运行时目录: {rt_dir.name}")
-                        break
+                rts = sorted([d for d in runtime_base.iterdir() if d.is_dir() and d.name.startswith(self.world_name)], key=lambda x: x.stat().st_mtime, reverse=True)
+                if rts:
+                    self.runtime_dir = rts[0]
+                    print(f"[Dir] 发现运行时目录: {self.runtime_dir.name}")
+
+            # 如果未找到可用 runtime，或 runtime 缺少关键产物，则自动生成一个新的
+            expected_files = [
+                "ws/world_state.json",
+                "plot/current_scene.json",
+                "plot/current_script.json",
+                "vibe/initial_atmosphere.json",
+                "init_summary.json",
+            ]
+
+            def runtime_ready(rt: Path) -> bool:
+                return all((rt / rel).exists() for rel in expected_files)
+
+            if self.world_name and (self.runtime_dir is None or not runtime_ready(self.runtime_dir)):
+                from initial_Illuminati import IlluminatiInitializer
+
+                suffix = f"test_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                initializer = IlluminatiInitializer(
+                    self.world_name,
+                    runtime_name=suffix,
+                    overwrite_runtime=False,
+                )
+                self.runtime_dir = initializer.run()
+                print(f"[Dir] 已自动生成运行时目录: {self.runtime_dir.name}")
             
             return self.world_name is not None
         except Exception as e:
-            print(f"❌ 准备阶段失败: {e}")
+            print(f"FAIL 准备阶段失败: {e}")
             return False
     
     def test_illuminati_import(self):
@@ -481,13 +509,13 @@ class TestIlluminatiInit:
     def run_all_tests(self):
         """运行所有测试"""
         print("=" * 60)
-        print("🧪 光明会初始化流程测试")
+        print("[Test] 光明会初始化流程测试")
         print("=" * 60)
         print()
         
         # 准备阶段
         if not self.setup():
-            print("❌ 测试准备失败，无法继续")
+            print("FAIL 测试准备失败，无法继续")
             return False
         
         print()
@@ -500,7 +528,7 @@ class TestIlluminatiInit:
         
         # 以下测试需要已运行过initial_Illuminati.py
         print()
-        print("📋 以下测试验证已生成的运行时数据（需要先运行initial_Illuminati.py）:")
+        print("[List] 以下测试验证已生成的运行时数据（需要先运行initial_Illuminati.py）:")
         print()
         
         self.test_runtime_directory_structure()
@@ -512,7 +540,7 @@ class TestIlluminatiInit:
         # 打印总结
         print()
         print("=" * 60)
-        print("📊 测试结果总结")
+        print("[Stats] 测试结果总结")
         print("=" * 60)
         print(f"   通过: {self.results['passed']}")
         print(f"   失败: {self.results['failed']}")
@@ -520,7 +548,7 @@ class TestIlluminatiInit:
         print()
         
         if not self.runtime_dir:
-            print("💡 提示: 部分测试跳过，请先运行以下命令生成运行时数据:")
+            print("HINT 提示: 部分测试跳过，请先运行以下命令生成运行时数据:")
             print(f"   python initial_Illuminati.py --world {self.world_name}")
             print()
         
@@ -533,9 +561,9 @@ def main():
     success = tester.run_all_tests()
     
     if success:
-        print("✅ 所有光明会初始化测试通过！")
+        print("PASS 所有光明会初始化测试通过！")
     else:
-        print("❌ 部分测试失败，请检查配置")
+        print("FAIL 部分测试失败，请检查配置")
     
     return 0 if success else 1
 

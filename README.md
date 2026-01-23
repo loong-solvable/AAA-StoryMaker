@@ -61,10 +61,14 @@ pip install -r requirements.txt
 4. **配置API密钥**
 ```bash
 # 复制配置模板
-copy .env.example .env
+copy template.env .env
 
 # 编辑 .env 文件，填入你的智谱清言API密钥
 # ZHIPU_API_KEY=your_api_key_here
+
+# 服务器联调（Web 前端从浏览器访问后端）时：
+# 需要把 VITE_API_URL 设为后端可被浏览器访问的地址（不是 localhost）
+# 例如：VITE_API_URL=http://YOUR_SERVER_IP:8000
 ```
 
 ### 运行Demo

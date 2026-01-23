@@ -29,7 +29,9 @@ class LLMFactory:
         provider: Optional[str] = None,
         model_name: Optional[str] = None,
         temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None
+        max_tokens: Optional[int] = None,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None
     ) -> BaseLanguageModel:
         """
         创建LLM实例
@@ -44,6 +46,12 @@ class LLMFactory:
             LLM实例
         """
         provider = provider or settings.LLM_PROVIDER
+
+        if provider == "mock":
+            from utils.mock_llm import MockChatLLM
+
+            logger.info("🧪 使用 MockChatLLM（离线/CI 模式）")
+            return MockChatLLM()
         
         # OpenRouter使用专门的模型配置
         if provider == "openrouter":
@@ -58,11 +66,11 @@ class LLMFactory:
         
         try:
             if provider == "zhipu":
-                return LLMFactory._create_zhipu(model_name, temperature, max_tokens)
+                return LLMFactory._create_zhipu(model_name, temperature, max_tokens, timeout)
             elif provider == "openai":
-                return LLMFactory._create_openai(model_name, temperature, max_tokens)
+                return LLMFactory._create_openai(model_name, temperature, max_tokens, timeout, max_retries)
             elif provider == "openrouter":
-                return LLMFactory._create_openrouter(model_name, temperature, max_tokens)
+                return LLMFactory._create_openrouter(model_name, temperature, max_tokens, timeout, max_retries)
             else:
                 raise ValueError(f"不支持的LLM提供商: {provider}")
         except Exception as e:
@@ -70,7 +78,12 @@ class LLMFactory:
             raise
     
     @staticmethod
-    def _create_zhipu(model_name: str, temperature: float, max_tokens: Optional[int]) -> CustomChatZhipuAI:
+    def _create_zhipu(
+        model_name: str,
+        temperature: float,
+        max_tokens: Optional[int],
+        timeout: Optional[float]
+    ) -> CustomChatZhipuAI:
         """创建智谱清言LLM（使用自定义类修复超时问题）"""
         if not settings.ZHIPU_API_KEY:
             raise ValueError("❌ 未配置ZHIPU_API_KEY，请检查.env文件")
@@ -82,11 +95,12 @@ class LLMFactory:
         logger.info(f"⏱️  使用自定义ChatZhipuAI，配置超时: 7200秒 (2小时)")
         
         # 构建参数字典
+        request_timeout = timeout if timeout is not None else 7200.0
         params = {
             "model": model_name,
             "temperature": temperature,
             "api_key": settings.ZHIPU_API_KEY,
-            "request_timeout": 7200.0,  # 2小时超时
+            "request_timeout": request_timeout,
         }
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
@@ -94,7 +108,13 @@ class LLMFactory:
         return CustomChatZhipuAI(**params)
     
     @staticmethod
-    def _create_openai(model_name: str, temperature: float, max_tokens: Optional[int]) -> ChatOpenAI:
+    def _create_openai(
+        model_name: str,
+        temperature: float,
+        max_tokens: Optional[int],
+        timeout: Optional[float],
+        max_retries: Optional[int]
+    ) -> ChatOpenAI:
         """创建OpenAI LLM"""
         if not settings.OPENAI_API_KEY:
             raise ValueError("❌ 未配置OPENAI_API_KEY，请检查.env文件")
@@ -107,11 +127,21 @@ class LLMFactory:
         }
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
+        if timeout is not None:
+            params["timeout"] = timeout
+        if max_retries is not None:
+            params["max_retries"] = max_retries
         
         return ChatOpenAI(**params)
     
     @staticmethod
-    def _create_openrouter(model_name: str, temperature: float, max_tokens: Optional[int]) -> ChatOpenAI:
+    def _create_openrouter(
+        model_name: str,
+        temperature: float,
+        max_tokens: Optional[int],
+        timeout: Optional[float],
+        max_retries: Optional[int]
+    ) -> ChatOpenAI:
         """
         创建OpenRouter LLM
         
@@ -135,8 +165,10 @@ class LLMFactory:
                 "HTTP-Referer": "https://github.com/AAA-StoryMaker",  # 可选：用于OpenRouter统计
                 "X-Title": "AAA-StoryMaker"  # 可选：应用名称
             },
-            "timeout": 7200,  # 2小时超时
         }
+        params["timeout"] = timeout if timeout is not None else 7200
+        if max_retries is not None:
+            params["max_retries"] = max_retries
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
         
@@ -147,4 +179,3 @@ class LLMFactory:
 def get_llm(**kwargs) -> BaseLanguageModel:
     """获取LLM实例的便捷函数"""
     return LLMFactory.create_llm(**kwargs)
-

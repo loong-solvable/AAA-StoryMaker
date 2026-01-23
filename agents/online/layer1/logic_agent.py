@@ -29,7 +29,13 @@ class LogicValidator:
         logger.info("🔍 初始化逻辑审查官...")
         
         # 创建LLM实例（使用较低温度以提高判断准确性）
-        self.llm = get_llm(temperature=0.3)
+        online_timeout = getattr(settings, "ONLINE_LLM_TIMEOUT", 90.0)
+        online_retries = getattr(settings, "ONLINE_LLM_MAX_RETRIES", 1)
+        self.llm = get_llm(
+            temperature=0.3,
+            timeout=online_timeout,
+            max_retries=online_retries
+        )
         
         # 加载系统提示词
         self.system_prompt = self._load_system_prompt()
@@ -302,4 +308,3 @@ class LogicValidator:
         response.to_agent = message.from_agent
         
         return response
-

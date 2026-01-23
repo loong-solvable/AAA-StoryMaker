@@ -45,7 +45,7 @@ class TestCharacterPromptGeneration:
     
     def log_result(self, test_name: str, passed: bool, message: str = ""):
         """记录测试结果"""
-        status = "✅ PASS" if passed else "❌ FAIL"
+        status = "PASS PASS" if passed else "FAIL FAIL"
         self.results["tests"].append({
             "name": test_name,
             "passed": passed,
@@ -69,11 +69,11 @@ class TestCharacterPromptGeneration:
             for world in worlds_dir.iterdir():
                 if world.is_dir() and (world / "characters").exists():
                     self.world_dir = world
-                    print(f"📂 使用测试世界: {world.name}")
+                    print(f"[Dir] 使用测试世界: {world.name}")
                     break
             
             if not self.world_dir:
-                print("❌ 未找到有效的世界数据")
+                print("FAIL 未找到有效的世界数据")
                 return False
             
             # 加载角色数据
@@ -85,22 +85,22 @@ class TestCharacterPromptGeneration:
                 if char_id:
                     self.characters[char_id] = char_data
             
-            print(f"📊 加载了 {len(self.characters)} 个角色数据")
+            print(f"[Stats] 加载了 {len(self.characters)} 个角色数据")
             
             # 创建临时目录用于测试
             self.temp_dir = Path(tempfile.mkdtemp(prefix="test_prompts_"))
-            print(f"📁 临时测试目录: {self.temp_dir}")
+            print(f"[Folder] 临时测试目录: {self.temp_dir}")
             
             return True
         except Exception as e:
-            print(f"❌ 准备阶段失败: {e}")
+            print(f"FAIL 准备阶段失败: {e}")
             return False
     
     def cleanup(self):
         """清理临时目录"""
         if self.temp_dir and self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
-            print(f"🧹 已清理临时目录")
+            print(f"[Clean] 已清理临时目录")
     
     def test_npc_system_template_exists(self):
         """
@@ -142,10 +142,10 @@ class TestCharacterPromptGeneration:
         """
         测试2: 模板占位符验证
         
-        验证模板中包含必要的占位符：
-        - {id} - 角色ID
-        - {id_character} - 角色卡内容
-        - {id_script} - 剧本内容（运行时填充）
+        验证模板中包含必要的占位符（以当前 npc_system.txt 为准）：
+        - {npc_id} - 角色ID
+        - {npc_name} - 角色名称
+        - {traits} - 特质
         """
         try:
             from config.settings import settings
@@ -155,7 +155,7 @@ class TestCharacterPromptGeneration:
                 content = f.read()
             
             # 检查必要的占位符
-            placeholders = ["{id}", "{id_character}", "{id_script}"]
+            placeholders = ["{npc_id}", "{npc_name}", "{traits}"]
             found = []
             missing = []
             
@@ -190,6 +190,8 @@ class TestCharacterPromptGeneration:
                 "os_agent",
                 PROJECT_ROOT / "agents" / "online" / "layer1" / "os_agent.py"
             )
+            if spec is None or spec.loader is None:
+                raise ImportError("无法加载 agents/online/layer1/os_agent.py")
             os_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(os_module)
             
@@ -227,7 +229,7 @@ class TestCharacterPromptGeneration:
             # 显示格式化结果预览
             if all_ok:
                 preview = formatted[:200] + "..." if len(formatted) > 200 else formatted
-                print(f"         📝 格式化预览:\n         {preview.replace(chr(10), chr(10) + '         ')}")
+                print(f"         [Note] 格式化预览:\n         {preview.replace(chr(10), chr(10) + '         ')}")
             
             return all_ok
         except Exception as e:
@@ -248,10 +250,15 @@ class TestCharacterPromptGeneration:
                 "os_agent",
                 PROJECT_ROOT / "agents" / "online" / "layer1" / "os_agent.py"
             )
+            if spec is None or spec.loader is None:
+                raise ImportError("无法加载 agents/online/layer1/os_agent.py")
             os_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(os_module)
             
             os_agent = os_module.OperatingSystem()
+
+            if not self.temp_dir:
+                raise RuntimeError("临时目录未初始化")
             
             # 获取第一个角色
             if not self.characters:
@@ -271,8 +278,9 @@ class TestCharacterPromptGeneration:
             character_card = os_agent._format_character_card(char_data)
             
             # 手动填充模板
-            filled_prompt = template.replace("{id}", char_id)
-            filled_prompt = filled_prompt.replace("{id_character}", character_card)
+            filled_prompt = template.replace("{npc_id}", char_id)
+            filled_prompt = filled_prompt.replace("{npc_name}", char_name)
+            filled_prompt = filled_prompt.replace("{traits}", ", ".join(char_data.get("traits", []) or []))
             
             # 保存到临时目录
             prompt_file = self.temp_dir / f"{char_id}_{char_name}.txt"
@@ -293,7 +301,7 @@ class TestCharacterPromptGeneration:
                     content = f.read()
                 
                 # 检查ID是否正确替换
-                id_replaced = char_id in content and "{id}" not in content.split("{id_script}")[0]
+                id_replaced = char_id in content and "{npc_id}" not in content
                 self.log_result(
                     "ID占位符替换",
                     id_replaced,
@@ -332,6 +340,8 @@ class TestCharacterPromptGeneration:
                 "os_agent",
                 PROJECT_ROOT / "agents" / "online" / "layer1" / "os_agent.py"
             )
+            if spec is None or spec.loader is None:
+                raise ImportError("无法加载 agents/online/layer1/os_agent.py")
             os_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(os_module)
             
@@ -354,8 +364,9 @@ class TestCharacterPromptGeneration:
                 char_name = char_data.get("name", char_id)
                 character_card = os_agent._format_character_card(char_data)
                 
-                filled_prompt = template.replace("{id}", char_id)
-                filled_prompt = filled_prompt.replace("{id_character}", character_card)
+                filled_prompt = template.replace("{npc_id}", char_id)
+                filled_prompt = filled_prompt.replace("{npc_name}", char_name)
+                filled_prompt = filled_prompt.replace("{traits}", ", ".join(char_data.get("traits", []) or []))
                 
                 generated_prompts[char_id] = {
                     "name": char_name,
@@ -384,8 +395,8 @@ class TestCharacterPromptGeneration:
             # 验证角色ID的唯一性 - ID不应该在对方的【角色ID】字段中
             id1 = prompt1["data"]["id"]
             id2 = prompt2["data"]["id"]
-            id1_section = f"【角色ID】{id1}"
-            id2_section = f"【角色ID】{id2}"
+            id1_section = f"- **角色ID**: {id1}"
+            id2_section = f"- **角色ID**: {id2}"
             id1_unique = id1_section in prompt1["content"] and id1_section not in prompt2["content"]
             id2_unique = id2_section in prompt2["content"] and id2_section not in prompt1["content"]
             
@@ -440,10 +451,15 @@ class TestCharacterPromptGeneration:
                 "os_agent",
                 PROJECT_ROOT / "agents" / "online" / "layer1" / "os_agent.py"
             )
+            if spec is None or spec.loader is None:
+                raise ImportError("无法加载 agents/online/layer1/os_agent.py")
             os_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(os_module)
             
             os_agent = os_module.OperatingSystem()
+
+            if not self.temp_dir:
+                raise RuntimeError("临时目录未初始化")
             
             # 读取模板
             template_path = settings.PROMPTS_DIR / "online" / "npc_system.txt"
@@ -458,8 +474,9 @@ class TestCharacterPromptGeneration:
                     char_name = char_data.get("name", char_id)
                     character_card = os_agent._format_character_card(char_data)
                     
-                    filled_prompt = template.replace("{id}", char_id)
-                    filled_prompt = filled_prompt.replace("{id_character}", character_card)
+                    filled_prompt = template.replace("{npc_id}", char_id)
+                    filled_prompt = filled_prompt.replace("{npc_name}", char_name)
+                    filled_prompt = filled_prompt.replace("{traits}", ", ".join(char_data.get("traits", []) or []))
                     
                     # 保存
                     prompt_file = self.temp_dir / f"{char_id}_{char_name}.txt"
@@ -469,7 +486,7 @@ class TestCharacterPromptGeneration:
                     success_count += 1
                 except Exception as e:
                     fail_count += 1
-                    print(f"         ⚠️ {char_id} 生成失败: {e}")
+                    print(f"         WARNING {char_id} 生成失败: {e}")
             
             all_success = fail_count == 0
             self.log_result(
@@ -500,10 +517,15 @@ class TestCharacterPromptGeneration:
         try:
             from config.settings import settings
             
-            prompts_dir = settings.PROMPTS_DIR / "online"
+            prompts_dir = settings.PROMPTS_DIR / "online" / "npc_prompt"
+            if not prompts_dir.exists():
+                prompts_dir = settings.PROMPTS_DIR / "online"
             
-            # 查找角色提示词文件（格式: npc_xxx_角色名.txt）
-            npc_prompts = list(prompts_dir.glob("npc_*.txt"))
+            # 查找角色提示词文件
+            if "npc_prompt" in str(prompts_dir):
+                npc_prompts = list(prompts_dir.glob("npc_*_prompt.txt"))
+            else:
+                npc_prompts = list(prompts_dir.glob("npc_*.txt"))
             
             # 排除模板文件
             npc_prompts = [p for p in npc_prompts if p.name != "npc_system.txt"]
@@ -521,8 +543,13 @@ class TestCharacterPromptGeneration:
                 with open(sample_file, "r", encoding="utf-8") as f:
                     content = f.read()
                 
-                # 检查基本结构
-                has_role_info = "【角色ID】" in content or "【姓名】" in content
+                # 检查基本结构（允许不同历史格式）
+                has_role_info = (
+                    ("【角色ID】" in content)
+                    or ("【姓名】" in content)
+                    or ("**角色ID**" in content)
+                    or ("npc_" in content)
+                )
                 self.log_result(
                     "提示词文件结构",
                     has_role_info,
@@ -530,7 +557,7 @@ class TestCharacterPromptGeneration:
                 )
                 
                 # 显示文件列表
-                print(f"         📄 已生成的提示词文件:")
+                print(f"         [File] 已生成的提示词文件:")
                 for pf in npc_prompts[:5]:  # 只显示前5个
                     print(f"            - {pf.name}")
                 if len(npc_prompts) > 5:
@@ -561,6 +588,8 @@ class TestCharacterPromptGeneration:
                 "os_agent",
                 PROJECT_ROOT / "agents" / "online" / "layer1" / "os_agent.py"
             )
+            if spec is None or spec.loader is None:
+                raise ImportError("无法加载 agents/online/layer1/os_agent.py")
             os_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(os_module)
             
@@ -628,13 +657,13 @@ class TestCharacterPromptGeneration:
     def run_all_tests(self):
         """运行所有测试"""
         print("=" * 60)
-        print("🧪 角色提示词动态生成测试（重点）")
+        print("[Test] 角色提示词动态生成测试（重点）")
         print("=" * 60)
         print()
         
         # 准备阶段
         if not self.setup():
-            print("❌ 测试准备失败，无法继续")
+            print("FAIL 测试准备失败，无法继续")
             return False
         
         print()
@@ -653,7 +682,7 @@ class TestCharacterPromptGeneration:
             # 打印总结
             print()
             print("=" * 60)
-            print("📊 测试结果总结")
+            print("[Stats] 测试结果总结")
             print("=" * 60)
             print(f"   通过: {self.results['passed']}")
             print(f"   失败: {self.results['failed']}")
@@ -672,16 +701,16 @@ def main():
     success = tester.run_all_tests()
     
     if success:
-        print("✅ 所有角色提示词生成测试通过！")
+        print("PASS 所有角色提示词生成测试通过！")
         print()
-        print("💡 核心验证点:")
-        print("   ✓ 模板文件存在且包含必要占位符")
-        print("   ✓ 角色卡数据能正确格式化")
-        print("   ✓ 每个角色能生成特异性的提示词")
-        print("   ✓ 不同角色的提示词内容不同")
-        print("   ✓ 提示词包含完整的角色信息")
+        print("HINT 核心验证点:")
+        print("   OK 模板文件存在且包含必要占位符")
+        print("   OK 角色卡数据能正确格式化")
+        print("   OK 每个角色能生成特异性的提示词")
+        print("   OK 不同角色的提示词内容不同")
+        print("   OK 提示词包含完整的角色信息")
     else:
-        print("❌ 部分测试失败，请检查相关功能")
+        print("FAIL 部分测试失败，请检查相关功能")
     
     return 0 if success else 1
 

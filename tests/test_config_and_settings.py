@@ -31,7 +31,7 @@ class TestConfigSettings:
     
     def log_result(self, test_name: str, passed: bool, message: str = ""):
         """记录测试结果"""
-        status = "✅ PASS" if passed else "❌ FAIL"
+        status = "PASS PASS" if passed else "FAIL FAIL"
         self.results["tests"].append({
             "name": test_name,
             "passed": passed,
@@ -120,7 +120,7 @@ class TestConfigSettings:
         try:
             from config.settings import settings
             
-            supported_providers = ["zhipu", "openai", "openrouter"]
+            supported_providers = ["zhipu", "openai", "openrouter", "mock"]
             provider = settings.LLM_PROVIDER
             
             is_supported = provider in supported_providers
@@ -147,7 +147,10 @@ class TestConfigSettings:
             provider = settings.LLM_PROVIDER
             
             # 根据提供商检查对应的API密钥
-            if provider == "zhipu":
+            if provider == "mock":
+                key_var = "(mock)"
+                key = "mock"
+            elif provider == "zhipu":
                 key_var = "ZHIPU_API_KEY"
                 key = getattr(settings, key_var, None)
             elif provider == "openai":
@@ -255,7 +258,7 @@ class TestConfigSettings:
     def run_all_tests(self):
         """运行所有测试"""
         print("=" * 60)
-        print("🧪 配置和环境设置测试")
+        print("[Test] 配置和环境设置测试")
         print("=" * 60)
         print()
         
@@ -272,7 +275,7 @@ class TestConfigSettings:
         # 打印总结
         print()
         print("=" * 60)
-        print("📊 测试结果总结")
+        print("[Stats] 测试结果总结")
         print("=" * 60)
         print(f"   通过: {self.results['passed']}")
         print(f"   失败: {self.results['failed']}")
@@ -288,9 +291,9 @@ def main():
     success = tester.run_all_tests()
     
     if success:
-        print("✅ 所有配置测试通过！")
+        print("PASS 所有配置测试通过！")
     else:
-        print("❌ 部分测试失败，请检查配置")
+        print("FAIL 部分测试失败，请检查配置")
     
     return 0 if success else 1
 

@@ -197,6 +197,19 @@ def setup_logger(name: str, log_file: str = None) -> logging.Logger:
     return logger
 
 
+def mute_console_handlers() -> None:
+    root = logging.getLogger()
+    logger_dict = logging.root.manager.loggerDict
+
+    for logger in logger_dict.values():
+        if isinstance(logger, logging.PlaceHolder):
+            continue
+        for handler in list(logger.handlers):
+            if isinstance(handler, logging.StreamHandler):
+                logger.removeHandler(handler)
+        logger.propagate = True
+
+
 # ============================================================
 # LLM 调用日志工具
 # ============================================================

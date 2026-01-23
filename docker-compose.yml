@@ -40,7 +40,9 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: http://localhost:8000
+        # For server testing: set VITE_API_URL in .env to your server base URL
+        # Example: VITE_API_URL=http://YOUR_SERVER_IP:8000
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
     container_name: story-frontend
     restart: unless-stopped
     ports:

@@ -118,6 +118,14 @@ class OperatingSystem:
         
         # LLM 实例（用于剧本拆分等智能任务）
         self.llm = get_llm(temperature=0.7)
+        # 路由专用 LLM（在线交互更快超时与重试）
+        online_timeout = getattr(settings, "ONLINE_LLM_TIMEOUT", 90.0)
+        online_retries = getattr(settings, "ONLINE_LLM_MAX_RETRIES", 1)
+        self.routing_llm = get_llm(
+            temperature=0.3,
+            timeout=online_timeout,
+            max_retries=online_retries
+        )
         
         # 加载Genesis数据
         if genesis_path:
@@ -1875,7 +1883,7 @@ def create_agent() -> {class_name}:
                 ("human", "请根据以上信息，决定下一位发言者。")
             ])
             
-            chain = prompt | self.llm | StrOutputParser()
+            chain = prompt | self.routing_llm | StrOutputParser()
             response = chain.invoke({})
             
             # 解析响应
@@ -1969,7 +1977,8 @@ def create_agent() -> {class_name}:
         world_dir: Path,
         max_turns: int = 12,
         user_input_callback = None,
-        screen_callback = None
+        screen_callback = None,
+        start_speaker_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         运行完整的场景对话循环
@@ -1988,6 +1997,7 @@ def create_agent() -> {class_name}:
             user_input_callback: 获取玩家输入的回调函数，签名: (prompt: str) -> str
             screen_callback: 屏幕渲染回调函数，签名: (event: str, data: dict) -> None
                             event 可选值: "scene_start", "dialogue", "player_input", "scene_end"
+            start_speaker_id: 指定起始发言者（user 或在场 NPC），用于断点续演
         
         Returns:
             场景执行结果
@@ -2014,8 +2024,10 @@ def create_agent() -> {class_name}:
         # 创建场景记忆板（使用 scene_id）
         scene_memory = create_scene_memory(runtime_dir, scene_id=current_scene_id)
         
-        # === 清理不在场的NPC Agent ===
+        # === 保留已初始化的 NPC Agent（不回收） ===
         scene_file = runtime_dir / "plot" / "current_scene.json"
+        scene_data = {}
+        should_present_ids = set()
         if scene_file.exists():
             try:
                 with open(scene_file, "r", encoding="utf-8") as f:
@@ -2030,29 +2042,28 @@ def create_agent() -> {class_name}:
                 # 玩家永远视为在场，但不需要 NPC Agent
                 should_present_ids.add("user")
                 
-                # 清理不在场的NPC Agent
+                # 不回收 Agent，仅记录不在场角色
                 if should_present_ids:
-                    npcs_to_remove = [
-                        npc_id for npc_id in list(self.npc_agents.keys()) 
+                    npcs_not_present = [
+                        npc_id for npc_id in list(self.npc_agents.keys())
                         if npc_id not in should_present_ids
                     ]
-                    
-                    for npc_id in npcs_to_remove:
+                    for npc_id in npcs_not_present:
                         npc_name = self.npc_agents[npc_id].CHARACTER_NAME
-                        logger.info(f"🚪 {npc_name} ({npc_id}) 不在本幕场景，移除Agent")
-                        del self.npc_agents[npc_id]
+                        logger.info(f"🚪 {npc_name} ({npc_id}) 不在本幕场景，保留Agent")
             except Exception as e:
                 logger.warning(f"⚠️ 读取场景文件失败: {e}")
         
         # 获取在场角色信息
         active_npc_info = {}
+        active_npcs = []
         for npc_id, agent in self.npc_agents.items():
-            active_npc_info[npc_id] = {
-                "name": agent.CHARACTER_NAME,
-                "traits": getattr(agent, "CHARACTER_DATA", {}).get("traits", "")
-            }
-        
-        active_npcs = list(self.npc_agents.keys())
+            if npc_id in should_present_ids and npc_id != "user":
+                active_npc_info[npc_id] = {
+                    "name": agent.CHARACTER_NAME,
+                    "traits": getattr(agent, "CHARACTER_DATA", {}).get("traits", "")
+                }
+                active_npcs.append(npc_id)
         
         if not active_npcs:
             logger.warning("⚠️ 没有在场的 NPC，场景无法进行")
@@ -2094,12 +2105,17 @@ def create_agent() -> {class_name}:
         if player_info:
             logger.info(f"👤 玩家角色: {player_info['name']} ({player_info['id']})")
         
-        # 选择第一个发言者
-        current_speaker_id = active_npcs[0]
+        # 选择发言者（支持从上次中断恢复）
+        if start_speaker_id in active_npcs or start_speaker_id == "user":
+            current_speaker_id = start_speaker_id
+        else:
+            current_speaker_id = active_npcs[0]
         
         turn_count = 0
         scene_finished = False
         dialogue_history = []
+        paused_for_user = False
+        next_speaker_id = current_speaker_id
         
         # 重置未知对象决策标志
         self._pending_unknown_target_decision = False
@@ -2165,9 +2181,15 @@ def create_agent() -> {class_name}:
                 
                 if user_input_callback:
                     user_input = user_input_callback("请输入你的回应: ")
+                    if user_input is None:
+                        logger.info("⏸️ 回调返回空，暂停循环")
+                        paused_for_user = True
+                        next_speaker_id = "user"
+                        turn_count -= 1
+                        break
                 else:
                     user_input = "(玩家沉默)"
-                
+
                 if user_input:
                     # 将玩家输入写入场景记忆板
                     scene_memory.add_dialogue(
@@ -2196,6 +2218,7 @@ def create_agent() -> {class_name}:
                 # 玩家发言后，选择下一个 NPC 发言
                 # 简单策略：选择第一个 NPC
                 current_speaker_id = active_npcs[0]
+                next_speaker_id = current_speaker_id
                 continue
             
             # NPC 演绎
@@ -2316,15 +2339,30 @@ def create_agent() -> {class_name}:
             
             if routing_result.get("should_pause_for_user"):
                 current_speaker_id = "user"
+                next_speaker_id = "user"
                 # 如果是因为未知对象需要决策，设置标志
                 if routing_result.get("needs_user_decision"):
                     self._pending_unknown_target_decision = True
             elif next_speaker:
                 current_speaker_id = next_speaker
+                next_speaker_id = next_speaker
             else:
                 # 没有下一位，结束
                 scene_finished = True
                 logger.info("🏁 没有可用的下一位发言者，场景结束")
+
+        if paused_for_user:
+            scene_memory.set_scene_status("PAUSED")
+            return {
+                "success": True,
+                "total_turns": max(turn_count, 0),
+                "scene_finished": False,
+                "waiting_for_player": True,
+                "next_speaker_id": next_speaker_id,
+                "dialogue_count": scene_memory.get_dialogue_count(),
+                "dialogue_history": dialogue_history,
+                "final_status": scene_memory.get_scene_status()
+            }
         
         # 场景结束
         logger.info("\n" + "=" * 60)
@@ -2350,6 +2388,8 @@ def create_agent() -> {class_name}:
             "success": True,
             "total_turns": turn_count,
             "scene_finished": scene_finished,
+            "waiting_for_player": False,
+            "next_speaker_id": next_speaker_id,
             "dialogue_count": scene_memory.get_dialogue_count(),
             "dialogue_history": dialogue_history,
             "final_status": scene_memory.get_scene_status()

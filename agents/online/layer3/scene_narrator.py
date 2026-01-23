@@ -14,6 +14,7 @@ from pathlib import Path
 
 from utils.llm_factory import get_llm
 from utils.logger import setup_logger
+from config.settings import settings
 
 logger = setup_logger("SceneNarrator", "scene_narrator.log")
 
@@ -31,7 +32,13 @@ class SceneNarrator:
             genesis_data: 世界数据（可选）
         """
         self.genesis_data = genesis_data or {}
-        self.llm = get_llm(temperature=0.8)
+        online_timeout = getattr(settings, "ONLINE_LLM_TIMEOUT", 90.0)
+        online_retries = getattr(settings, "ONLINE_LLM_MAX_RETRIES", 1)
+        self.llm = get_llm(
+            temperature=0.8,
+            timeout=online_timeout,
+            max_retries=online_retries
+        )
 
         # 加载提示词模板
         self.prompt_template = self._load_prompt_template()

@@ -52,6 +52,10 @@ class Settings:
     TEMPERATURE = float(os.getenv("TEMPERATURE", "0.7"))
     MAX_TOKENS = None  # 不限制，让模型自己决定需要多少tokens
 
+    # 在线交互超时与重试（面向玩家的实时体验）
+    ONLINE_LLM_TIMEOUT = float(os.getenv("ONLINE_LLM_TIMEOUT", "90"))
+    ONLINE_LLM_MAX_RETRIES = int(os.getenv("ONLINE_LLM_MAX_RETRIES", "1"))
+
     # LangSmith 追踪配置
     LANGCHAIN_TRACING = os.getenv("LANGCHAIN_TRACING_V2", "false").lower() == "true"
     LANGCHAIN_PROJECT = os.getenv("LANGCHAIN_PROJECT", "AAA-StoryMaker")

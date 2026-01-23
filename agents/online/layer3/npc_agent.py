@@ -96,7 +96,13 @@ class NPCAgent:
         self.dialogue_history: List[Dict[str, str]] = []
 
         # LLM 与 Prompt
-        self.llm = get_llm(temperature=0.8)
+        online_timeout = getattr(settings, "ONLINE_LLM_TIMEOUT", 90.0)
+        online_retries = getattr(settings, "ONLINE_LLM_MAX_RETRIES", 1)
+        self.llm = get_llm(
+            temperature=0.8,
+            timeout=online_timeout,
+            max_retries=online_retries
+        )
         self.prompt_template = self._load_prompt_template()
 
         logger.info(

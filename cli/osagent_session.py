@@ -43,6 +43,7 @@ class OSAgentSession(GameSession):
         self._last_rendered_text = ""
         self._scene_memory = None  # 场景记忆，用于幕间过渡
         self._pending_player_input = None  # 待处理的玩家输入
+        self._next_speaker_id = None
     
     def _init_agents(self, fail_on_corrupted: bool = False) -> None:
         """
@@ -170,12 +171,14 @@ class OSAgentSession(GameSession):
                 world_dir=self.world_dir,
                 max_turns=15,
                 user_input_callback=pause_for_player,
-                screen_callback=self._screen_callback
+                screen_callback=self._screen_callback,
+                start_speaker_id=self._next_speaker_id
             )
             
             # 记录初始轮数
             turns = loop_result.get("total_turns", 0)
             self._total_turn_count = turns
+            self._next_speaker_id = loop_result.get("next_speaker_id")
             
             # 检查是否场景已结束（NPC 主动结束）
             is_scene_finished = loop_result.get("scene_finished", False)
@@ -235,8 +238,11 @@ class OSAgentSession(GameSession):
                 world_dir=self.world_dir,
                 max_turns=15,
                 user_input_callback=player_input_callback,
-                screen_callback=self._screen_callback
+                screen_callback=self._screen_callback,
+                start_speaker_id=self._next_speaker_id
             )
+
+            self._next_speaker_id = loop_result.get("next_speaker_id")
             
             # 累加回合数
             turns_this_call = loop_result.get("total_turns", 1)

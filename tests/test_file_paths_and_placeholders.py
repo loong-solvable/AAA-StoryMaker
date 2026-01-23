@@ -37,7 +37,7 @@ class TestFilePathsAndPlaceholders:
     
     def log_result(self, test_name: str, passed: bool, message: str = ""):
         """记录测试结果"""
-        status = "✅ PASS" if passed else "❌ FAIL"
+        status = "PASS PASS" if passed else "FAIL FAIL"
         self.results["tests"].append({
             "name": test_name,
             "passed": passed,
@@ -83,7 +83,7 @@ class TestFilePathsAndPlaceholders:
                     all_placeholders[str(rel_path)] = sorted(placeholders)
             
             # 输出发现的占位符
-            print(f"\n         📋 发现的占位符:")
+            print(f"\n         [List] 发现的占位符:")
             for file_path, phs in all_placeholders.items():
                 print(f"            {file_path}:")
                 for ph in phs:
@@ -115,8 +115,25 @@ class TestFilePathsAndPlaceholders:
             
             # 定义期望的占位符
             expected = {
-                "npc_system.txt": {"id", "id_character", "id_script"},
-                "script_divider.txt": {"current_scene", "current_script"}
+                "npc_system.txt": {
+                    "npc_id",
+                    "npc_name",
+                    "traits",
+                    "appearance",
+                    "relationships",
+                    "voice_samples",
+                    "global_context",
+                    "scene_summary",
+                    "role_in_scene",
+                    "objective",
+                    "emotional_arc",
+                    "key_topics",
+                    "outcome_direction",
+                    "special_notes",
+                    "dialogue_history",
+                    "present_characters",
+                },
+                "script_divider.txt": {"current_scene", "current_script", "world_state"},
             }
             
             placeholder_pattern = re.compile(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}')
@@ -452,10 +469,7 @@ class TestFilePathsAndPlaceholders:
         """
         测试8: NPC提示词占位符替换正确性
         
-        验证 npc_system.txt 中的占位符能被正确替换：
-        - {id} -> 角色ID
-        - {id_character} -> 角色卡内容
-        - {id_script} -> 保留（运行时填充）
+        验证 npc_system.txt 中的关键占位符能被正确替换。
         """
         try:
             from config.settings import settings
@@ -466,38 +480,40 @@ class TestFilePathsAndPlaceholders:
                 template = f.read()
             
             # 模拟角色数据
-            test_id = "npc_test_001"
-            test_character = """【角色ID】npc_test_001
-【姓名】测试角色
-【性别】男
-【人物特质】聪明, 勇敢"""
-            
-            # 执行替换
-            filled = template.replace("{id}", test_id)
-            filled = filled.replace("{id_character}", test_character)
+            test_values = {
+                "npc_id": "npc_test_001",
+                "npc_name": "测试角色",
+                "traits": "聪明, 勇敢",
+                "behavior_rules": "- (mock) 行为准则",
+                "appearance": "(mock) 外貌",
+                "relationships": "(mock) 人际关系",
+                "voice_samples": "(mock) 台词",
+                "global_context": "(mock) 场景背景",
+                "scene_summary": "(mock) 剧情概要",
+                "role_in_scene": "(mock) 角色定位",
+                "objective": "(mock) 目标",
+                "emotional_arc": "(mock) 情绪曲线",
+                "key_topics": "(mock) 话题",
+                "outcome_direction": "(mock) 结局",
+                "special_notes": "(mock) 注意事项",
+                "dialogue_history": "(mock) 对话历史",
+                "present_characters": "(mock) 在场角色",
+            }
+
+            filled = template
+            for k, v in test_values.items():
+                filled = filled.replace(f"{{{k}}}", v)
             
             # 验证
-            id_replaced = test_id in filled and "{id}" not in filled.split("{id_script}")[0]
-            char_replaced = "测试角色" in filled and "{id_character}" not in filled
-            script_preserved = "{id_script}" in filled
+            id_replaced = test_values["npc_id"] in filled and "{npc_id}" not in filled
+            name_replaced = test_values["npc_name"] in filled and "{npc_name}" not in filled
+            traits_replaced = test_values["traits"] in filled and "{traits}" not in filled
             
-            self.log_result(
-                "NPC模板{id}替换",
-                id_replaced,
-                f"ID '{test_id}' 已嵌入"
-            )
-            self.log_result(
-                "NPC模板{id_character}替换",
-                char_replaced,
-                "角色卡内容已嵌入"
-            )
-            self.log_result(
-                "NPC模板{id_script}保留",
-                script_preserved,
-                "保留用于运行时替换"
-            )
-            
-            return id_replaced and char_replaced and script_preserved
+            self.log_result("NPC模板{npc_id}替换", id_replaced, f"ID '{test_values['npc_id']}' 已嵌入")
+            self.log_result("NPC模板{npc_name}替换", name_replaced, "名称已嵌入")
+            self.log_result("NPC模板{traits}替换", traits_replaced, "特质已嵌入")
+
+            return id_replaced and name_replaced and traits_replaced
         except Exception as e:
             self.log_result("NPC占位符替换", False, f"测试失败: {e}")
             return False
@@ -635,7 +651,7 @@ class TestFilePathsAndPlaceholders:
             
             # 报告发现
             if findings:
-                print(f"\n         ⚠️ 发现可能的硬编码值:")
+                print(f"\n         WARNING 发现可能的硬编码值:")
                 for f in findings:
                     print(f"            {f['file']}: {f['description']} (匹配 {f['count']} 次)")
                 
@@ -742,36 +758,36 @@ class TestFilePathsAndPlaceholders:
     def run_all_tests(self):
         """运行所有测试"""
         print("=" * 70)
-        print("🧪 文件路径和占位符系统测试")
+        print("[Test] 文件路径和占位符系统测试")
         print("=" * 70)
         print()
         
-        print("📋 第一部分：占位符扫描测试")
+        print("[List] 第一部分：占位符扫描测试")
         print("-" * 50)
         self.test_scan_all_prompt_placeholders()
         self.test_online_prompts_placeholders()
         self.test_offline_prompts_placeholders()
         
         print()
-        print("📋 第二部分：文件路径动态性测试")
+        print("[List] 第二部分：文件路径动态性测试")
         print("-" * 50)
         self.test_settings_paths_are_dynamic()
         self.test_code_uses_settings_for_paths()
         
         print()
-        print("📋 第三部分：新世界名称兼容性测试")
+        print("[List] 第三部分：新世界名称兼容性测试")
         print("-" * 50)
         self.test_world_name_with_special_characters()
         self.test_create_mock_world_and_load()
         
         print()
-        print("📋 第四部分：占位符替换正确性测试")
+        print("[List] 第四部分：占位符替换正确性测试")
         print("-" * 50)
         self.test_npc_prompt_placeholder_replacement()
         self.test_character_detail_placeholder_replacement()
         
         print()
-        print("📋 第五部分：运行时目录和结构测试")
+        print("[List] 第五部分：运行时目录和结构测试")
         print("-" * 50)
         self.test_runtime_directory_naming()
         self.test_hardcoded_values_check()
@@ -780,7 +796,7 @@ class TestFilePathsAndPlaceholders:
         # 打印总结
         print()
         print("=" * 70)
-        print("📊 测试结果总结")
+        print("[Stats] 测试结果总结")
         print("=" * 70)
         print(f"   通过: {self.results['passed']}")
         print(f"   失败: {self.results['failed']}")
@@ -796,16 +812,16 @@ def main():
     success = tester.run_all_tests()
     
     if success:
-        print("✅ 所有文件路径和占位符测试通过！")
+        print("PASS 所有文件路径和占位符测试通过！")
         print()
-        print("💡 验证的内容:")
-        print("   ✓ 所有提示词文件的占位符已扫描记录")
-        print("   ✓ 文件路径使用动态配置而非硬编码")
-        print("   ✓ 新世界名称可以正确处理")
-        print("   ✓ 占位符能被正确替换")
-        print("   ✓ JSON文件结构保持一致性")
+        print("HINT 验证的内容:")
+        print("   v 所有提示词文件的占位符已扫描记录")
+        print("   v 文件路径使用动态配置而非硬编码")
+        print("   v 新世界名称可以正确处理")
+        print("   v 占位符能被正确替换")
+        print("   v JSON文件结构保持一致性")
     else:
-        print("❌ 部分测试失败，请检查相关功能")
+        print("FAIL 部分测试失败，请检查相关功能")
     
     return 0 if success else 1
 

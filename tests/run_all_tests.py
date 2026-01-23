@@ -13,6 +13,7 @@
 
 创建日期：2025-12-01
 """
+import os
 import sys
 import importlib.util
 from pathlib import Path
@@ -21,6 +22,19 @@ from datetime import datetime
 # 添加项目根目录到路径
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# CI/离线测试默认使用 mock LLM，避免真实网络调用
+os.environ.setdefault("LLM_PROVIDER", "mock")
+
+# Windows/GBK 终端下避免编码崩溃：必须在 print 之前 reconfigure
+if os.name == "nt":
+    for _stream in (sys.stdout, sys.stderr):
+        _reconfigure = getattr(_stream, "reconfigure", None)
+        if callable(_reconfigure):
+            try:
+                _reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
 
 
 def load_and_run_test(test_file: Path, test_name: str) -> dict:
@@ -36,7 +50,7 @@ def load_and_run_test(test_file: Path, test_name: str) -> dict:
     """
     print()
     print("=" * 70)
-    print(f"▶️  运行测试: {test_name}")
+    print(f">  运行测试: {test_name}")
     print("=" * 70)
     
     try:
@@ -45,6 +59,8 @@ def load_and_run_test(test_file: Path, test_name: str) -> dict:
             test_file.stem,
             test_file
         )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"无法加载测试模块: {test_file}")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         
@@ -77,23 +93,23 @@ def load_and_run_test(test_file: Path, test_name: str) -> dict:
 def main():
     """主函数：运行所有测试"""
     print()
-    print("╔" + "═" * 68 + "╗")
-    print("║" + " " * 20 + "🧪 AAA-StoryMaker 初始化测试" + " " * 19 + "║")
-    print("║" + " " * 68 + "║")
-    print(f"║  开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}" + " " * 35 + "║")
-    print("╚" + "═" * 68 + "╝")
+    print("+" + "-" * 68 + "+")
+    print("|" + " " * 20 + "[Test] AAA-StoryMaker 初始化测试" + " " * 19 + "|")
+    print("|" + " " * 68 + "|")
+    print(f"|  开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}" + " " * 35 + "|")
+    print("+" + "-" * 68 + "+")
     
     tests_dir = Path(__file__).parent
     
     # 定义测试列表（按顺序执行）
     tests = [
-        ("test_config_and_settings.py", "1️⃣  配置和环境设置测试"),
-        ("test_world_data_loading.py", "2️⃣  世界数据加载测试"),
-        ("test_character_data_model.py", "3️⃣  角色数据模型测试"),
-        ("test_illuminati_init.py", "4️⃣  光明会初始化测试"),
-        ("test_character_prompt_generation.py", "5️⃣  角色提示词动态生成测试（重点）"),
-        ("test_file_paths_and_placeholders.py", "6️⃣  文件路径和占位符测试"),
-        ("test_world_state_dynamic_update.py", "7️⃣  世界状态动态更新测试"),
+        ("test_config_and_settings.py", "1  配置和环境设置测试"),
+        ("test_world_data_loading.py", "2  世界数据加载测试"),
+        ("test_character_data_model.py", "3  角色数据模型测试"),
+        ("test_illuminati_init.py", "4  光明会初始化测试"),
+        ("test_character_prompt_generation.py", "5  角色提示词动态生成测试（重点）"),
+        ("test_file_paths_and_placeholders.py", "6  文件路径和占位符测试"),
+        ("test_world_state_dynamic_update.py", "7  世界状态动态更新测试"),
     ]
     
     results = []
@@ -116,39 +132,39 @@ def main():
     # 打印总结报告
     print()
     print()
-    print("╔" + "═" * 68 + "╗")
-    print("║" + " " * 25 + "📊 测试总结报告" + " " * 27 + "║")
-    print("╚" + "═" * 68 + "╝")
+    print("+" + "-" * 68 + "+")
+    print("|" + " " * 25 + "[Report] 测试总结报告" + " " * 27 + "|")
+    print("+" + "-" * 68 + "+")
     print()
     
     passed_count = sum(1 for r in results if r["passed"])
     failed_count = len(results) - passed_count
     
     for result in results:
-        status = "✅ PASS" if result["passed"] else "❌ FAIL"
+        status = "PASS PASS" if result["passed"] else "FAIL FAIL"
         print(f"   {status}  {result['name']}")
         if result.get("error"):
             print(f"           错误: {result['error']}")
     
     print()
-    print("─" * 70)
+    print("-" * 70)
     print(f"   总计: {len(results)} 个测试套件")
     print(f"   通过: {passed_count}")
     print(f"   失败: {failed_count}")
-    print("─" * 70)
+    print("-" * 70)
     print()
     
     if failed_count == 0:
-        print("🎉 所有测试通过！项目初始化功能正常。")
+        print("SUCCESS 所有测试通过！项目初始化功能正常。")
         print()
         print("   已验证的功能:")
-        print("   ✓ 配置文件和环境变量正确加载")
-        print("   ✓ 世界数据能够完整加载")
-        print("   ✓ 角色数据模型正确处理")
-        print("   ✓ 光明会初始化流程正常")
-        print("   ✓ 角色提示词能够动态特异性生成")
+        print("   OK 配置文件和环境变量正确加载")
+        print("   OK 世界数据能够完整加载")
+        print("   OK 角色数据模型正确处理")
+        print("   OK 光明会初始化流程正常")
+        print("   OK 角色提示词能够动态特异性生成")
     else:
-        print("⚠️  部分测试失败，请检查上述错误信息。")
+        print("WARNING  部分测试失败，请检查上述错误信息。")
     
     print()
     print(f"结束时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
