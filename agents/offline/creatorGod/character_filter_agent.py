@@ -32,7 +32,7 @@ class CharacterFilterAgent:
 
         # 估算 Token 数 (简单按字符数/1.5估算)
         estimated_tokens = len(novel_text) / 1.5
-        MAX_TOKENS = 10000000  # 设置安全阈值（支持长上下文模型）
+        MAX_TOKENS = 600000  # 安全阈值（模型限制100万，留余量给prompt）
         
         if estimated_tokens > MAX_TOKENS:
             self.logger.warning(f"⚠️ 小说过长 (约 {int(estimated_tokens)} tokens)，将进行分块处理...")
