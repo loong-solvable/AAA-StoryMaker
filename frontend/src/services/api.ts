@@ -66,6 +66,19 @@ export interface TurnResponse {
   visual_data?: VisualRenderData;
 }
 
+export interface HistoryEntry {
+  id: string;
+  turn: number;
+  seq: number;
+  role: string;
+  speaker_name: string;
+  content: string;
+  action?: string;
+  emotion?: string;
+  timestamp: string;
+  meta?: Record<string, unknown>;
+}
+
 const api = axios.create({
   baseURL: API_URL,
 });
@@ -98,6 +111,15 @@ export const gameApi = {
 
   getState: async () => {
     const res = await api.get<GameState>('/game/state');
+    return res.data;
+  },
+
+  getHistory: async (limit = 200, beforeTurn?: number) => {
+    const params: Record<string, string | number> = { limit };
+    if (beforeTurn !== undefined) {
+      params.before_turn = beforeTurn;
+    }
+    const res = await api.get<HistoryEntry[]>('/game/history', { params });
     return res.data;
   }
 };

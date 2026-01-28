@@ -11,19 +11,22 @@ import asyncio
 import uvicorn
 from datetime import datetime
 from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from typing import Optional
 import json
 
 from game_engine import GameEngine
-from api.schemas import GameInitRequest, GameStateResponse, TurnResponse, ActionRequest, NPCReaction
+from api.schemas import GameInitRequest, GameStateResponse, TurnResponse, ActionRequest, NPCReaction, HistoryEntry
 from api.screen_adapter import ScreenAdapter
 from config.settings import settings
 from initial_Illuminati import IlluminatiInitializer
+from utils.history_store import HistoryStore
+from utils.logger import setup_logger
 
 app = FastAPI(title="AAA-StoryMaker API")
+logger = setup_logger("ApiServer", "api_server.log")
 
 # Allow CORS for frontend
 app.add_middleware(
@@ -37,6 +40,23 @@ app.add_middleware(
 # Global Game Instance (Single Session for Demo)
 game_engine: Optional[GameEngine] = None
 screen_adapter: Optional[ScreenAdapter] = None
+
+
+def _get_history_store() -> Optional[HistoryStore]:
+    if not game_engine or not game_engine.runtime_dir:
+        return None
+    return HistoryStore(game_engine.runtime_dir)
+
+
+def _extract_narration(text: str) -> Optional[str]:
+    if not text:
+        return None
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in lines:
+        if line.startswith(("🎭", "💭", "[", "\"", "─", "=")):
+            continue
+        return line
+    return None
 
 @app.get("/")
 def read_root():
@@ -106,6 +126,8 @@ async def init_game(request: GameInitRequest):
     runtime_dir = settings.DATA_DIR / "runtime"
     target_runtime = None
     
+    is_new_runtime = request.runtime_id is None
+
     # Mode 1: Load existing
     if request.runtime_id:
         target_path = runtime_dir / request.runtime_id
@@ -147,7 +169,7 @@ async def init_game(request: GameInitRequest):
         status = game_engine.get_game_status()
         suggestions = game_engine.generate_action_suggestions()
 
-        return GameStateResponse(
+        response = GameStateResponse(
             turn=status['turn'],
             location=str(status['location']),
             time=status['time'],
@@ -155,6 +177,23 @@ async def init_game(request: GameInitRequest):
             bgm_url=None,
             suggestions=suggestions
         )
+        if opening_text and is_new_runtime:
+            try:
+                history_store = HistoryStore(target_runtime)
+                if not history_store.has_entries():
+                    history_store.append_entries([
+                        history_store.build_entry(
+                            turn=0,
+                            seq=0,
+                            role="system",
+                            speaker_name="System",
+                            content=opening_text,
+                            meta={"event": "game_start"}
+                        )
+                    ])
+            except Exception as e:
+                logger.warning(f"Failed to persist opening history: {e}")
+        return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -177,11 +216,11 @@ async def player_action(request: ActionRequest):
 
         suggestions = game_engine.generate_action_suggestions()
 
-        # 等待视觉数据（15秒超时，LLM调用需要时间）
+        # 等待视觉数据（100秒超时，LLM调用可能较慢）
         visual_data = None
         if visual_task:
             try:
-                visual_data = await asyncio.wait_for(visual_task, timeout=15.0)
+                visual_data = await asyncio.wait_for(visual_task, timeout=100.0)
             except asyncio.TimeoutError:
                 print("⚠️ 视觉数据生成超时，跳过")
 
@@ -198,7 +237,7 @@ async def player_action(request: ActionRequest):
                     emotion=reaction.get("emotion")
                 ))
 
-        return TurnResponse(
+        response = TurnResponse(
             success=result["success"],
             text=result["text"],
             script=result.get("script", {}),
@@ -208,6 +247,27 @@ async def player_action(request: ActionRequest):
             error=result.get("error"),
             visual_data=visual_data
         )
+        try:
+            history_store = _get_history_store()
+            if history_store and result.get("success"):
+                history_store.append_turn(
+                    turn_id=getattr(game_engine.os, "turn_count", None),
+                    player_action=request.action,
+                    npc_reactions=[
+                        {
+                            "character_name": r.character_name,
+                            "dialogue": r.dialogue,
+                            "action": r.action,
+                            "emotion": r.emotion,
+                        }
+                        for r in npc_reactions
+                    ],
+                    narration=_extract_narration(result.get("text", "")),
+                    meta={"mode": result.get("mode")}
+                )
+        except Exception as e:
+            logger.warning(f"Failed to persist history: {e}")
+        return response
     except Exception as e:
          return TurnResponse(success=False, text=str(e), script={}, error=str(e))
 
@@ -227,6 +287,17 @@ def get_state():
         "time": status['time'],
         # "suggestions": suggestions
     }
+
+
+@app.get("/game/history", response_model=list[HistoryEntry])
+def get_history(
+    limit: int = Query(200, ge=1, le=1000),
+    before_turn: Optional[int] = None
+):
+    history_store = _get_history_store()
+    if not history_store:
+        raise HTTPException(status_code=400, detail="Game not initialized")
+    return history_store.list_entries(limit=limit, before_turn=before_turn)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

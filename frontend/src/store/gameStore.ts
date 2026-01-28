@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { gameApi, NPCReaction, VisualRenderData } from '../services/api';
+import { gameApi, NPCReaction, VisualRenderData, HistoryEntry } from '../services/api';
 
 interface GameStore {
   isStarted: boolean;
@@ -13,9 +13,12 @@ interface GameStore {
 
   suggestions: string[];
   visualData: VisualRenderData | null;  // 视觉渲染数据
+  history: HistoryEntry[];
+  isHistoryLoading: boolean;
 
   initGame: (world: string, player: string, runtimeId?: string) => Promise<void>;
   sendAction: (action: string) => Promise<void>;
+  loadHistory: () => Promise<void>;
 }
 
 export const useGameStore = create<GameStore>((set) => ({
@@ -27,6 +30,8 @@ export const useGameStore = create<GameStore>((set) => ({
   npcReactions: [],
   suggestions: [],
   visualData: null,
+  history: [],
+  isHistoryLoading: false,
   isLoading: false,
   error: null,
 
@@ -34,6 +39,7 @@ export const useGameStore = create<GameStore>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const state = await gameApi.initGame(world, player, runtimeId);
+      const history = await gameApi.getHistory();
       set({ 
         isStarted: true, 
         currentTurn: state.turn, 
@@ -41,6 +47,7 @@ export const useGameStore = create<GameStore>((set) => ({
         time: state.time,
         lastText: state.text || "Welcome to the game.",
         suggestions: state.suggestions || [],
+        history,
         isLoading: false 
       });
     } catch (err: any) {
@@ -64,12 +71,23 @@ export const useGameStore = create<GameStore>((set) => ({
         }));
         // Background refresh state
         const state = await gameApi.getState();
-        set({ location: state.location, time: state.time });
+        const history = await gameApi.getHistory();
+        set({ location: state.location, time: state.time, history });
       } else {
         set({ error: res.error || "Action failed", isLoading: false });
       }
     } catch (err: any) {
       set({ error: err.message, isLoading: false });
+    }
+  },
+
+  loadHistory: async () => {
+    set({ isHistoryLoading: true });
+    try {
+      const history = await gameApi.getHistory();
+      set({ history, isHistoryLoading: false });
+    } catch (err: any) {
+      set({ isHistoryLoading: false, error: err.message });
     }
   }
 }));

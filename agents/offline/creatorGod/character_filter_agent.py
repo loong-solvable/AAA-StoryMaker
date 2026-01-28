@@ -48,7 +48,7 @@ class CharacterFilterAgent:
 
         self.logger.info("🤖 正在调用角色过滤 LLM...")
         try:
-            response = chain.invoke({"novel_text": novel_text}, config={"timeout": 7200})
+            response = chain.invoke({"novel_text": novel_text}, config={"timeout": 18000})
             characters_list = parse_json_response(response)
             
             if isinstance(characters_list, dict):
@@ -91,7 +91,7 @@ class CharacterFilterAgent:
         for i, chunk in enumerate(chunks, 1):
             self.logger.info(f"🤖 处理片段 {i}/{len(chunks)}...")
             try:
-                response = chain.invoke({"novel_text": chunk}, config={"timeout": 7200})
+                response = chain.invoke({"novel_text": chunk}, config={"timeout": 18000})
                 chunk_chars = parse_json_response(response)
                 
                 if isinstance(chunk_chars, dict):

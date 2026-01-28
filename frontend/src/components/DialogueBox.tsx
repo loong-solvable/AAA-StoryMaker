@@ -39,7 +39,7 @@ export const DialogueBox = ({ text, npcName, hasNext }: Props) => {
           <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-blue-500/10 blur-3xl rounded-full pointer-events-none" />
 
           {/* Text Content */}
-          <div className="relative z-10 text-lg md:text-xl leading-relaxed text-slate-100 font-sans tracking-wide min-h-[4rem] text-shadow-sm">
+          <div className="relative z-10 text-lg md:text-xl leading-relaxed text-slate-100 font-story tracking-wide min-h-[4rem] text-shadow-sm">
             <Typewriter text={text} speed={25} />
           </div>
 

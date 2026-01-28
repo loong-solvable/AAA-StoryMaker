@@ -68,3 +68,16 @@ class TurnResponse(BaseModel):
 class ActionRequest(BaseModel):
     action: str
     audio_data: Optional[str] = None # Base64 encoded audio for future use
+
+
+class HistoryEntry(BaseModel):
+    id: str
+    turn: int
+    seq: int
+    role: str
+    speaker_name: str
+    content: str
+    action: Optional[str] = None
+    emotion: Optional[str] = None
+    timestamp: str
+    meta: Optional[Dict[str, Any]] = None

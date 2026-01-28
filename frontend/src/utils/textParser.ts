@@ -15,7 +15,7 @@ export const parseBackendText = (rawText: string): string[] => {
   // Filter out empty lines or just whitespace
   const paragraphs = cleanText
     .split('\n')
-    .map(line => line.trim())
+    .map(line => line.replace(/[ \t\r]+$/g, ''))
     .filter(line => line.length > 0);
 
   // 5. Post-process paragraphs (optional combining of short lines?)

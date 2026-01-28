@@ -53,7 +53,7 @@ class Settings:
     MAX_TOKENS = None  # 不限制，让模型自己决定需要多少tokens
 
     # 在线交互超时与重试（面向玩家的实时体验）
-    ONLINE_LLM_TIMEOUT = float(os.getenv("ONLINE_LLM_TIMEOUT", "90"))
+    ONLINE_LLM_TIMEOUT = float(os.getenv("ONLINE_LLM_TIMEOUT", "180"))
     ONLINE_LLM_MAX_RETRIES = int(os.getenv("ONLINE_LLM_MAX_RETRIES", "1"))
 
     # LangSmith 追踪配置

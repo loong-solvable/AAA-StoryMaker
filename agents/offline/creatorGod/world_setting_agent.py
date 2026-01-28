@@ -48,7 +48,7 @@ class WorldSettingAgent:
 
         self.logger.info("🤖 正在调用世界观 LLM...")
         try:
-            response = chain.invoke({"novel_text": novel_text}, config={"timeout": 7200})
+            response = chain.invoke({"novel_text": novel_text}, config={"timeout": 18000})
             world_setting = parse_json_response(response)
             return world_setting
         except Exception as e:
@@ -89,7 +89,7 @@ class WorldSettingAgent:
         for i, chunk in enumerate(chunks, 1):
             self.logger.info(f"🤖 处理片段 {i}/{len(chunks)}...")
             try:
-                response = chain.invoke({"novel_text": chunk}, config={"timeout": 7200})
+                response = chain.invoke({"novel_text": chunk}, config={"timeout": 18000})
                 chunk_setting = parse_json_response(response)
                 
                 # 合并逻辑

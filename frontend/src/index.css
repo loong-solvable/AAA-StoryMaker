@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,12 +11,22 @@
   .text-shadow-sm {
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
   }
+  .font-ui {
+    font-family: var(--font-ui);
+  }
+  .font-story {
+    font-family: var(--font-story);
+  }
+}
+
+:root {
+  --font-ui: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-story: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
 }
 
 body {
   margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
-    sans-serif;
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #0f172a;

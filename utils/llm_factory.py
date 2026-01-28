@@ -92,10 +92,10 @@ class LLMFactory:
         # 原始ChatZhipuAI在_generate方法中硬编码: httpx.Client(timeout=60)
         # 导致无法配置更长的超时时间
         
-        logger.info(f"⏱️  使用自定义ChatZhipuAI，配置超时: 7200秒 (2小时)")
+        logger.info(f"⏱️  使用自定义ChatZhipuAI，配置超时: 18000秒 (5小时)")
         
         # 构建参数字典
-        request_timeout = timeout if timeout is not None else 7200.0
+        request_timeout = timeout if timeout is not None else 18000.0
         params = {
             "model": model_name,
             "temperature": temperature,
@@ -166,7 +166,7 @@ class LLMFactory:
                 "X-Title": "AAA-StoryMaker"  # 可选：应用名称
             },
         }
-        params["timeout"] = timeout if timeout is not None else 7200
+        params["timeout"] = timeout if timeout is not None else 18000
         if max_retries is not None:
             params["max_retries"] = max_retries
         if max_tokens is not None:

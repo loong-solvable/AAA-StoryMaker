@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { DialogueBox } from './DialogueBox';
-import { ArrowRight, Loader2, Mic, Sparkles } from 'lucide-react';
+import { ArrowRight, Loader2, Mic, Sparkles, ScrollText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { parseBackendText } from '../utils/textParser';
+import { HistoryDrawer } from './HistoryDrawer';
 
 export const Stage = () => {
   const { 
@@ -13,7 +14,10 @@ export const Stage = () => {
     npcReactions, 
     suggestions,
     sendAction,
-    isLoading 
+    isLoading,
+    history,
+    isHistoryLoading,
+    loadHistory
   } = useGameStore();
 
   const [textQueue, setTextQueue] = useState<string[]>([]);
@@ -27,6 +31,21 @@ export const Stage = () => {
   }, [lastText]);
 
   const [input, setInput] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'h' || event.key === 'H') {
+        setHistoryOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
 
   const handleAdvance = () => {
     if (currentLineIndex < textQueue.length - 1) {
@@ -51,7 +70,7 @@ export const Stage = () => {
 
   return (
     <div 
-      className="relative w-full h-screen bg-slate-950 overflow-hidden font-sans select-none cursor-pointer"
+      className="relative w-full h-screen bg-slate-950 overflow-hidden font-ui select-none cursor-pointer"
       onClick={handleAdvance} // Click anywhere to advance
     >
       
@@ -98,13 +117,26 @@ export const Stage = () => {
       </div>
 
       {/* HUD Info */}
-      <div className="absolute top-6 left-6 flex flex-col gap-2 z-30 pointer-events-none">
-        <div className="flex items-center gap-3 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/5 shadow-xl">
+      <div className="absolute top-6 left-6 flex flex-col gap-2 z-30">
+        <div className="flex items-center gap-3 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/5 shadow-xl pointer-events-none">
            <span className="text-blue-400"><Sparkles size={16} /></span>
            <span className="text-slate-200 text-sm font-medium tracking-wide">📍 {location}</span>
            <span className="w-px h-4 bg-white/10" />
            <span className="text-slate-300 text-sm">🕒 {time}</span>
         </div>
+      </div>
+
+      <div className="absolute top-6 right-6 z-30">
+        <button
+          className="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/70 border border-white/10 text-slate-200 text-sm hover:bg-slate-800/80 transition-all shadow-lg"
+          onClick={(event) => {
+            event.stopPropagation();
+            setHistoryOpen(true);
+          }}
+        >
+          <ScrollText size={16} />
+          History
+        </button>
       </div>
 
       {/* Main Interaction Layer */}
@@ -183,6 +215,13 @@ export const Stage = () => {
         )}
         </AnimatePresence>
       </div>
+
+      <HistoryDrawer
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        entries={history}
+        loading={isHistoryLoading}
+      />
 
     </div>
   );
