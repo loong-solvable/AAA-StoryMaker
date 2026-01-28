@@ -169,8 +169,11 @@ class LLMFactory:
         params["timeout"] = timeout if timeout is not None else 18000
         if max_retries is not None:
             params["max_retries"] = max_retries
+        # 设置安全的 max_tokens 默认值（MiniMax-01 限制4万）
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
+        else:
+            params["max_tokens"] = 16000  # 安全默认值
         
         return ChatOpenAI(**params)
 
