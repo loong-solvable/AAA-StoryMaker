@@ -3,8 +3,21 @@
 🎭 Infinite Story - 无限故事机
 玩家入口 - 简洁、沉浸的游戏体验
 
+⚠️ 已弃用警告 (Deprecated since v0.4.0):
+   此文件使用旧的 OS Agent 架构，不包含 Conductor 幕管理系统。
+   
+   推荐使用:
+   - CLI 入口: python player_entry.py
+   - API 服务: python api_server.py
+   
+   新架构优势:
+   - Conductor 幕管理系统（动态幕转换、紧迫度驱动）
+   - 三模式分流优化（DIALOGUE/PLOT_ADVANCE/ACT_TRANSITION）
+   - NPC 幕级指令支持
+   - 更好的性能和稳定性
+
 使用方法:
-    python play.py
+    python play.py  # 已弃用，建议使用 player_entry.py
 
 特性:
 - 极简界面，隐藏技术细节
@@ -12,6 +25,13 @@
 - 智能行动建议
 - 自动断点续传
 """
+import warnings
+warnings.warn(
+    "play.py 已弃用，请使用 player_entry.py 或 api_server.py。"
+    "新架构包含 Conductor 幕管理系统，功能更完整。",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import sys
 from pathlib import Path
