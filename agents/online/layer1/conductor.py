@@ -205,8 +205,8 @@ class Conductor:
         # ========== 幕管理（原ActDirector）==========
         self.act_definitions: List[Dict] = genesis_data.get("act_definitions", [])
         if not self.act_definitions:
-            self.act_definitions = [self._create_default_act()]
-            logger.info("📝 未找到预定义幕目标，使用默认开放式幕")
+            self.act_definitions = self._create_default_acts()
+            logger.info("📝 未找到预定义幕目标，使用默认三幕结构")
 
         self.current_act: Optional[ActState] = None
         self.act_history: List[ActState] = []
@@ -616,21 +616,70 @@ class Conductor:
     # ============================================================
 
     def _create_default_act(self) -> Dict[str, Any]:
-        """创建默认开放式幕"""
-        return {
-            "act_number": 1,
-            "act_name": "自由探索",
-            "objective": {
-                "objective_id": "default_explore",
-                "description": "自由探索这个世界，与周围的人和事互动",
-                "internal_goal": "让玩家熟悉世界和角色",
-                "completion_conditions": [],
-                "failure_conditions": [],
-                "max_turns": 999,
-                "urgency_curve": "linear",
-                "plot_guidance": "保持开放，响应玩家的探索行为"
+        """创建默认开放式幕（兼容方法，返回第一幕）"""
+        return self._create_default_acts()[0]
+
+    def _create_default_acts(self) -> List[Dict[str, Any]]:
+        """
+        创建默认多幕配置
+        
+        返回三幕结构：
+        1. 探索与熟悉 - 让玩家熟悉世界和角色
+        2. 发现端倪 - 引导玩家发现线索
+        3. 抉择与行动 - 推动玩家做出关键决定
+        """
+        return [
+            {
+                "act_number": 1,
+                "act_name": "探索与熟悉",
+                "objective": {
+                    "objective_id": "default_explore",
+                    "description": "自由探索这个世界，与周围的人和事互动",
+                    "internal_goal": "让玩家熟悉世界和角色，建立初步关系",
+                    "completion_conditions": [
+                        {"type": "turns_elapsed", "min_turns": 8},
+                        {"type": "npc_interaction_count", "threshold": 3}
+                    ],
+                    "failure_conditions": [],
+                    "max_turns": 25,
+                    "urgency_curve": "linear",
+                    "plot_guidance": "保持开放，响应玩家的探索行为。NPC可以主动分享信息、提出话题。"
+                }
+            },
+            {
+                "act_number": 2,
+                "act_name": "发现端倪",
+                "objective": {
+                    "objective_id": "discover_clues",
+                    "description": "深入了解这个世界的秘密",
+                    "internal_goal": "引导玩家发现第一个重要线索或冲突",
+                    "completion_conditions": [
+                        {"type": "turns_elapsed", "min_turns": 6},
+                        {"type": "npc_interaction_count", "threshold": 2}
+                    ],
+                    "failure_conditions": [],
+                    "max_turns": 18,
+                    "urgency_curve": "linear",
+                    "plot_guidance": "通过NPC暗示或环境线索引导玩家。NPC应该开始透露一些深层信息。"
+                }
+            },
+            {
+                "act_number": 3,
+                "act_name": "抉择与行动",
+                "objective": {
+                    "objective_id": "take_action",
+                    "description": "是时候做出选择了",
+                    "internal_goal": "推动玩家做出关键决定，剧情进入高潮",
+                    "completion_conditions": [
+                        {"type": "turns_elapsed", "min_turns": 5}
+                    ],
+                    "failure_conditions": [],
+                    "max_turns": 15,
+                    "urgency_curve": "climax",
+                    "plot_guidance": "制造紧迫感，NPC主动推进剧情，给玩家施加选择压力。"
+                }
             }
-        }
+        ]
 
     def _initialize_first_act(self):
         """初始化第一幕"""
@@ -911,7 +960,7 @@ class Conductor:
                 break
 
         if not next_act_def:
-            # 创建开放式幕
+            # 创建开放式幕（带有默认完成条件，确保紧迫度曲线正常工作）
             next_act_def = {
                 "act_number": next_act_number,
                 "act_name": f"第{next_act_number}幕 - 自由发展",
@@ -919,9 +968,13 @@ class Conductor:
                     "objective_id": f"act_{next_act_number}_open",
                     "description": "故事继续发展...",
                     "internal_goal": "基于之前的剧情自然发展",
-                    "completion_conditions": [],
+                    "completion_conditions": [
+                        {"type": "turns_elapsed", "min_turns": 8},
+                        {"type": "npc_interaction_count", "threshold": 3}
+                    ],
                     "max_turns": 20,
-                    "plot_guidance": "保持剧情连贯，响应玩家选择"
+                    "urgency_curve": "linear",
+                    "plot_guidance": "保持剧情连贯，响应玩家选择，在紧迫度上升时主动推进剧情"
                 }
             }
 

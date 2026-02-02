@@ -24,6 +24,7 @@ from config.settings import settings
 from initial_Illuminati import IlluminatiInitializer
 from utils.history_store import HistoryStore
 from utils.logger import setup_logger
+from utils.progress_tracker import ProgressTracker
 
 app = FastAPI(title="AAA-StoryMaker API")
 logger = setup_logger("ApiServer", "api_server.log")
@@ -97,11 +98,20 @@ def get_runtimes(world_name: str):
                 except:
                     pass
                     
+                # Read turn count from progress.json if available
+                turn_count = 0
+                try:
+                    progress = ProgressTracker().load_progress(rt_dir)
+                    if not progress.is_corrupted:
+                        turn_count = progress.turn_count
+                except Exception:
+                    pass  # Fallback to 0 if progress cannot be read
+                
                 runtimes.append({
                     "id": rt_dir.name,
                     "name": summary.get("player_profile", {}).get("name", "Unknown Player"),
                     "initialized_at": datetime.fromtimestamp(init_time).isoformat(),
-                    "turn": 0 # TODO: read from state if possible
+                    "turn": turn_count
                 })
     
     # Sort by newest first
@@ -285,7 +295,8 @@ def get_state():
         "turn": status['turn'],
         "location": str(status['location']),
         "time": status['time'],
-        # "suggestions": suggestions
+        # 幕目标信息
+        "act": status.get('act', {})
     }
 
 

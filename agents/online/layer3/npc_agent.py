@@ -69,6 +69,9 @@ class NPCAgent:
     基于角色档案 + 场景上下文 + 导演指令，调用 LLM 生成 NPC 的行动与对白。
     """
 
+    # 类级 Prompt 缓存，避免每次实例化都读取磁盘
+    _prompt_template_cache: Optional[str] = None
+
     def __init__(self, character_data: Dict[str, Any]):
         self.character_data = character_data
         self.character_id: str = character_data.get("id", "npc_unknown")
@@ -114,11 +117,17 @@ class NPCAgent:
     # --------------------------------------------------------------------- #
 
     def _load_prompt_template(self) -> str:
-        """加载通用 NPC 系统 Prompt 模板。"""
+        """加载通用 NPC 系统 Prompt 模板（使用类级缓存）。"""
+        if NPCAgent._prompt_template_cache is not None:
+            return NPCAgent._prompt_template_cache
+        
         prompt_file = settings.PROMPTS_DIR / "online" / "npc_system.txt"
         if not prompt_file.exists():
             raise FileNotFoundError(f"未找到 NPC 提示词文件: {prompt_file}")
-        return prompt_file.read_text(encoding="utf-8")
+        
+        NPCAgent._prompt_template_cache = prompt_file.read_text(encoding="utf-8")
+        logger.info("📝 NPC Prompt 模板已缓存（仅首次加载）")
+        return NPCAgent._prompt_template_cache
 
     def _format_relationships(self) -> str:
         """将 relationship_matrix 转换为可读文本。"""
@@ -299,6 +308,15 @@ class NPCAgent:
             key_topics_str = str(key_topics)
         outcome_direction = params.get("outcome_direction", "让本幕自然收束。")
         special_notes = params.get("special_notes", "") or "无特别注意事项。"
+        
+        # 根据紧迫度添加主动推进指令
+        urgency = params.get("urgency", 0)
+        if urgency > 0.8:
+            special_notes += "\n⚠️ 【紧迫度极高】剧情即将迎来转折！请主动推进核心目标，不要让对话陷入闲聊。主动抛出关键话题或做出推动剧情的行动。"
+        elif urgency > 0.6:
+            special_notes += "\n💡 【紧迫度较高】请开始积极推进剧情，主动引导对话向目标方向发展。"
+        elif urgency > 0.4:
+            special_notes += "\n📌 【紧迫度中等】如果对话偏离目标，请适时引导回正轨。"
 
         filled = (
             self.prompt_template.replace("{npc_name}", self.character_name)
@@ -543,15 +561,26 @@ class NPCAgent:
         attitude = self.emotional_state.get("attitude_toward_player", 0.5)
         trust = self.emotional_state.get("trust_level", 0.3)
 
-        # 高好感度+高信任可能主动发起
-        if attitude > 0.7 and trust > 0.5:
-            # 有一定概率主动发起
+        # 降低主动发起门槛：中等好感度即可考虑主动发起
+        if attitude > 0.5 and trust > 0.3:
+            # 概率随态度增加：20%-40%
             import random
-            if random.random() < 0.3:  # 30%概率
+            initiative_chance = 0.2 + (attitude - 0.5) * 0.4
+            if random.random() < initiative_chance:
                 return {
                     "mode": "initiate",
                     "priority": 7,
-                    "reason": f"{self.character_name}与玩家关系很好，想主动互动"
+                    "reason": f"{self.character_name}想主动推进对话"
+                }
+        
+        # 即使态度中等，也有小概率主动（用于推进剧情）
+        elif attitude > 0.3:
+            import random
+            if random.random() < 0.15:  # 15%概率
+                return {
+                    "mode": "initiate",
+                    "priority": 5,
+                    "reason": f"{self.character_name}有话想说"
                 }
 
         # 3. 根据态度决定是否旁观

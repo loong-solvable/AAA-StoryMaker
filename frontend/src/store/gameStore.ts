@@ -1,6 +1,16 @@
 import { create } from 'zustand';
 import { gameApi, NPCReaction, VisualRenderData, HistoryEntry } from '../services/api';
 
+// 幕目标信息
+interface ActInfo {
+  act_number: number;
+  act_name: string;
+  objective: string;
+  progress: number;
+  urgency: number;
+  turns_remaining: number;
+}
+
 interface GameStore {
   isStarted: boolean;
   currentTurn: number;
@@ -15,6 +25,9 @@ interface GameStore {
   visualData: VisualRenderData | null;  // 视觉渲染数据
   history: HistoryEntry[];
   isHistoryLoading: boolean;
+  
+  // 幕目标
+  act: ActInfo | null;
 
   initGame: (world: string, player: string, runtimeId?: string) => Promise<void>;
   sendAction: (action: string) => Promise<void>;
@@ -34,6 +47,7 @@ export const useGameStore = create<GameStore>((set) => ({
   isHistoryLoading: false,
   isLoading: false,
   error: null,
+  act: null,
 
   initGame: async (world, player, runtimeId) => {
     set({ isLoading: true, error: null });
@@ -72,7 +86,12 @@ export const useGameStore = create<GameStore>((set) => ({
         // Background refresh state
         const state = await gameApi.getState();
         const history = await gameApi.getHistory();
-        set({ location: state.location, time: state.time, history });
+        set({ 
+          location: state.location, 
+          time: state.time, 
+          history,
+          act: state.act || null  // 更新幕目标信息
+        });
       } else {
         set({ error: res.error || "Action failed", isLoading: false });
       }

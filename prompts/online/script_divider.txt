@@ -49,3 +49,46 @@
 ```
 
 现在，请根据输入数据生成每位在场演员的任务卡。
+
+---
+
+# Few-shot 示例
+
+## 示例输入
+【当前剧本】
+A走进咖啡馆，看到了B，两个人寒暄了一会，最终由于A提到B欠A的钱没有还而不欢而散。
+
+## 示例输出
+```json
+{
+  "global_context": "下午3点，阳光透过咖啡馆的落地窗洒进室内，店内播放着舒缓的爵士乐",
+  "scene_summary": "A与B在咖啡馆的一次不愉快重逢，因旧账问题关系恶化",
+  
+  "actor_missions": {
+    "npc_a": {
+      "character_name": "A",
+      "role_in_scene": "发起话题者、债权人",
+      "objective": "起初想修复关系，但最终无法忍受B的回避态度，要求B正视债务问题",
+      "emotional_arc": "期待 → 失望 → 不满 → 愤怒",
+      "key_topics": ["近况寒暄", "过去的借款"],
+      "interaction_targets": ["npc_b"],
+      "outcome_direction": "因债务问题与B不欢而散",
+      "special_notes": "A已经等待这笔钱很久，耐心正在耗尽"
+    },
+    "npc_b": {
+      "character_name": "B",
+      "role_in_scene": "被动倾听者、债务人",
+      "objective": "试图用寒暄转移话题，避免提及债务；当被直接质问时采取防御姿态",
+      "emotional_arc": "愉快 → 尴尬 → 防御 → 恼怒",
+      "key_topics": ["近况寒暄", "各种借口"],
+      "interaction_targets": ["npc_a"],
+      "outcome_direction": "拒绝承认债务问题，选择离开",
+      "special_notes": "B其实有钱但不想还，会找各种理由推脱"
+    }
+  }
+}
+```
+
+---
+
+请按以上格式，为当前剧本中的每位NPC生成任务卡。

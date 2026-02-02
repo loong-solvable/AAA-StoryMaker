@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { DialogueBox } from './DialogueBox';
-import { ArrowRight, Loader2, Mic, Sparkles, ScrollText } from 'lucide-react';
+import { ArrowRight, Loader2, Mic, Sparkles, ScrollText, Target } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { parseBackendText } from '../utils/textParser';
 import { HistoryDrawer } from './HistoryDrawer';
@@ -17,7 +17,8 @@ export const Stage = () => {
     isLoading,
     history,
     isHistoryLoading,
-    loadHistory
+    loadHistory,
+    act
   } = useGameStore();
 
   const [textQueue, setTextQueue] = useState<string[]>([]);
@@ -117,13 +118,42 @@ export const Stage = () => {
       </div>
 
       {/* HUD Info */}
-      <div className="absolute top-6 left-6 flex flex-col gap-2 z-30">
-        <div className="flex items-center gap-3 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/5 shadow-xl pointer-events-none">
+      <div className="absolute top-6 left-6 flex flex-col gap-2 z-30 pointer-events-none">
+        {/* 位置和时间 */}
+        <div className="flex items-center gap-3 bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/5 shadow-xl">
            <span className="text-blue-400"><Sparkles size={16} /></span>
            <span className="text-slate-200 text-sm font-medium tracking-wide">📍 {location}</span>
            <span className="w-px h-4 bg-white/10" />
            <span className="text-slate-300 text-sm">🕒 {time}</span>
         </div>
+        
+        {/* 幕目标显示 */}
+        {act && act.objective && (
+          <div className="bg-black/40 backdrop-blur-md px-4 py-3 rounded-xl border border-white/5 shadow-xl max-w-md">
+            <div className="flex items-center gap-2 mb-2">
+              <Target size={14} className="text-amber-400" />
+              <span className="text-amber-400 text-xs font-semibold tracking-wider uppercase">
+                第{act.act_number}幕 · {act.act_name}
+              </span>
+            </div>
+            <div className="text-slate-200 text-sm mb-2">
+              🎯 {act.objective}
+            </div>
+            {/* 进度条 */}
+            <div className="relative h-1.5 bg-slate-700/50 rounded-full overflow-hidden">
+              <motion.div 
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(act.progress * 100, 100)}%` }}
+                transition={{ duration: 0.5 }}
+              />
+            </div>
+            <div className="flex justify-between mt-1.5 text-xs text-slate-400">
+              <span>进度 {Math.round(act.progress * 100)}%</span>
+              <span>剩余 {act.turns_remaining} 回合</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="absolute top-6 right-6 z-30">

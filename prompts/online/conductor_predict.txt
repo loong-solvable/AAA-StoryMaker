@@ -51,3 +51,56 @@
 - 剧情到了自然的转折点
 
 请根据以上信息做出判断：
+
+---
+
+# Few-shot 示例
+
+## 示例 1：普通对话
+**输入**: 幕进度 20%，紧迫度 0.2，玩家说"你好，请问这里是什么地方？"
+**输出**:
+```json
+{
+  "predicted_mode": "DIALOGUE",
+  "confidence": 0.9,
+  "scene_mood": "平静",
+  "tension_level": 0.2,
+  "dialogue_phase": "OPENING",
+  "phase_guidance": "保持友好，引导玩家了解环境",
+  "focal_npcs": ["在场的主要NPC"]
+}
+```
+
+## 示例 2：剧情推进
+**输入**: 已连续对话 6 轮，紧迫度 0.6，玩家发现了关键线索
+**输出**:
+```json
+{
+  "predicted_mode": "PLOT_ADVANCE",
+  "confidence": 0.85,
+  "scene_mood": "悬疑",
+  "tension_level": 0.7,
+  "dialogue_phase": "RISING",
+  "phase_guidance": "NPC可以透露更多信息，增加悬念",
+  "focal_npcs": ["知情者NPC"]
+}
+```
+
+## 示例 3：幕转换
+**输入**: 幕进度 95%，紧迫度 0.9，剩余回合 2，玩家说"好的，我先走了"
+**输出**:
+```json
+{
+  "predicted_mode": "ACT_TRANSITION",
+  "confidence": 0.95,
+  "scene_mood": "平静",
+  "tension_level": 0.3,
+  "dialogue_phase": "FALLING",
+  "phase_guidance": "自然收尾，为下一幕铺垫",
+  "focal_npcs": []
+}
+```
+
+---
+
+现在请根据当前输入做出预测：

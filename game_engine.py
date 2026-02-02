@@ -847,14 +847,34 @@ class GameEngine:
             # 单NPC或无NPC：传统方式
             for char_id, npc in npcs_to_respond:
                 npc_instruction = self._find_instruction(script, f"npc_{char_id}")
-                if not npc_instruction and scene_summary:
+                
+                # 获取NPC幕级指令
+                npc_briefing = self.conductor.get_npc_act_briefing(char_id) if self.conductor else None
+                
+                if not npc_instruction:
+                    # 构建基于幕级指令的NPC指令
                     npc_instruction = {
                         "target": f"npc_{char_id}",
                         "parameters": {
                             "scene_summary": scene_summary,
-                            "objective": "根据剧情推演自然反应"
+                            "objective": npc_briefing.role_in_act if npc_briefing else "根据剧情推演自然反应",
+                            "emotional_arc": npc_briefing.emotional_journey if npc_briefing else "",
+                            "key_topics": npc_briefing.knowledge_scope if npc_briefing else [],
+                            "urgency": act_context.get("urgency", 0) if act_context else 0
                         }
                     }
+                elif npc_briefing:
+                    # 补充幕级指令到现有指令
+                    params = npc_instruction.get("parameters", {})
+                    if not params.get("objective"):
+                        params["objective"] = npc_briefing.role_in_act
+                    if not params.get("emotional_arc"):
+                        params["emotional_arc"] = npc_briefing.emotional_journey
+                    if not params.get("key_topics"):
+                        params["key_topics"] = npc_briefing.knowledge_scope
+                    params["urgency"] = act_context.get("urgency", 0) if act_context else 0
+                    npc_instruction["parameters"] = params
+                
                 all_tasks.append(
                     npc.async_react(
                         player_input=player_input,
@@ -922,6 +942,69 @@ class GameEngine:
         for event in triggered_events:
             self.conductor.apply_event_effects(event, game_state_for_events)
 
+        # 检查 Plot Agent 返回的幕完成信号
+        act_completion = script.get("act_completion", {})
+        act_signal = act_completion.get("signal", "CONTINUE")
+        
+        # 同时获取 Conductor 的进度评估
+        conductor_evaluation = self.conductor.evaluate_progress({
+            "player_location": self.player_location,
+            "present_characters": self.os.world_context.present_characters,
+            "npc_interactions": [],
+            "triggered_events": [{"event_id": e.event_id} for e in triggered_events] if triggered_events else [],
+            "player_action": player_input
+        })
+        
+        # 综合判断是否应该转换幕
+        should_transition = False
+        transition_reason = ""
+        outcome = "success"
+        
+        if act_signal == "FORCE_END":
+            # Plot 强制结束信号
+            should_transition = True
+            transition_reason = f"Plot强制结束: {act_completion.get('reason', '无')}"
+            outcome = "timeout"
+        elif act_signal == "READY_TO_END":
+            # Plot 建议结束，检查进度是否足够
+            progress = conductor_evaluation.get("progress", 0)
+            if progress >= 0.7:
+                should_transition = True
+                transition_reason = f"Plot建议结束且进度达{progress*100:.0f}%"
+                outcome = "success"
+            else:
+                logger.info(f"📝 Plot建议结束但进度仅{progress*100:.0f}%，继续当前幕")
+        elif conductor_evaluation.get("should_advance"):
+            # Conductor 评估达成
+            should_transition = True
+            progress = conductor_evaluation.get("progress", 0)
+            if progress >= 1.0:
+                transition_reason = "Conductor评估：所有条件已完成"
+                outcome = "success"
+            else:
+                transition_reason = "Conductor评估：回合数达上限"
+                outcome = "timeout"
+        
+        if should_transition:
+            logger.info(f"📢 触发幕转换: {transition_reason}")
+            self.conductor.advance_to_next_act(outcome)
+            
+            new_act_name = self.conductor.current_act.act_name if self.conductor.current_act else "未知"
+            new_act_objective = ""
+            if self.conductor.current_act:
+                new_act_objective = self.conductor.current_act.objective.description
+            logger.info(f"🎬 幕转换完成: 进入 {new_act_name}")
+            
+            # 重置累积器
+            self.in_act_accumulator.reset()
+            
+            # 添加幕转换提示到输出（包含新目标）
+            transition_header = f"\n{'='*50}\n🎬 {new_act_name}\n"
+            if new_act_objective:
+                transition_header += f"🎯 目标: {new_act_objective}\n"
+            transition_header += f"{'='*50}\n\n"
+            output_text = transition_header + output_text
+
         elapsed = time.time() - start_time
         logger.info(f"📖 剧情推进完成，耗时: {elapsed:.2f}秒")
 
@@ -985,13 +1068,36 @@ class GameEngine:
                 self.conductor.advance_to_next_act("timeout")
 
             new_act_name = self.conductor.current_act.act_name if self.conductor.current_act else "未知"
+            new_act_objective = ""
+            if self.conductor.current_act:
+                new_act_objective = self.conductor.current_act.objective.description
             logger.info(f"🎬 幕转换完成: 进入 {new_act_name}")
+
+            # 为在场NPC生成新幕的幕级指令
+            try:
+                present_npcs = []
+                for char_id in self.os.world_context.present_characters:
+                    if char_id == "user":
+                        continue
+                    char_data = self.os.get_character_data(char_id)
+                    if char_data:
+                        present_npcs.append(char_data)
+                
+                if present_npcs:
+                    logger.info(f"📝 为 {len(present_npcs)} 个NPC生成幕级指令...")
+                    await self.conductor.generate_npc_act_briefings(present_npcs)
+            except Exception as e:
+                logger.warning(f"⚠️ 生成NPC幕级指令失败: {e}")
 
             # 重置累积器
             self.in_act_accumulator.reset()
 
-            # 添加幕转换提示到输出
-            result["text"] = f"\n{'='*50}\n🎬 {new_act_name}\n{'='*50}\n\n" + result.get("text", "")
+            # 添加幕转换提示到输出（包含新目标）
+            transition_header = f"\n{'='*50}\n🎬 {new_act_name}\n"
+            if new_act_objective:
+                transition_header += f"🎯 目标: {new_act_objective}\n"
+            transition_header += f"{'='*50}\n\n"
+            result["text"] = transition_header + result.get("text", "")
 
         result["mode"] = "act_transition"
         elapsed = time.time() - start_time
@@ -1305,13 +1411,25 @@ class GameEngine:
         return "\n".join(lines)
     
     def get_game_status(self) -> Dict[str, Any]:
-        """获取游戏状态"""
+        """获取游戏状态（包含幕目标信息）"""
+        # 获取幕目标上下文
+        act_context = self.conductor.get_plot_context() if self.conductor else {}
+        
         return {
             "turn": self.os.turn_count,
             "time": self.world_state.current_time,
             "location": self.player_location,
             "plot_progress": self.plot.get_plot_status(),
-            "npcs": {npc_id: npc.get_state() for npc_id, npc in self.npc_manager.npcs.items()}
+            "npcs": {npc_id: npc.get_state() for npc_id, npc in self.npc_manager.npcs.items()},
+            # 幕目标信息 - 供玩家查看
+            "act": {
+                "act_number": act_context.get("current_act", 1),
+                "act_name": act_context.get("act_name", "自由探索"),
+                "objective": act_context.get("objective_description", ""),
+                "progress": act_context.get("progress", 0),
+                "urgency": act_context.get("urgency", 0),
+                "turns_remaining": act_context.get("turns_remaining", 999)
+            }
         }
     
     def save_game(self, save_name: str = "quicksave"):

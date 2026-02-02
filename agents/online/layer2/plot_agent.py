@@ -353,6 +353,11 @@ class PlotDirector:
         - **入场**: 角色名 (ID) [First Appearance: True/False] - *描述*
         - **离场**: 角色名 (ID) - *原因*
         - **在场**: 角色名 (ID) - *状态*
+        
+        【幕进度评估】
+        - **幕完成信号**: CONTINUE / READY_TO_END / FORCE_END
+        - **结束理由**: ...
+        - **下一幕建议**: ...
         """
         import re
         
@@ -376,6 +381,11 @@ class PlotDirector:
                 "branching_opportunities": []
             },
             "director_notes": "",
+            "act_completion": {
+                "signal": "CONTINUE",
+                "reason": "",
+                "next_act_suggestion": ""
+            },
             "raw_content": response  # 保存原始文本
         }
         
@@ -432,7 +442,27 @@ class PlotDirector:
             if location_match:
                 result["location_change"] = location_match.group(1).strip()
         
-        logger.info(f"📝 解析文本格式剧本: {len(result['instructions'])} 条指令")
+        # 提取【幕进度评估】部分
+        act_match = re.search(r'【幕进度评估】(.*?)(?=【|$)', response, re.DOTALL)
+        if act_match:
+            act_content = act_match.group(1).strip()
+            
+            # 解析幕完成信号
+            signal_match = re.search(r'\*\*幕完成信号\*\*:\s*(CONTINUE|READY_TO_END|FORCE_END)', act_content, re.IGNORECASE)
+            if signal_match:
+                result["act_completion"]["signal"] = signal_match.group(1).upper()
+            
+            # 解析结束理由
+            reason_match = re.search(r'\*\*结束理由\*\*:\s*(.+?)(?=\n|$)', act_content)
+            if reason_match:
+                result["act_completion"]["reason"] = reason_match.group(1).strip()
+            
+            # 解析下一幕建议
+            next_act_match = re.search(r'\*\*下一幕建议\*\*:\s*(.+?)(?=\n|$)', act_content)
+            if next_act_match:
+                result["act_completion"]["next_act_suggestion"] = next_act_match.group(1).strip()
+        
+        logger.info(f"📝 解析文本格式剧本: {len(result['instructions'])} 条指令, 幕信号: {result['act_completion']['signal']}")
         return result
     
     def _update_plot_state(self, script: Dict[str, Any]):
